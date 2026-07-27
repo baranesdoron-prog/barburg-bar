@@ -1,28 +1,31 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 
 import { useAppUser } from '@/hooks/useAppUser'
+import { useAppUserContext, type AppOutletContext } from '@/lib/outletContext'
+import type { AppRole } from '@/lib/types'
+import { AppShell } from '@/components/AppShell'
 import { SignUp } from '@/pages/SignUp'
 import { Login } from '@/pages/Login'
 import { PendingApproval } from '@/pages/PendingApproval'
-import { Approved } from '@/pages/Approved'
+import { Dashboard } from '@/pages/Dashboard'
+import { MyShifts } from '@/pages/MyShifts'
+import { Profile } from '@/pages/Profile'
 import { AdminApprovals } from '@/pages/AdminApprovals'
 
-function Home() {
+function RequireApproved() {
   const { loading, session, appUser } = useAppUser()
 
   if (loading) return null
   if (!session) return <Navigate to="/login" replace />
   if (!appUser || appUser.status !== 'approved') return <PendingApproval />
-  return <Approved appUser={appUser} />
+  return <AppShell appUser={appUser} session={session} />
 }
 
-function AdminApprovalsRoute() {
-  const { loading, session, appUser } = useAppUser()
+function RequireRole({ roles }: { roles: AppRole[] }) {
+  const { appUser, session } = useAppUserContext()
 
-  if (loading) return null
-  if (!session) return <Navigate to="/login" replace />
-  if (!appUser || appUser.role !== 'administrator') return <Navigate to="/" replace />
-  return <AdminApprovals />
+  if (!roles.includes(appUser.role!)) return <Navigate to="/" replace />
+  return <Outlet context={{ appUser, session } satisfies AppOutletContext} />
 }
 
 export function App() {
@@ -30,8 +33,16 @@ export function App() {
     <Routes>
       <Route path="/signup" element={<SignUp />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/admin/approvals" element={<AdminApprovalsRoute />} />
-      <Route path="/" element={<Home />} />
+      <Route element={<RequireApproved />}>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route element={<RequireRole roles={['employee', 'shift_manager', 'bar_manager']} />}>
+          <Route path="/my-shifts" element={<MyShifts />} />
+        </Route>
+        <Route element={<RequireRole roles={['administrator']} />}>
+          <Route path="/admin/approvals" element={<AdminApprovals />} />
+        </Route>
+      </Route>
     </Routes>
   )
 }

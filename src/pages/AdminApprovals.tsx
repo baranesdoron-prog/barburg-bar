@@ -66,7 +66,7 @@ export function AdminApprovals() {
   }
 
   return (
-    <div className="mx-auto flex min-h-svh max-w-2xl flex-col gap-4 p-4">
+    <div className="mx-auto flex max-w-2xl flex-col gap-4">
       <h1 className="text-xl font-semibold">בקשות הצטרפות ממתינות</h1>
 
       {loadError && <p className="text-destructive text-sm">{loadError}</p>}
