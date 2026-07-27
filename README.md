@@ -63,15 +63,25 @@ frontend.
    ```
 
 6. **Bootstrap the first administrator.** Sign up through the app once, then
-   in the Supabase SQL editor run:
+   in the Supabase SQL editor run a **plain UPDATE**, not the `approve_user()`
+   function:
 
    ```sql
-   select approve_user('<your-auth-user-id>', 'administrator');
+   update app_users set role = 'administrator', status = 'approved', approved_at = now()
+   where id = '<your-auth-user-id>';
    ```
 
    (Find your user id in Authentication → Users, or `select id from auth.users;`.)
-   A real approval UI for this ships in Milestone 2 — until then this is the
-   only way to create the first admin.
+
+   This has to be a raw UPDATE, not `select approve_user(...)`: that function
+   checks `is_admin()`, which relies on `auth.uid()` — and the SQL editor (and
+   any other direct-Postgres connection) has no authenticated session, so
+   `auth.uid()` is always `null` there. `approve_user()` can only ever be
+   called successfully through an authenticated request (i.e. from the app,
+   by an existing admin) — which is exactly why bootstrapping the very first
+   admin needs this one-off UPDATE instead. Once you have an admin, all
+   further approvals go through **Admin → ניהול בקשות הצטרפות**
+   (`/admin/approvals`) in the app — no more manual SQL needed.
 
 ## Scripts
 
@@ -83,6 +93,8 @@ frontend.
 
 ## Project status
 
-Milestone 1 (identity & permission foundation) only: registration, login, and
-the pending-approval gate. No shift management, inventory, or reporting yet —
-see the project plan for the full roadmap.
+Milestone 2 (admin approval flow) done, on top of Milestone 1 (identity &
+permission foundation): registration, login, pending-approval gate, and an
+admin screen to approve pending signups (assigning a role and creating or
+linking an Employee) or reject them. No shift management, inventory, or
+reporting yet — see the project plan for the full roadmap.

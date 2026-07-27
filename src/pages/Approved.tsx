@@ -1,15 +1,10 @@
+import { Link } from 'react-router-dom'
+
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import type { AppUser } from '@/lib/types'
-
-const roleLabels: Record<NonNullable<AppUser['role']>, string> = {
-  administrator: 'מנהל/ת מערכת',
-  bar_manager: 'מנהל/ת בר',
-  shift_manager: 'אחראי/ת משמרת',
-  employee: 'עובד/ת',
-  viewer: 'צופה',
-}
+import { roleLabels } from '@/lib/roleLabels'
 
 export function Approved({ appUser }: { appUser: AppUser }) {
   return (
@@ -21,10 +16,15 @@ export function Approved({ appUser }: { appUser: AppUser }) {
             {appUser.role ? roleLabels[appUser.role] : ''}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-4">
           <p className="text-muted-foreground text-sm">
             לוח הבקרה המלא בבנייה (עתידי).
           </p>
+          {appUser.role === 'administrator' && (
+            <Button asChild variant="secondary">
+              <Link to="/admin/approvals">ניהול בקשות הצטרפות</Link>
+            </Button>
+          )}
         </CardContent>
         <CardFooter className="justify-center">
           <Button variant="outline" onClick={() => supabase.auth.signOut()}>
