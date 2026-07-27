@@ -3,6 +3,7 @@ import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { useAppUser } from '@/hooks/useAppUser'
 import { useAppUserContext, type AppOutletContext } from '@/lib/outletContext'
 import type { AppRole } from '@/lib/types'
+import { ROLES_MANAGING_SHIFTS, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
 import { AppShell } from '@/components/AppShell'
 import { SignUp } from '@/pages/SignUp'
 import { Login } from '@/pages/Login'
@@ -11,6 +12,9 @@ import { Dashboard } from '@/pages/Dashboard'
 import { MyShifts } from '@/pages/MyShifts'
 import { Profile } from '@/pages/Profile'
 import { AdminApprovals } from '@/pages/AdminApprovals'
+import { Shifts } from '@/pages/Shifts'
+import { ShiftForm } from '@/pages/ShiftForm'
+import { ShiftDetail } from '@/pages/ShiftDetail'
 
 function RequireApproved() {
   const { loading, session, appUser } = useAppUser()
@@ -38,6 +42,14 @@ export function App() {
         <Route path="/profile" element={<Profile />} />
         <Route element={<RequireRole roles={['employee', 'shift_manager', 'bar_manager']} />}>
           <Route path="/my-shifts" element={<MyShifts />} />
+        </Route>
+        <Route element={<RequireRole roles={ROLES_VIEWING_SHIFTS} />}>
+          <Route path="/shifts" element={<Shifts />} />
+          <Route path="/shifts/:id" element={<ShiftDetail />} />
+        </Route>
+        <Route element={<RequireRole roles={ROLES_MANAGING_SHIFTS} />}>
+          <Route path="/shifts/new" element={<ShiftForm />} />
+          <Route path="/shifts/:id/edit" element={<ShiftForm />} />
         </Route>
         <Route element={<RequireRole roles={['administrator']} />}>
           <Route path="/admin/approvals" element={<AdminApprovals />} />

@@ -13,3 +13,7 @@ export const ROLES_REQUIRING_EMPLOYEE: AppRole[] = [
   'shift_manager',
   'bar_manager',
 ]
+
+export const ROLES_VIEWING_SHIFTS: AppRole[] = ['shift_manager', 'bar_manager', 'administrator']
+
+export const ROLES_MANAGING_SHIFTS: AppRole[] = ['bar_manager', 'administrator']
