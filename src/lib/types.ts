@@ -78,3 +78,72 @@ export interface AttendanceRecord {
   created_at: string
   updated_at: string
 }
+
+export type JournalCategory =
+  | 'equipment_issue'
+  | 'broken_equipment'
+  | 'items_missing'
+  | 'special_event'
+  | 'improvement_suggestion'
+  | 'positive_feedback'
+  | 'general_note'
+
+export interface JournalEntry {
+  id: string
+  shift_id: string
+  category: JournalCategory
+  description: string
+  quantity: number | null
+  requires_follow_up: boolean
+  photo_url: string | null
+  author: string
+  created_at: string
+}
+
+export interface InventoryItem {
+  id: string
+  name: string
+  unit: string | null
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface InventoryCount {
+  id: string
+  shift_id: string
+  inventory_item_id: string
+  quantity_counted: number
+  recorded_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ShiftReportRow {
+  id: string
+  shift_id: string
+  generated_by: string
+  generated_at: string
+  snapshot: {
+    shift: Shift
+    attendance: {
+      employee_id: string
+      employee_name: string
+      status: AttendanceStatus | null
+      note: string | null
+    }[]
+    journal_entries: {
+      category: JournalCategory
+      description: string
+      quantity: number | null
+      requires_follow_up: boolean
+      author_id: string
+      created_at: string
+    }[]
+    inventory_counts: {
+      item_name: string
+      unit: string | null
+      quantity_counted: number
+    }[]
+  }
+}

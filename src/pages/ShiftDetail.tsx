@@ -163,6 +163,19 @@ export function ShiftDetail() {
     load()
   }
 
+  async function handleReopen() {
+    if (!confirm('לפתוח מחדש את המשמרת?')) return
+
+    const { error: reopenError } = await supabase.rpc('reopen_shift', { p_shift_id: id })
+
+    if (reopenError) {
+      setError(reopenError.message)
+      return
+    }
+
+    load()
+  }
+
   if (error) return <p className="text-destructive text-center text-sm">{error}</p>
   if (!shift) return null
 
@@ -235,6 +248,25 @@ export function ShiftDetail() {
           </CardFooter>
         )}
       </Card>
+
+      {canManageStaffing && (shift.effective_status === 'waiting_for_closure' || shift.effective_status === 'reopened') && (
+        <Button asChild>
+          <Link to={`/shifts/${shift.id}/close`}>סגירת משמרת</Link>
+        </Button>
+      )}
+
+      {shift.status === 'completed' && (
+        <div className="flex gap-2">
+          <Button asChild variant="outline" className="flex-1">
+            <Link to={`/shifts/${shift.id}/report`}>צפייה בדוח</Link>
+          </Button>
+          {canManageShift && (
+            <Button variant="outline" className="flex-1" onClick={handleReopen}>
+              פתיחה מחדש
+            </Button>
+          )}
+        </div>
+      )}
 
       {canManageStaffing && (
         <Card>

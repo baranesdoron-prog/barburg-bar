@@ -16,6 +16,9 @@ import { Shifts } from '@/pages/Shifts'
 import { ShiftForm } from '@/pages/ShiftForm'
 import { ShiftDetail } from '@/pages/ShiftDetail'
 import { AttendanceForm } from '@/pages/AttendanceForm'
+import { ShiftClosing } from '@/pages/ShiftClosing'
+import { ShiftReport } from '@/pages/ShiftReport'
+import { InventoryItems } from '@/pages/InventoryItems'
 
 function RequireApproved() {
   const { loading, session, appUser } = useAppUser()
@@ -48,10 +51,13 @@ export function App() {
           <Route path="/shifts" element={<Shifts />} />
           <Route path="/shifts/:id" element={<ShiftDetail />} />
           <Route path="/shifts/:id/attendance" element={<AttendanceForm />} />
+          <Route path="/shifts/:id/close" element={<ShiftClosing />} />
+          <Route path="/shifts/:id/report" element={<ShiftReport />} />
         </Route>
         <Route element={<RequireRole roles={ROLES_MANAGING_SHIFTS} />}>
           <Route path="/shifts/new" element={<ShiftForm />} />
           <Route path="/shifts/:id/edit" element={<ShiftForm />} />
+          <Route path="/inventory/items" element={<InventoryItems />} />
         </Route>
         <Route element={<RequireRole roles={['administrator']} />}>
           <Route path="/admin/approvals" element={<AdminApprovals />} />

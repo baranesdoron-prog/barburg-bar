@@ -1,7 +1,7 @@
-import { LayoutDashboard, Calendar, CalendarClock, User, UserCheck, type LucideIcon } from 'lucide-react'
+import { LayoutDashboard, Calendar, CalendarClock, Package, User, UserCheck, type LucideIcon } from 'lucide-react'
 
 import type { AppRole } from '@/lib/types'
-import { ROLES_REQUIRING_EMPLOYEE, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
+import { ROLES_MANAGING_SHIFTS, ROLES_REQUIRING_EMPLOYEE, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
 
 export interface NavItem {
   to: string
@@ -18,6 +18,10 @@ export function getNavItems(role: AppRole): NavItem[] {
 
   if (ROLES_REQUIRING_EMPLOYEE.includes(role)) {
     items.push({ to: '/my-shifts', label: 'המשמרות שלי', icon: Calendar })
+  }
+
+  if (ROLES_MANAGING_SHIFTS.includes(role)) {
+    items.push({ to: '/inventory/items', label: 'פריטי מלאי', icon: Package })
   }
 
   items.push({ to: '/profile', label: 'הפרופיל שלי', icon: User })
