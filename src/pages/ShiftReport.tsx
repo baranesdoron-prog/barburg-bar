@@ -36,9 +36,12 @@ export function ShiftReport() {
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
-      <div className="hidden print:block">
-        <h1 className="text-2xl font-bold">בארבורג</h1>
-        <p className="text-lg">דוח סגירת משמרת</p>
+      <div className="hidden items-center gap-3 print:flex">
+        <img src="/logo.png" alt="ברבורג" className="size-16 rounded-full object-cover" />
+        <div>
+          <h1 className="text-2xl font-bold">ברבורג</h1>
+          <p className="text-lg">דוח סגירת משמרת</p>
+        </div>
       </div>
 
       <div className="flex justify-end print:hidden">

@@ -15,9 +15,12 @@ function SidebarContent({ appUser, onNavigate }: { appUser: AppUser; onNavigate?
 
   return (
     <div className="flex h-full flex-col gap-4">
-      <div>
-        <p className="text-lg font-semibold">בארבורג</p>
-        <p className="text-muted-foreground text-sm">{roleLabels[appUser.role!]}</p>
+      <div className="flex items-center gap-2">
+        <img src="/logo.png" alt="ברבורג" className="size-10 shrink-0 rounded-full object-cover" />
+        <div>
+          <p className="text-lg font-semibold">ברבורג</p>
+          <p className="text-muted-foreground text-sm">{roleLabels[appUser.role!]}</p>
+        </div>
       </div>
 
       <nav className="flex flex-1 flex-col gap-1">
@@ -88,7 +91,8 @@ export function AppShell({ appUser, session }: { appUser: AppUser; session: Sess
           <Button variant="ghost" size="icon" onClick={() => setDrawerOpen(true)}>
             <Menu className="size-5" />
           </Button>
-          <span className="font-semibold">בארבורג</span>
+          <img src="/logo.png" alt="ברבורג" className="size-8 shrink-0 rounded-full object-cover" />
+          <span className="font-semibold">ברבורג</span>
         </header>
 
         <main className="flex-1 p-4">

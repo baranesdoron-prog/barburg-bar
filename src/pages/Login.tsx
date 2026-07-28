@@ -41,8 +41,9 @@ export function Login() {
   return (
     <div className="flex min-h-svh items-center justify-center p-4">
       <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>התחברות לבארבורג</CardTitle>
+        <CardHeader className="items-center text-center">
+          <img src="/logo.png" alt="ברבורג" className="mb-2 size-24 rounded-full object-cover" />
+          <CardTitle>התחברות לברבורג</CardTitle>
           <CardDescription>ניהול הבר הקהילתי</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>

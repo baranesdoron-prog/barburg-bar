@@ -61,8 +61,9 @@ export function SignUp() {
   return (
     <div className="flex min-h-svh items-center justify-center p-4">
       <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>הרשמה לבארבורג</CardTitle>
+        <CardHeader className="items-center text-center">
+          <img src="/logo.png" alt="ברבורג" className="mb-2 size-24 rounded-full object-cover" />
+          <CardTitle>הרשמה לברבורג</CardTitle>
           <CardDescription>יצירת חשבון חדש</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
