@@ -20,6 +20,7 @@ import { AttendanceForm } from '@/pages/AttendanceForm'
 import { ShiftClosing } from '@/pages/ShiftClosing'
 import { ShiftReport } from '@/pages/ShiftReport'
 import { InventoryItems } from '@/pages/InventoryItems'
+import { ProductFormPage } from '@/pages/ProductFormPage'
 import { Suppliers } from '@/pages/Suppliers'
 import { PurchaseOrders } from '@/pages/PurchaseOrders'
 import { PurchaseOrderDetail } from '@/pages/PurchaseOrderDetail'
@@ -70,6 +71,8 @@ export function App() {
           <Route path="/shifts/new" element={<ShiftForm />} />
           <Route path="/shifts/:id/edit" element={<ShiftForm />} />
           <Route path="/inventory/items" element={<InventoryItems />} />
+          <Route path="/inventory/items/new" element={<ProductFormPage />} />
+          <Route path="/inventory/items/:id/edit" element={<ProductFormPage />} />
           <Route path="/suppliers" element={<Suppliers />} />
           <Route path="/purchase-orders" element={<PurchaseOrders />} />
           <Route path="/purchase-orders/:id" element={<PurchaseOrderDetail />} />

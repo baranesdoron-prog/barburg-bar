@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
 import { parseCsv, toCsv } from '@/lib/csv'
-import { ProductForm } from '@/components/ProductForm'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -33,8 +33,6 @@ export function InventoryItems() {
   const [categoryFilter, setCategoryFilter] = useState('')
   const [supplierFilter, setSupplierFilter] = useState('')
 
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null)
   const [importSummary, setImportSummary] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -244,8 +242,8 @@ export function InventoryItems() {
                   )}
                 </div>
                 <div className="flex flex-col gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => setEditingItem(item)}>
-                    עריכה
+                  <Button asChild variant="ghost" size="sm">
+                    <Link to={`/inventory/items/${item.id}/edit`}>עריכה</Link>
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => handleToggleActive(item)}>
                     {item.active ? 'השבתה' : 'הפעלה'}
@@ -257,53 +255,19 @@ export function InventoryItems() {
         </CardContent>
       </Card>
 
-      {editingItem && (
-        <ProductForm
-          item={editingItem}
-          suppliers={suppliers}
-          categoryOptions={categoryOptions}
-          onSaved={() => {
-            setEditingItem(null)
-            loadFilters()
-            search()
-          }}
-          onCancel={() => setEditingItem(null)}
-        />
-      )}
-
-      {!editingItem && showAddForm && (
-        <ProductForm
-          item={null}
-          suppliers={suppliers}
-          categoryOptions={categoryOptions}
-          onSaved={() => {
-            setShowAddForm(false)
-            loadFilters()
-            search()
-          }}
-          onCancel={() => setShowAddForm(false)}
-        />
-      )}
-
-      {!editingItem && !showAddForm && (
-        <div className="flex flex-col gap-2">
-          <Button onClick={() => setShowAddForm(true)}>הוספת מוצר</Button>
-          <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-            ייבוא קובץ CSV
-          </Button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            className="hidden"
-            onChange={handleImportFile}
-          />
-          <Button variant="ghost" onClick={handleDownloadTemplate}>
-            הורדת תבנית ייבוא
-          </Button>
-          {importSummary && <p className="text-muted-foreground text-sm">{importSummary}</p>}
-        </div>
-      )}
+      <div className="flex flex-col gap-2">
+        <Button asChild>
+          <Link to="/inventory/items/new">הוספת מוצר</Link>
+        </Button>
+        <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+          ייבוא קובץ CSV
+        </Button>
+        <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportFile} />
+        <Button variant="ghost" onClick={handleDownloadTemplate}>
+          הורדת תבנית ייבוא
+        </Button>
+        {importSummary && <p className="text-muted-foreground text-sm">{importSummary}</p>}
+      </div>
     </div>
   )
 }
