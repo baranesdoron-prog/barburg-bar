@@ -147,3 +147,38 @@ export interface ShiftReportRow {
     }[]
   }
 }
+
+export interface Supplier {
+  id: string
+  name: string
+  contact_name: string | null
+  phone: string | null
+  email: string | null
+  notes: string | null
+  active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type PurchaseOrderStatus = 'draft' | 'ordered' | 'received' | 'cancelled'
+
+export interface PurchaseOrder {
+  id: string
+  supplier_id: string
+  status: PurchaseOrderStatus
+  notes: string | null
+  created_by: string
+  ordered_at: string | null
+  received_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PurchaseOrderItem {
+  id: string
+  purchase_order_id: string
+  inventory_item_id: string
+  quantity: number
+  unit_price: number | null
+  created_at: string
+}

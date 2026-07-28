@@ -19,6 +19,9 @@ import { AttendanceForm } from '@/pages/AttendanceForm'
 import { ShiftClosing } from '@/pages/ShiftClosing'
 import { ShiftReport } from '@/pages/ShiftReport'
 import { InventoryItems } from '@/pages/InventoryItems'
+import { Suppliers } from '@/pages/Suppliers'
+import { PurchaseOrders } from '@/pages/PurchaseOrders'
+import { PurchaseOrderDetail } from '@/pages/PurchaseOrderDetail'
 
 function RequireApproved() {
   const { loading, session, appUser } = useAppUser()
@@ -58,6 +61,9 @@ export function App() {
           <Route path="/shifts/new" element={<ShiftForm />} />
           <Route path="/shifts/:id/edit" element={<ShiftForm />} />
           <Route path="/inventory/items" element={<InventoryItems />} />
+          <Route path="/suppliers" element={<Suppliers />} />
+          <Route path="/purchase-orders" element={<PurchaseOrders />} />
+          <Route path="/purchase-orders/:id" element={<PurchaseOrderDetail />} />
         </Route>
         <Route element={<RequireRole roles={['administrator']} />}>
           <Route path="/admin/approvals" element={<AdminApprovals />} />
