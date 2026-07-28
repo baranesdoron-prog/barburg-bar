@@ -66,3 +66,15 @@ export interface ReplacementRequest {
   review_note: string | null
   created_at: string
 }
+
+export type AttendanceStatus = 'present' | 'absent' | 'late'
+
+export interface AttendanceRecord {
+  id: string
+  shift_assignment_id: string
+  status: AttendanceStatus
+  note: string | null
+  recorded_by: string
+  created_at: string
+  updated_at: string
+}

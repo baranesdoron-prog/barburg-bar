@@ -4,11 +4,18 @@ import { Link, useParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
 import { ROLES_MANAGING_SHIFTS, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
-import { effectiveStatusLabels, effectiveStatusBadgeClass } from '@/lib/shiftLabels'
+import { attendanceStatusLabels, effectiveStatusLabels, effectiveStatusBadgeClass } from '@/lib/shiftLabels'
 import { cn, formatDateTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import type { ReplacementRequest, Shift, ShiftAssignment } from '@/lib/types'
+import type { AttendanceRecord, EffectiveShiftStatus, ReplacementRequest, Shift, ShiftAssignment } from '@/lib/types'
+
+const ATTENDANCE_ELIGIBLE_STATUSES: EffectiveShiftStatus[] = [
+  'active',
+  'waiting_for_closure',
+  'completed',
+  'reopened',
+]
 
 interface Employee {
   id: string
@@ -26,6 +33,7 @@ export function ShiftDetail() {
   const [assignments, setAssignments] = useState<ShiftAssignment[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [pendingRequests, setPendingRequests] = useState<ReplacementRequest[]>([])
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
   const [error, setError] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState(false)
   const [addingEmployeeId, setAddingEmployeeId] = useState('')
@@ -61,17 +69,21 @@ export function ShiftDetail() {
     setAssignments(loadedAssignments)
 
     if (loadedAssignments.length > 0) {
-      const { data: requests } = await supabase
-        .from('replacement_requests')
-        .select('*')
-        .in(
-          'shift_assignment_id',
-          loadedAssignments.map((a) => a.id),
-        )
-        .eq('status', 'pending')
-      setPendingRequests((requests as ReplacementRequest[]) ?? [])
+      const assignmentIds = loadedAssignments.map((a) => a.id)
+
+      const [requestsRes, attendanceRes] = await Promise.all([
+        supabase
+          .from('replacement_requests')
+          .select('*')
+          .in('shift_assignment_id', assignmentIds)
+          .eq('status', 'pending'),
+        supabase.from('attendance_records').select('*').in('shift_assignment_id', assignmentIds),
+      ])
+      setPendingRequests((requestsRes.data as ReplacementRequest[]) ?? [])
+      setAttendanceRecords((attendanceRes.data as AttendanceRecord[]) ?? [])
     } else {
       setPendingRequests([])
+      setAttendanceRecords([])
     }
   }
 
@@ -260,6 +272,32 @@ export function ShiftDetail() {
                 </Button>
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {canManageStaffing && ATTENDANCE_ELIGIBLE_STATUSES.includes(shift.effective_status) && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">נוכחות</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3">
+            {attendanceRecords.length > 0 ? (
+              <p className="text-muted-foreground text-sm">
+                {(['present', 'late', 'absent'] as const)
+                  .map((status) => {
+                    const count = attendanceRecords.filter((r) => r.status === status).length
+                    return count > 0 ? `${count} ${attendanceStatusLabels[status]}` : null
+                  })
+                  .filter(Boolean)
+                  .join(', ')}
+              </p>
+            ) : (
+              <p className="text-muted-foreground text-sm">נוכחות טרם נרשמה.</p>
+            )}
+            <Button asChild variant="outline">
+              <Link to={`/shifts/${shift.id}/attendance`}>רישום נוכחות</Link>
+            </Button>
           </CardContent>
         </Card>
       )}

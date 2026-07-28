@@ -1,4 +1,4 @@
-import type { EffectiveShiftStatus } from '@/lib/types'
+import type { AttendanceStatus, EffectiveShiftStatus } from '@/lib/types'
 
 export const effectiveStatusLabels: Record<EffectiveShiftStatus, string> = {
   draft: 'טיוטה',
@@ -18,4 +18,10 @@ export const effectiveStatusBadgeClass: Record<EffectiveShiftStatus, string> = {
   completed: 'bg-secondary text-secondary-foreground',
   cancelled: 'bg-secondary text-muted-foreground line-through',
   reopened: 'bg-accent text-accent-foreground',
+}
+
+export const attendanceStatusLabels: Record<AttendanceStatus, string> = {
+  present: 'נוכח/ת',
+  absent: 'נעדר/ת',
+  late: 'איחור',
 }
