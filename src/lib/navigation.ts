@@ -5,6 +5,7 @@ import {
   Package,
   Truck,
   ClipboardList,
+  FileText,
   User,
   UserCheck,
   type LucideIcon,
@@ -24,6 +25,7 @@ export function getNavItems(role: AppRole): NavItem[] {
 
   if (ROLES_VIEWING_SHIFTS.includes(role)) {
     items.push({ to: '/shifts', label: 'משמרות', icon: CalendarClock })
+    items.push({ to: '/reports', label: 'דוחות', icon: FileText })
   }
 
   if (ROLES_REQUIRING_EMPLOYEE.includes(role)) {

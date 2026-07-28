@@ -36,6 +36,17 @@ export function ShiftReport() {
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
+      <div className="hidden print:block">
+        <h1 className="text-2xl font-bold">בארבורג</h1>
+        <p className="text-lg">דוח סגירת משמרת</p>
+      </div>
+
+      <div className="flex justify-end print:hidden">
+        <Button variant="outline" onClick={() => window.print()}>
+          הדפסה / ייצוא PDF
+        </Button>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle>דוח סגירת משמרת — {snapshot.shift.shift_type}</CardTitle>
@@ -104,7 +115,7 @@ export function ShiftReport() {
         </CardContent>
       </Card>
 
-      <div className="flex justify-center">
+      <div className="flex justify-center print:hidden">
         <Button asChild variant="ghost">
           <Link to={`/shifts/${id}`}>חזרה למשמרת</Link>
         </Button>

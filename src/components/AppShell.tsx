@@ -59,7 +59,7 @@ export function AppShell({ appUser, session }: { appUser: AppUser; session: Sess
 
   return (
     <div className="flex min-h-svh">
-      <aside className="hidden w-64 shrink-0 border-e p-4 md:flex">
+      <aside className="hidden w-64 shrink-0 border-e p-4 md:flex print:hidden">
         <SidebarContent appUser={appUser} />
       </aside>
 
@@ -84,7 +84,7 @@ export function AppShell({ appUser, session }: { appUser: AppUser; session: Sess
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-3 border-b p-4 md:hidden">
+        <header className="flex items-center gap-3 border-b p-4 md:hidden print:hidden">
           <Button variant="ghost" size="icon" onClick={() => setDrawerOpen(true)}>
             <Menu className="size-5" />
           </Button>

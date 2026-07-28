@@ -22,6 +22,7 @@ import { InventoryItems } from '@/pages/InventoryItems'
 import { Suppliers } from '@/pages/Suppliers'
 import { PurchaseOrders } from '@/pages/PurchaseOrders'
 import { PurchaseOrderDetail } from '@/pages/PurchaseOrderDetail'
+import { Reports } from '@/pages/Reports'
 
 function RequireApproved() {
   const { loading, session, appUser } = useAppUser()
@@ -56,6 +57,7 @@ export function App() {
           <Route path="/shifts/:id/attendance" element={<AttendanceForm />} />
           <Route path="/shifts/:id/close" element={<ShiftClosing />} />
           <Route path="/shifts/:id/report" element={<ShiftReport />} />
+          <Route path="/reports" element={<Reports />} />
         </Route>
         <Route element={<RequireRole roles={ROLES_MANAGING_SHIFTS} />}>
           <Route path="/shifts/new" element={<ShiftForm />} />
