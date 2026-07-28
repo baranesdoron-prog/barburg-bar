@@ -180,6 +180,7 @@ export type PurchaseOrderStatus = 'draft' | 'ordered' | 'received' | 'cancelled'
 
 export interface PurchaseOrder {
   id: string
+  order_number: string
   supplier_id: string
   status: PurchaseOrderStatus
   notes: string | null

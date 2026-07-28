@@ -82,6 +82,7 @@ export function PurchaseOrders() {
             >
               <div>
                 <p className="font-medium">{supplierNames.get(order.supplier_id) ?? '—'}</p>
+                <p className="text-muted-foreground text-xs">{order.order_number}</p>
                 <p className="text-muted-foreground">₪{(totals[order.id] ?? 0).toFixed(2)}</p>
               </div>
               <span

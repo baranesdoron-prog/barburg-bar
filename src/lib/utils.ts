@@ -15,13 +15,20 @@ export function formatDateTime(isoString: string) {
   return dateTimeFormatter.format(new Date(isoString))
 }
 
-const localDateKeyFormatter = new Intl.DateTimeFormat('en-CA', {
+const dateFormatter = new Intl.DateTimeFormat('he-IL', {
+  dateStyle: 'short',
   timeZone: 'Asia/Jerusalem',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
 })
 
-export function toLocalDateKey(isoString: string) {
-  return localDateKeyFormatter.format(new Date(isoString))
+export function formatDate(isoString: string) {
+  return dateFormatter.format(new Date(isoString))
+}
+
+const timeFormatter = new Intl.DateTimeFormat('he-IL', {
+  timeStyle: 'short',
+  timeZone: 'Asia/Jerusalem',
+})
+
+export function formatTime(isoString: string) {
+  return timeFormatter.format(new Date(isoString))
 }

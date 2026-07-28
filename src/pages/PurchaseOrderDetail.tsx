@@ -124,6 +124,7 @@ export function PurchaseOrderDetail() {
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-2 text-sm">
+          <p className="text-muted-foreground">{order.order_number}</p>
           {order.ordered_at && (
             <p>
               <span className="text-muted-foreground">הוזמן: </span>
