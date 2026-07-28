@@ -8,6 +8,7 @@ import {
   FileText,
   User,
   UserCheck,
+  Users,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -42,6 +43,7 @@ export function getNavItems(role: AppRole): NavItem[] {
 
   if (role === 'administrator') {
     items.push({ to: '/admin/approvals', label: 'בקשות הצטרפות', icon: UserCheck })
+    items.push({ to: '/admin/users', label: 'משתמשים', icon: Users })
   }
 
   return items

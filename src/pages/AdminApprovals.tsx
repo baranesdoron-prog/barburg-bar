@@ -1,33 +1,16 @@
 import { useEffect, useState } from 'react'
 
 import { supabase } from '@/lib/supabase'
-import { roleLabels, ROLES_REQUIRING_EMPLOYEE } from '@/lib/roleLabels'
-import type { AppRole } from '@/lib/types'
+import { useRoleEmployeeAssignment, type Employee } from '@/hooks/useRoleEmployeeAssignment'
+import { RoleEmployeeFields } from '@/components/RoleEmployeeFields'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 
 interface PendingUser {
   id: string
   email: string
   created_at: string
 }
-
-interface Employee {
-  id: string
-  full_name: string
-}
-
-const selectClass =
-  'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
 
 export function AdminApprovals() {
   const [pending, setPending] = useState<PendingUser[] | null>(null)
@@ -99,59 +82,26 @@ function PendingUserCard({
   onResolved: () => void
   onEmployeeCreated: (employee: Employee) => void
 }) {
-  const [role, setRole] = useState<AppRole | ''>('')
-  const [employeeMode, setEmployeeMode] = useState<'link' | 'create'>('link')
-  const [employeeId, setEmployeeId] = useState('')
-  const [newName, setNewName] = useState('')
-  const [newPhone, setNewPhone] = useState('')
+  const assignment = useRoleEmployeeAssignment()
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const needsEmployee = role !== '' && ROLES_REQUIRING_EMPLOYEE.includes(role)
-
   async function handleApprove() {
     setError(null)
-
-    if (!role) {
-      setError('יש לבחור תפקיד')
-      return
-    }
-
-    if (needsEmployee) {
-      if (employeeMode === 'link' && !employeeId) {
-        setError('יש לבחור עובד/ת קיים/ת')
-        return
-      }
-      if (employeeMode === 'create' && !newName.trim()) {
-        setError('יש להזין שם מלא')
-        return
-      }
-    }
-
     setSubmitting(true)
 
-    let resolvedEmployeeId: string | null = needsEmployee && employeeMode === 'link' ? employeeId : null
+    const result = await assignment.resolve(onEmployeeCreated)
 
-    if (needsEmployee && employeeMode === 'create') {
-      const { data: employee, error: employeeError } = await supabase
-        .from('employees')
-        .insert({ full_name: newName.trim(), phone: newPhone.trim() || null })
-        .select('id, full_name')
-        .single()
-
-      if (employeeError) {
-        setSubmitting(false)
-        setError(employeeError.message)
-        return
-      }
-      resolvedEmployeeId = employee.id
-      onEmployeeCreated(employee)
+    if (result.error) {
+      setSubmitting(false)
+      setError(result.error)
+      return
     }
 
     const { error: approveError } = await supabase.rpc('approve_user', {
       p_user_id: user.id,
-      p_role: role,
-      p_employee_id: resolvedEmployeeId,
+      p_role: assignment.role,
+      p_employee_id: result.employeeId,
     })
 
     setSubmitting(false)
@@ -191,78 +141,7 @@ function PendingUserCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor={`role-${user.id}`}>תפקיד</Label>
-          <select
-            id={`role-${user.id}`}
-            className={selectClass}
-            value={role}
-            onChange={(e) => setRole(e.target.value as AppRole)}
-          >
-            <option value="" disabled>
-              בחר תפקיד
-            </option>
-            {(Object.keys(roleLabels) as AppRole[]).map((r) => (
-              <option key={r} value={r}>
-                {roleLabels[r]}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {needsEmployee && (
-          <div className="flex flex-col gap-3 rounded-md border p-3">
-            <div className="flex gap-4 text-sm">
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  checked={employeeMode === 'link'}
-                  onChange={() => setEmployeeMode('link')}
-                />
-                שיוך לעובד/ת קיים/ת
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  checked={employeeMode === 'create'}
-                  onChange={() => setEmployeeMode('create')}
-                />
-                יצירת עובד/ת חדש/ה
-              </label>
-            </div>
-
-            {employeeMode === 'link' ? (
-              <select
-                className={selectClass}
-                value={employeeId}
-                onChange={(e) => setEmployeeId(e.target.value)}
-              >
-                <option value="" disabled>
-                  בחר/י עובד/ת
-                </option>
-                {employees.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.full_name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <Input
-                  placeholder="שם מלא"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                />
-                <Input
-                  placeholder="טלפון (לא חובה)"
-                  value={newPhone}
-                  onChange={(e) => setNewPhone(e.target.value)}
-                />
-              </div>
-            )}
-          </div>
-        )}
-
+        <RoleEmployeeFields idPrefix={user.id} employees={employees} assignment={assignment} />
         {error && <p className="text-destructive text-sm">{error}</p>}
       </CardContent>
       <CardFooter className="flex gap-2">

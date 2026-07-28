@@ -23,6 +23,7 @@ import { Suppliers } from '@/pages/Suppliers'
 import { PurchaseOrders } from '@/pages/PurchaseOrders'
 import { PurchaseOrderDetail } from '@/pages/PurchaseOrderDetail'
 import { Reports } from '@/pages/Reports'
+import { Users } from '@/pages/Users'
 
 function RequireApproved() {
   const { loading, session, appUser } = useAppUser()
@@ -69,6 +70,7 @@ export function App() {
         </Route>
         <Route element={<RequireRole roles={['administrator']} />}>
           <Route path="/admin/approvals" element={<AdminApprovals />} />
+          <Route path="/admin/users" element={<Users />} />
         </Route>
       </Route>
     </Routes>
