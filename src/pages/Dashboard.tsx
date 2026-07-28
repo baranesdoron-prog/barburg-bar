@@ -7,6 +7,7 @@ import { roleLabels, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
 import { useAppUserContext } from '@/lib/outletContext'
 import { effectiveStatusLabels } from '@/lib/shiftLabels'
 import { formatDateTime } from '@/lib/utils'
+import { DashboardCalendar } from '@/components/DashboardCalendar'
 import type { EffectiveShiftStatus, ReplacementRequest, Shift, ShiftAssignment } from '@/lib/types'
 
 function ShiftSection({ title, shifts }: { title: string; shifts: Shift[] }) {
@@ -86,6 +87,9 @@ function ManagerDashboard() {
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
+      <div className="flex justify-end">
+        <DashboardCalendar shifts={shifts} />
+      </div>
       <ShiftSection title={effectiveStatusLabels.active} shifts={byStatus('active')} />
       <ShiftSection title="משמרות בתת-איוש" shifts={understaffed} />
       <ShiftSection title="בקשות החלפה ממתינות" shifts={pendingRequestShifts} />
