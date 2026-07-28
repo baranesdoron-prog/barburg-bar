@@ -33,6 +33,7 @@ export function ShiftForm() {
   const [shiftType, setShiftType] = useState('')
   const [shiftManagerId, setShiftManagerId] = useState('')
   const [notes, setNotes] = useState('')
+  const [requiredStaffCount, setRequiredStaffCount] = useState('')
   const [status, setStatus] = useState<ShiftStatus>('draft')
   const [loading, setLoading] = useState(isEdit)
   const [submitting, setSubmitting] = useState(false)
@@ -67,6 +68,7 @@ export function ShiftForm() {
         setShiftType(shift.shift_type)
         setShiftManagerId(shift.shift_manager_id ?? '')
         setNotes(shift.notes ?? '')
+        setRequiredStaffCount(shift.required_staff_count?.toString() ?? '')
         setStatus(shift.status)
       })
   }, [id])
@@ -93,6 +95,7 @@ export function ShiftForm() {
       shift_type: shiftType.trim(),
       shift_manager_id: shiftManagerId || null,
       notes: notes.trim() || null,
+      required_staff_count: requiredStaffCount ? Number(requiredStaffCount) : null,
       status,
     }
 
@@ -159,6 +162,17 @@ export function ShiftForm() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="required-staff-count">מספר עובדים נדרש (לא חובה)</Label>
+            <Input
+              id="required-staff-count"
+              type="number"
+              min={1}
+              value={requiredStaffCount}
+              onChange={(e) => setRequiredStaffCount(e.target.value)}
+            />
           </div>
 
           <div className="flex flex-col gap-2">

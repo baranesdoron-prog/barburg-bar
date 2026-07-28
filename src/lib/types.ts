@@ -37,8 +37,32 @@ export interface Shift {
   shift_manager_id: string | null
   notes: string | null
   status: ShiftStatus
+  required_staff_count: number | null
   created_by: string
   created_at: string
   updated_at: string
   effective_status: EffectiveShiftStatus
+  assigned_count: number
+}
+
+export interface ShiftAssignment {
+  id: string
+  shift_id: string
+  employee_id: string
+  created_at: string
+}
+
+export type ReplacementRequestStatus = 'pending' | 'approved' | 'rejected'
+
+export interface ReplacementRequest {
+  id: string
+  shift_assignment_id: string
+  requested_by: string
+  reason: string | null
+  substitute_employee_id: string | null
+  status: ReplacementRequestStatus
+  reviewed_by: string | null
+  reviewed_at: string | null
+  review_note: string | null
+  created_at: string
 }
