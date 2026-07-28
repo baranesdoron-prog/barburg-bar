@@ -2,6 +2,7 @@ import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 
 import { useAppUser } from '@/hooks/useAppUser'
 import { useAppUserContext, type AppOutletContext } from '@/lib/outletContext'
+import { ImpersonationProvider, useImpersonation } from '@/lib/impersonation'
 import type { AppRole } from '@/lib/types'
 import { ROLES_MANAGING_SHIFTS, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
 import { AppShell } from '@/components/AppShell'
@@ -31,14 +32,19 @@ function RequireApproved() {
   if (loading) return null
   if (!session) return <Navigate to="/login" replace />
   if (!appUser || appUser.status !== 'approved') return <PendingApproval />
-  return <AppShell appUser={appUser} session={session} />
+  return (
+    <ImpersonationProvider realRole={appUser.role!}>
+      <AppShell appUser={appUser} session={session} />
+    </ImpersonationProvider>
+  )
 }
 
 function RequireRole({ roles }: { roles: AppRole[] }) {
   const { appUser, session } = useAppUserContext()
+  const { effectiveRole } = useImpersonation()
 
-  if (!roles.includes(appUser.role!)) return <Navigate to="/" replace />
-  return <Outlet context={{ appUser, session } satisfies AppOutletContext} />
+  if (!roles.includes(effectiveRole)) return <Navigate to="/" replace />
+  return <Outlet context={{ appUser, session, effectiveRole } satisfies AppOutletContext} />
 }
 
 export function App() {

@@ -6,12 +6,17 @@ import { Menu, LogOut, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { getNavItems } from '@/lib/navigation'
 import { roleLabels } from '@/lib/roleLabels'
-import type { AppUser } from '@/lib/types'
+import { useImpersonation } from '@/lib/impersonation'
+import type { AppOutletContext } from '@/lib/outletContext'
+import type { AppRole, AppUser } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
+const PREVIEWABLE_ROLES: AppRole[] = ['employee', 'shift_manager', 'bar_manager', 'viewer']
+
 function SidebarContent({ appUser, onNavigate }: { appUser: AppUser; onNavigate?: () => void }) {
-  const navItems = getNavItems(appUser.role!)
+  const { effectiveRole, isPreviewing, startPreview, stopPreview } = useImpersonation()
+  const navItems = getNavItems(effectiveRole)
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -45,6 +50,27 @@ function SidebarContent({ appUser, onNavigate }: { appUser: AppUser; onNavigate?
         ))}
       </nav>
 
+      {appUser.role === 'administrator' && (
+        <div className="flex flex-col gap-2 border-t pt-3">
+          <label className="text-muted-foreground text-xs">תצוגה מקדימה כתפקיד</label>
+          <select
+            className="border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs outline-none"
+            value={isPreviewing ? effectiveRole : ''}
+            onChange={(e) => {
+              if (e.target.value) startPreview(e.target.value as AppRole)
+              else stopPreview()
+            }}
+          >
+            <option value="">— תצוגה רגילה (מנהל/ת מערכת) —</option>
+            {PREVIEWABLE_ROLES.map((role) => (
+              <option key={role} value={role}>
+                {roleLabels[role]}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <Button
         variant="outline"
         className="justify-start gap-3"
@@ -57,8 +83,24 @@ function SidebarContent({ appUser, onNavigate }: { appUser: AppUser; onNavigate?
   )
 }
 
+function ImpersonationBanner() {
+  const { isPreviewing, effectiveRole, stopPreview } = useImpersonation()
+
+  if (!isPreviewing) return null
+
+  return (
+    <button
+      onClick={stopPreview}
+      className="print:hidden mb-4 w-full rounded-md bg-amber-500/20 px-4 py-2 text-start text-sm font-medium text-amber-900 dark:text-amber-200"
+    >
+      צופה כעת כ־{roleLabels[effectiveRole]} (תצוגה מקדימה, לחיצה ליציאה)
+    </button>
+  )
+}
+
 export function AppShell({ appUser, session }: { appUser: AppUser; session: Session }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const { effectiveRole } = useImpersonation()
 
   return (
     <div className="flex min-h-svh">
@@ -96,7 +138,8 @@ export function AppShell({ appUser, session }: { appUser: AppUser; session: Sess
         </header>
 
         <main className="flex-1 p-4">
-          <Outlet context={{ appUser, session } satisfies { appUser: AppUser; session: Session }} />
+          <ImpersonationBanner />
+          <Outlet context={{ appUser, session, effectiveRole } satisfies AppOutletContext} />
         </main>
       </div>
     </div>

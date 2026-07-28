@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { AttendanceStep } from '@/components/AttendanceStep'
 import { journalCategoryLabels } from '@/lib/journalLabels'
 import { formatDateTime } from '@/lib/utils'
+import { useAppUserContext } from '@/lib/outletContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,6 +18,7 @@ const journalCategories = Object.keys(journalCategoryLabels) as JournalCategory[
 
 export function ShiftClosing() {
   const { id } = useParams()
+  const { appUser } = useAppUserContext()
   const [shift, setShift] = useState<Shift | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reportId, setReportId] = useState<string | null>(null)
@@ -47,6 +49,26 @@ export function ShiftClosing() {
 
   if (reportId) {
     return <ClosingComplete shiftId={shift.id} />
+  }
+
+  const canClose =
+    appUser.role === 'bar_manager' ||
+    appUser.role === 'administrator' ||
+    (appUser.employee_id !== null && appUser.employee_id === shift.shift_manager_id)
+
+  if (!canClose) {
+    return (
+      <Card className="mx-auto max-w-md text-center">
+        <CardHeader>
+          <CardTitle>אין הרשאה לסגור משמרת זו</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground text-sm">
+            רק אחראי/ת המשמרת שמונה/תה למשמרת זו, או מנהל/ת בר, יכולים לסגור אותה.
+          </p>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
@@ -284,6 +306,7 @@ function SummarySection({
   const [journalCount, setJournalCount] = useState(0)
   const [followUpCount, setFollowUpCount] = useState(0)
   const [inventoryCount, setInventoryCount] = useState(0)
+  const [activeItemCount, setActiveItemCount] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [finishing, setFinishing] = useState(false)
 
@@ -295,12 +318,13 @@ function SummarySection({
 
     const assignmentIds = (assignments as { id: string }[] | null)?.map((a) => a.id) ?? []
 
-    const [attendanceRes, journalRes, inventoryRes] = await Promise.all([
+    const [attendanceRes, journalRes, inventoryRes, activeItemsRes] = await Promise.all([
       assignmentIds.length > 0
         ? supabase.from('attendance_records').select('*').in('shift_assignment_id', assignmentIds)
         : Promise.resolve({ data: [] as AttendanceRecord[] }),
       supabase.from('journal_entries').select('requires_follow_up').eq('shift_id', shift.id),
       supabase.from('inventory_counts').select('id').eq('shift_id', shift.id),
+      supabase.from('inventory_items').select('id').eq('active', true),
     ])
 
     setAttendanceCount((attendanceRes.data as AttendanceRecord[]).length)
@@ -308,6 +332,7 @@ function SummarySection({
     setJournalCount(journalRows.length)
     setFollowUpCount(journalRows.filter((r) => r.requires_follow_up).length)
     setInventoryCount((inventoryRes.data as { id: string }[] | null)?.length ?? 0)
+    setActiveItemCount((activeItemsRes.data as { id: string }[] | null)?.length ?? 0)
   }
 
   useEffect(() => {
@@ -334,6 +359,10 @@ function SummarySection({
     onFinished(data.id)
   }
 
+  const missingJournal = journalCount === 0
+  const missingInventory = activeItemCount > 0 && inventoryCount < activeItemCount
+  const canFinish = !missingJournal && !missingInventory
+
   return (
     <Card>
       <CardHeader>
@@ -347,11 +376,17 @@ function SummarySection({
         <p>
           רשומות יומן: {journalCount} (מתוכן {followUpCount} דורשות מעקב)
         </p>
-        <p>פריטי מלאי שנספרו: {inventoryCount}</p>
+        <p>
+          פריטי מלאי שנספרו: {inventoryCount} מתוך {activeItemCount}
+        </p>
+        {missingJournal && (
+          <p className="text-destructive">יש להוסיף לפחות רשומת יומן אחת (מה עבד טוב, מה השתבש וכו') לפני הסיום.</p>
+        )}
+        {missingInventory && <p className="text-destructive">יש להשלים ספירה של כל פריטי המלאי הפעילים לפני הסיום.</p>}
         {error && <p className="text-destructive">{error}</p>}
       </CardContent>
       <CardFooter>
-        <Button className="w-full" disabled={finishing} onClick={handleFinish}>
+        <Button className="w-full" disabled={finishing || !canFinish} onClick={handleFinish}>
           סיום משמרת
         </Button>
       </CardFooter>

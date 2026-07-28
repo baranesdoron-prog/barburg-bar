@@ -41,10 +41,7 @@ export function ShiftForm() {
 
   useEffect(() => {
     supabase
-      .from('employees')
-      .select('id, full_name')
-      .eq('active', true)
-      .order('full_name')
+      .rpc('list_shift_manager_employees')
       .then(({ data }) => setEmployees((data as Employee[]) ?? []))
   }, [])
 

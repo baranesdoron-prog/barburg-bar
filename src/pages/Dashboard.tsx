@@ -181,13 +181,13 @@ function EmployeeDashboard({ employeeId }: { employeeId: string }) {
 }
 
 export function Dashboard() {
-  const { appUser } = useAppUserContext()
+  const { appUser, effectiveRole } = useAppUserContext()
 
-  if (ROLES_VIEWING_SHIFTS.includes(appUser.role!)) {
+  if (ROLES_VIEWING_SHIFTS.includes(effectiveRole)) {
     return <ManagerDashboard />
   }
 
-  if (appUser.role === 'employee' && appUser.employee_id) {
+  if (effectiveRole === 'employee' && appUser.employee_id) {
     return <EmployeeDashboard employeeId={appUser.employee_id} />
   }
 
@@ -195,7 +195,7 @@ export function Dashboard() {
     <Card className="mx-auto max-w-md text-center">
       <CardHeader>
         <CardTitle>לוח הבקרה בבנייה</CardTitle>
-        <CardDescription>{roleLabels[appUser.role!]}</CardDescription>
+        <CardDescription>{roleLabels[effectiveRole]}</CardDescription>
       </CardHeader>
       <CardContent>
         <p className="text-muted-foreground text-sm">
