@@ -100,13 +100,29 @@ export interface JournalEntry {
   created_at: string
 }
 
+export type InventoryUnitType = 'single' | 'box'
+
 export interface InventoryItem {
   id: string
   name: string
   unit: string | null
+  category: string | null
+  vendor: string | null
+  sku: string | null
+  supplier_id: string | null
+  unit_type: InventoryUnitType
+  units_per_box: number | null
+  unit_price: number | null
+  minimum_quantity: number | null
+  image_url: string | null
   active: boolean
   created_at: string
   updated_at: string
+}
+
+export interface InventoryItemWithStock extends InventoryItem {
+  latest_counted_quantity: number | null
+  latest_counted_at: string | null
 }
 
 export interface InventoryCount {
