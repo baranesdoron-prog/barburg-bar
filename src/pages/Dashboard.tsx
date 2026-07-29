@@ -108,8 +108,8 @@ function StatCard({
   to?: string
 }) {
   const content = (
-    <Card className={cn(to && 'hover:bg-accent transition-colors')}>
-      <CardContent className="flex flex-col items-start gap-3 pt-6">
+    <Card className={cn('h-full', to && 'hover:bg-accent transition-colors')}>
+      <CardContent className="flex h-full flex-col items-start gap-3 pt-6">
         <div className={cn('flex size-10 items-center justify-center rounded-lg', colorClass)}>
           <Icon className="size-5" />
         </div>
@@ -121,7 +121,13 @@ function StatCard({
     </Card>
   )
 
-  return to ? <Link to={to}>{content}</Link> : content
+  return to ? (
+    <Link to={to} className="block h-full">
+      {content}
+    </Link>
+  ) : (
+    content
+  )
 }
 
 interface ManagerStats {
