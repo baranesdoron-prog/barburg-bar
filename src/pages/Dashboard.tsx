@@ -10,6 +10,7 @@ import { purchaseOrderStatusBadgeClass, purchaseOrderStatusLabels } from '@/lib/
 import { useAppUserContext } from '@/lib/outletContext'
 import { effectiveStatusLabels } from '@/lib/shiftLabels'
 import { cn, formatDate, formatDateTime, formatTime } from '@/lib/utils'
+import { SelfCheckIn } from '@/components/SelfCheckIn'
 import type {
   EffectiveShiftStatus,
   PurchaseOrder,
@@ -353,6 +354,7 @@ function ManagerDashboard() {
 
 function EmployeeDashboard({ employeeId }: { employeeId: string }) {
   const [upcoming, setUpcoming] = useState<Shift[] | null>(null)
+  const [assignmentIdByShiftId, setAssignmentIdByShiftId] = useState<Map<string, string>>(new Map())
   const [pendingRequestCount, setPendingRequestCount] = useState(0)
 
   useEffect(() => {
@@ -363,6 +365,7 @@ function EmployeeDashboard({ employeeId }: { employeeId: string }) {
         .eq('employee_id', employeeId)
 
       const loadedAssignments = (assignments as ShiftAssignment[]) ?? []
+      setAssignmentIdByShiftId(new Map(loadedAssignments.map((a) => [a.shift_id, a.id])))
 
       if (loadedAssignments.length === 0) {
         setUpcoming([])
@@ -407,14 +410,20 @@ function EmployeeDashboard({ employeeId }: { employeeId: string }) {
         <CardHeader>
           <CardTitle className="text-base">המשמרת הבאה שלי</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-3">
           {nextShift ? (
-            <Link to="/my-shifts" className="flex flex-col text-sm">
-              <span className="font-medium">{nextShift.shift_type}</span>
-              <span className="text-muted-foreground">
-                {formatDateTime(nextShift.start_time)} – {formatDateTime(nextShift.end_time)}
-              </span>
-            </Link>
+            <>
+              <Link to="/my-shifts" className="flex flex-col text-sm">
+                <span className="font-medium">{nextShift.shift_type}</span>
+                <span className="text-muted-foreground">
+                  {formatDateTime(nextShift.start_time)} – {formatDateTime(nextShift.end_time)}
+                </span>
+              </Link>
+              {nextShift.effective_status === 'active' &&
+                assignmentIdByShiftId.get(nextShift.id) && (
+                  <SelfCheckIn shiftAssignmentId={assignmentIdByShiftId.get(nextShift.id)!} />
+                )}
+            </>
           ) : (
             <p className="text-muted-foreground text-sm">אין משמרות קרובות.</p>
           )}

@@ -6,6 +6,7 @@ import { effectiveStatusLabels, effectiveStatusBadgeClass } from '@/lib/shiftLab
 import { cn, formatDateTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { SelfCheckIn } from '@/components/SelfCheckIn'
 import type { ReplacementRequest, Shift, ShiftAssignment } from '@/lib/types'
 
 const selectClass =
@@ -152,6 +153,10 @@ function ShiftRow({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        {(shift.effective_status === 'active' || shift.effective_status === 'waiting_for_closure') && (
+          <SelfCheckIn shiftAssignmentId={assignment.id} />
+        )}
+
         {pendingRequest && (
           <p className="text-muted-foreground text-sm">בקשת החלפה נשלחה, ממתינה לאישור.</p>
         )}
