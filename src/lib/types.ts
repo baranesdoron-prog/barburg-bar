@@ -16,6 +16,20 @@ export interface AppUser {
   updated_at: string
 }
 
+export type EmployeeInviteStatus = 'pending' | 'claimed' | 'cancelled'
+
+export interface EmployeeInvite {
+  id: string
+  email: string
+  role: AppRole
+  employee_id: string | null
+  status: EmployeeInviteStatus
+  invited_by: string
+  claimed_by: string | null
+  claimed_at: string | null
+  created_at: string
+}
+
 export type ShiftStatus = 'draft' | 'published' | 'completed' | 'cancelled' | 'reopened'
 
 export type EffectiveShiftStatus =
