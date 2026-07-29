@@ -232,11 +232,11 @@ export function InventoryItems() {
                     {item.unit_type === 'box' ? `קופסה (${item.units_per_box} יח')` : 'בודד'}
                     {item.unit_price !== null && ` · ₪${item.unit_price}`}
                   </p>
-                  {isLowStock && (
-                    <p className="text-destructive text-xs font-medium">
-                      מלאי נמוך ({item.latest_counted_quantity} מתוך מינימום {item.minimum_quantity})
-                    </p>
-                  )}
+                  <p className={isLowStock ? 'text-destructive text-xs font-medium' : 'text-muted-foreground text-xs'}>
+                    מלאי נוכחי: {item.current_stock}
+                    {item.minimum_quantity !== null && ` (מינימום ${item.minimum_quantity})`}
+                    {isLowStock && ' — מלאי נמוך'}
+                  </p>
                 </div>
                 <div className="flex flex-col gap-1">
                   <Button asChild variant="ghost" size="sm">

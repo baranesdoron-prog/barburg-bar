@@ -90,7 +90,10 @@ export function PurchaseOrderDetail() {
   async function handleSetStatus(status: 'ordered' | 'received' | 'cancelled') {
     if (status === 'cancelled' && !confirm('לבטל את ההזמנה?')) return
 
-    const { error: updateError } = await supabase.from('purchase_orders').update({ status }).eq('id', id)
+    const { error: updateError } =
+      status === 'received'
+        ? await supabase.rpc('receive_purchase_order', { p_order_id: id })
+        : await supabase.from('purchase_orders').update({ status }).eq('id', id)
 
     if (updateError) {
       setError(updateError.message)

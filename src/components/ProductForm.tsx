@@ -106,6 +106,13 @@ export function ProductForm({ item, suppliers, categoryOptions, onSaved, onCance
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="flex flex-col gap-4">
+          {item && (
+            <p className="text-muted-foreground text-sm">
+              מלאי נוכחי: {item.current_stock}
+              {item.unit && ` ${item.unit}`}
+            </p>
+          )}
+
           <div className="flex flex-col gap-2">
             <Label htmlFor="product-name">שם המוצר</Label>
             <Input id="product-name" value={name} onChange={(e) => setName(e.target.value)} />
