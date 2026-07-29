@@ -11,9 +11,13 @@ export interface Employee {
 
 type ResolveResult = { employeeId: string | null; error?: undefined } | { employeeId?: undefined; error: string }
 
-export function useRoleEmployeeAssignment(initial?: { role?: AppRole | null; employeeId?: string | null }) {
+export function useRoleEmployeeAssignment(initial?: {
+  role?: AppRole | null
+  employeeId?: string | null
+  employeeMode?: 'link' | 'create'
+}) {
   const [role, setRole] = useState<AppRole | ''>(initial?.role ?? '')
-  const [employeeMode, setEmployeeMode] = useState<'link' | 'create'>('link')
+  const [employeeMode, setEmployeeMode] = useState<'link' | 'create'>(initial?.employeeMode ?? 'link')
   const [employeeId, setEmployeeId] = useState(initial?.employeeId ?? '')
   const [newName, setNewName] = useState('')
   const [newPhone, setNewPhone] = useState('')

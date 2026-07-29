@@ -187,7 +187,7 @@ function InviteForm({
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const assignment = useRoleEmployeeAssignment()
+  const assignment = useRoleEmployeeAssignment({ employeeMode: 'create' })
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
