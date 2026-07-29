@@ -229,11 +229,41 @@ function ManagerSummary({ shifts }: { shifts: Shift[] }) {
           colorClass="bg-red-100 text-red-600"
           to="/purchase-orders/reorder"
         />
-        <StatCard icon={ShoppingCart} value={stats.openOrders} label="הזמנות פתוחות" colorClass="bg-rose-100 text-rose-600" />
-        <StatCard icon={Package} value={stats.activeProducts} label="מוצרים פעילים" colorClass="bg-amber-100 text-amber-600" />
-        <StatCard icon={Truck} value={stats.activeSuppliers} label="ספקים פעילים" colorClass="bg-emerald-100 text-emerald-600" />
-        <StatCard icon={CalendarDays} value={stats.shiftsThisWeek} label="משמרות השבוע" colorClass="bg-violet-100 text-violet-600" />
-        <StatCard icon={Users} value={stats.activeEmployees} label="עובדים פעילים" colorClass="bg-blue-100 text-blue-600" />
+        <StatCard
+          icon={ShoppingCart}
+          value={stats.openOrders}
+          label="הזמנות פתוחות"
+          colorClass="bg-rose-100 text-rose-600"
+          to="/purchase-orders"
+        />
+        <StatCard
+          icon={Package}
+          value={stats.activeProducts}
+          label="מוצרים פעילים"
+          colorClass="bg-amber-100 text-amber-600"
+          to="/inventory/items"
+        />
+        <StatCard
+          icon={Truck}
+          value={stats.activeSuppliers}
+          label="ספקים פעילים"
+          colorClass="bg-emerald-100 text-emerald-600"
+          to="/suppliers"
+        />
+        <StatCard
+          icon={CalendarDays}
+          value={stats.shiftsThisWeek}
+          label="משמרות השבוע"
+          colorClass="bg-violet-100 text-violet-600"
+          to="/shifts"
+        />
+        <StatCard
+          icon={Users}
+          value={stats.activeEmployees}
+          label="עובדים פעילים"
+          colorClass="bg-blue-100 text-blue-600"
+          to="/admin/users"
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
