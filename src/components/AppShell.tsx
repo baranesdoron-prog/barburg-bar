@@ -12,7 +12,7 @@ import type { AppRole, AppUser } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-const PREVIEWABLE_ROLES: AppRole[] = ['bartender', 'shift_manager', 'bar_manager', 'viewer']
+const PREVIEWABLE_ROLES: AppRole[] = ['bartender', 'shift_manager']
 
 function SidebarContent({ appUser, onNavigate }: { appUser: AppUser; onNavigate?: () => void }) {
   const { effectiveRole, isPreviewing, startPreview, stopPreview } = useImpersonation()

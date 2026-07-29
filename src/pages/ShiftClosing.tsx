@@ -52,7 +52,6 @@ export function ShiftClosing() {
   }
 
   const canClose =
-    appUser.role === 'bar_manager' ||
     appUser.role === 'administrator' ||
     (appUser.employee_id !== null && appUser.employee_id === shift.shift_manager_id)
 

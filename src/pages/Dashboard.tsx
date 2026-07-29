@@ -330,7 +330,7 @@ function ManagerDashboard() {
       s.required_staff_count !== null &&
       s.assigned_count < s.required_staff_count,
   )
-  const canManage = effectiveRole === 'bar_manager' || effectiveRole === 'administrator'
+  const canManage = effectiveRole === 'administrator'
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4">

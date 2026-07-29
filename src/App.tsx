@@ -74,7 +74,7 @@ export function App() {
       <Route element={<RequireApproved />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/profile" element={<Profile />} />
-        <Route element={<RequireRole roles={['bartender', 'shift_manager', 'bar_manager']} />}>
+        <Route element={<RequireRole roles={['bartender', 'shift_manager']} />}>
           <Route path="/my-shifts" element={<MyShifts />} />
         </Route>
         <Route element={<RequireRole roles={ROLES_VIEWING_SHIFTS} />}>

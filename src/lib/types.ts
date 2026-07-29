@@ -1,9 +1,7 @@
 export type AppRole =
   | 'administrator'
-  | 'bar_manager'
   | 'shift_manager'
   | 'bartender'
-  | 'viewer'
 
 export type AppUserStatus = 'pending_approval' | 'approved' | 'suspended'
 
