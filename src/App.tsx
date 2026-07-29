@@ -1,5 +1,7 @@
-import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
+import { useEffect } from 'react'
+import { Navigate, Outlet, Route, Routes, useNavigate } from 'react-router-dom'
 
+import { supabase } from '@/lib/supabase'
 import { useAppUser } from '@/hooks/useAppUser'
 import { useAppUserContext, type AppOutletContext } from '@/lib/outletContext'
 import { ImpersonationProvider, useImpersonation } from '@/lib/impersonation'
@@ -51,6 +53,18 @@ function RequireRole({ roles }: { roles: AppRole[] }) {
 }
 
 export function App() {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') navigate('/reset-password', { replace: true })
+    })
+
+    return () => subscription.unsubscribe()
+  }, [navigate])
+
   return (
     <Routes>
       <Route path="/signup" element={<SignUp />} />
