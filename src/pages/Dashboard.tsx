@@ -452,7 +452,7 @@ export function Dashboard() {
     return <ManagerDashboard />
   }
 
-  if (effectiveRole === 'employee' && appUser.employee_id) {
+  if (effectiveRole === 'bartender' && appUser.employee_id) {
     return <EmployeeDashboard employeeId={appUser.employee_id} />
   }
 
