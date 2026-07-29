@@ -11,6 +11,9 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { cn, formatDateTime } from '@/lib/utils'
 import type { AppRole, AppUserStatus, EmployeeInvite } from '@/lib/types'
 
+const selectClass =
+  'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
+
 interface AdminAppUserRow {
   id: string
   email: string
@@ -95,7 +98,6 @@ export function Users() {
 
       {showInviteForm && (
         <InviteForm
-          employees={employees}
           onEmployeeCreated={handleEmployeeCreated}
           onDone={() => {
             setShowInviteForm(false)
@@ -174,12 +176,10 @@ export function Users() {
 }
 
 function InviteForm({
-  employees,
   onEmployeeCreated,
   onDone,
   onCancel,
 }: {
-  employees: Employee[]
   onEmployeeCreated: (employee: Employee) => void
   onDone: () => void
   onCancel: () => void
@@ -241,7 +241,42 @@ function InviteForm({
             />
           </div>
 
-          <RoleEmployeeFields idPrefix="invite" employees={employees} assignment={assignment} />
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="invite-role">תפקיד</Label>
+            <select
+              id="invite-role"
+              className={selectClass}
+              value={assignment.role}
+              onChange={(e) => assignment.setRole(e.target.value as AppRole)}
+            >
+              <option value="" disabled>
+                בחר תפקיד
+              </option>
+              {(Object.keys(roleLabels) as AppRole[]).map((r) => (
+                <option key={r} value={r}>
+                  {roleLabels[r]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="invite-name">שם מלא</Label>
+            <Input
+              id="invite-name"
+              value={assignment.newName}
+              onChange={(e) => assignment.setNewName(e.target.value)}
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="invite-phone">טלפון (לא חובה)</Label>
+            <Input
+              id="invite-phone"
+              value={assignment.newPhone}
+              onChange={(e) => assignment.setNewPhone(e.target.value)}
+            />
+          </div>
 
           {error && <p className="text-destructive text-sm">{error}</p>}
         </CardContent>
