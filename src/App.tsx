@@ -8,6 +8,8 @@ import { ROLES_MANAGING_SHIFTS, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
 import { AppShell } from '@/components/AppShell'
 import { SignUp } from '@/pages/SignUp'
 import { Login } from '@/pages/Login'
+import { ForgotPassword } from '@/pages/ForgotPassword'
+import { ResetPassword } from '@/pages/ResetPassword'
 import { PendingApproval } from '@/pages/PendingApproval'
 import { Dashboard } from '@/pages/Dashboard'
 import { MyShifts } from '@/pages/MyShifts'
@@ -53,6 +55,8 @@ export function App() {
     <Routes>
       <Route path="/signup" element={<SignUp />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<RequireApproved />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/profile" element={<Profile />} />

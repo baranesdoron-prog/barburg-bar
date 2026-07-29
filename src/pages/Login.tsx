@@ -77,6 +77,11 @@ export function Login() {
               {submitting ? 'מתחבר/ת...' : 'התחברות'}
             </Button>
             <p className="text-muted-foreground text-sm">
+              <Link to="/forgot-password" className="underline">
+                שכחת סיסמה?
+              </Link>
+            </p>
+            <p className="text-muted-foreground text-sm">
               עדיין אין לך חשבון? <Link to="/signup" className="underline">הרשמה</Link>
             </p>
           </CardFooter>
