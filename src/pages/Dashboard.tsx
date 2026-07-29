@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Clock, Package, ShoppingCart, Truck, Users, CalendarDays, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, Clock, Package, ShoppingCart, Truck, Users, CalendarDays, type LucideIcon } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
@@ -99,14 +99,16 @@ function StatCard({
   value,
   label,
   colorClass,
+  to,
 }: {
   icon: LucideIcon
   value: number
   label: string
   colorClass: string
+  to?: string
 }) {
-  return (
-    <Card>
+  const content = (
+    <Card className={cn(to && 'hover:bg-accent transition-colors')}>
       <CardContent className="flex flex-col items-start gap-3 pt-6">
         <div className={cn('flex size-10 items-center justify-center rounded-lg', colorClass)}>
           <Icon className="size-5" />
@@ -118,6 +120,8 @@ function StatCard({
       </CardContent>
     </Card>
   )
+
+  return to ? <Link to={to}>{content}</Link> : content
 }
 
 interface ManagerStats {
@@ -126,6 +130,7 @@ interface ManagerStats {
   activeSuppliers: number
   shiftsThisWeek: number
   activeEmployees: number
+  lowStockProducts: number
 }
 
 function ManagerSummary({ shifts }: { shifts: Shift[] }) {
@@ -143,24 +148,37 @@ function ManagerSummary({ shifts }: { shifts: Shift[] }) {
       const weekEnd = new Date(weekStart)
       weekEnd.setDate(weekStart.getDate() + 7)
 
-      const [openOrdersRes, activeProductsRes, activeSuppliersRes, shiftsThisWeekRes, activeEmployeesRes, ordersRes, suppliersRes] =
-        await Promise.all([
-          supabase
-            .from('purchase_orders')
-            .select('id', { count: 'exact', head: true })
-            .in('status', ['draft', 'ordered']),
-          supabase.from('inventory_items').select('id', { count: 'exact', head: true }).eq('active', true),
-          supabase.from('suppliers').select('id', { count: 'exact', head: true }).eq('active', true),
-          supabase
-            .from('shifts')
-            .select('id', { count: 'exact', head: true })
-            .neq('status', 'cancelled')
-            .gte('start_time', weekStart.toISOString())
-            .lt('start_time', weekEnd.toISOString()),
-          supabase.from('employees').select('id', { count: 'exact', head: true }).eq('active', true),
-          supabase.from('purchase_orders').select('*').order('created_at', { ascending: false }).limit(5),
-          supabase.from('suppliers').select('*'),
-        ])
+      const [
+        openOrdersRes,
+        activeProductsRes,
+        activeSuppliersRes,
+        shiftsThisWeekRes,
+        activeEmployeesRes,
+        lowStockRes,
+        ordersRes,
+        suppliersRes,
+      ] = await Promise.all([
+        supabase
+          .from('purchase_orders')
+          .select('id', { count: 'exact', head: true })
+          .in('status', ['draft', 'ordered']),
+        supabase.from('inventory_items').select('id', { count: 'exact', head: true }).eq('active', true),
+        supabase.from('suppliers').select('id', { count: 'exact', head: true }).eq('active', true),
+        supabase
+          .from('shifts')
+          .select('id', { count: 'exact', head: true })
+          .neq('status', 'cancelled')
+          .gte('start_time', weekStart.toISOString())
+          .lt('start_time', weekEnd.toISOString()),
+        supabase.from('employees').select('id', { count: 'exact', head: true }).eq('active', true),
+        supabase
+          .from('inventory_items_with_latest_count')
+          .select('id', { count: 'exact', head: true })
+          .eq('active', true)
+          .eq('is_low_stock', true),
+        supabase.from('purchase_orders').select('*').order('created_at', { ascending: false }).limit(5),
+        supabase.from('suppliers').select('*'),
+      ])
 
       setStats({
         openOrders: openOrdersRes.count ?? 0,
@@ -168,6 +186,7 @@ function ManagerSummary({ shifts }: { shifts: Shift[] }) {
         activeSuppliers: activeSuppliersRes.count ?? 0,
         shiftsThisWeek: shiftsThisWeekRes.count ?? 0,
         activeEmployees: activeEmployeesRes.count ?? 0,
+        lowStockProducts: lowStockRes.count ?? 0,
       })
 
       const orders = (ordersRes.data as PurchaseOrder[]) ?? []
@@ -202,7 +221,14 @@ function ManagerSummary({ shifts }: { shifts: Shift[] }) {
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <StatCard
+          icon={AlertTriangle}
+          value={stats.lowStockProducts}
+          label="מוצרים מתחת למינימום"
+          colorClass="bg-red-100 text-red-600"
+          to="/purchase-orders/reorder"
+        />
         <StatCard icon={ShoppingCart} value={stats.openOrders} label="הזמנות פתוחות" colorClass="bg-rose-100 text-rose-600" />
         <StatCard icon={Package} value={stats.activeProducts} label="מוצרים פעילים" colorClass="bg-amber-100 text-amber-600" />
         <StatCard icon={Truck} value={stats.activeSuppliers} label="ספקים פעילים" colorClass="bg-emerald-100 text-emerald-600" />

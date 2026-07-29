@@ -135,6 +135,7 @@ export interface InventoryItem {
 export interface InventoryItemWithStock extends InventoryItem {
   latest_counted_quantity: number | null
   latest_counted_at: string | null
+  is_low_stock: boolean
 }
 
 export interface InventoryCount {

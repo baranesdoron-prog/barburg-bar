@@ -27,6 +27,7 @@ import { InventoryItems } from '@/pages/InventoryItems'
 import { ProductFormPage } from '@/pages/ProductFormPage'
 import { Suppliers } from '@/pages/Suppliers'
 import { PurchaseOrders } from '@/pages/PurchaseOrders'
+import { Reorder } from '@/pages/Reorder'
 import { PurchaseOrderDetail } from '@/pages/PurchaseOrderDetail'
 import { Reports } from '@/pages/Reports'
 import { Users } from '@/pages/Users'
@@ -93,6 +94,7 @@ export function App() {
           <Route path="/inventory/items/:id/edit" element={<ProductFormPage />} />
           <Route path="/suppliers" element={<Suppliers />} />
           <Route path="/purchase-orders" element={<PurchaseOrders />} />
+          <Route path="/purchase-orders/reorder" element={<Reorder />} />
           <Route path="/purchase-orders/:id" element={<PurchaseOrderDetail />} />
         </Route>
         <Route element={<RequireRole roles={['administrator']} />}>

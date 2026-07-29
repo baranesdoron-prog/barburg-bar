@@ -213,10 +213,7 @@ export function InventoryItems() {
           {items.length === 0 && <p className="text-muted-foreground text-sm">לא נמצאו פריטים.</p>}
           {items.map((item) => {
             const supplierName = suppliers.find((s) => s.id === item.supplier_id)?.name
-            const isLowStock =
-              item.minimum_quantity !== null &&
-              item.latest_counted_quantity !== null &&
-              item.latest_counted_quantity < item.minimum_quantity
+            const isLowStock = item.is_low_stock
 
             return (
               <div key={item.id} className="flex items-start gap-3 rounded-md border p-2 text-sm">
