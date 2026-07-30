@@ -21,6 +21,7 @@ export function PurchaseOrderDetail() {
   const [newItemId, setNewItemId] = useState('')
   const [newQuantity, setNewQuantity] = useState('')
   const [newUnitPrice, setNewUnitPrice] = useState('')
+  const [updateCatalogPrice, setUpdateCatalogPrice] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -54,6 +55,13 @@ export function PurchaseOrderDetail() {
     load()
   }, [id])
 
+  function handleSelectItem(itemId: string) {
+    setNewItemId(itemId)
+    const catalogItem = catalog.find((c) => c.id === itemId)
+    setNewUnitPrice(catalogItem?.unit_price !== null && catalogItem?.unit_price !== undefined ? String(catalogItem.unit_price) : '')
+    setUpdateCatalogPrice(false)
+  }
+
   async function handleAddItem() {
     setError(null)
 
@@ -63,22 +71,38 @@ export function PurchaseOrderDetail() {
     }
 
     setSubmitting(true)
+
     const { error: insertError } = await supabase.from('purchase_order_items').insert({
       purchase_order_id: id,
       inventory_item_id: newItemId,
       quantity: Number(newQuantity),
       unit_price: newUnitPrice ? Number(newUnitPrice) : null,
     })
-    setSubmitting(false)
 
     if (insertError) {
+      setSubmitting(false)
       setError(insertError.message)
       return
     }
 
+    if (updateCatalogPrice && newUnitPrice) {
+      const { error: catalogError } = await supabase
+        .from('inventory_items')
+        .update({ unit_price: Number(newUnitPrice) })
+        .eq('id', newItemId)
+
+      if (catalogError) {
+        setSubmitting(false)
+        setError(catalogError.message)
+        return
+      }
+    }
+
+    setSubmitting(false)
     setNewItemId('')
     setNewQuantity('')
     setNewUnitPrice('')
+    setUpdateCatalogPrice(false)
     load()
   }
 
@@ -190,7 +214,7 @@ export function PurchaseOrderDetail() {
               <select
                 className={selectClass}
                 value={newItemId}
-                onChange={(e) => setNewItemId(e.target.value)}
+                onChange={(e) => handleSelectItem(e.target.value)}
               >
                 <option value="">בחר/י פריט</option>
                 {catalog.map((c) => (
@@ -211,6 +235,14 @@ export function PurchaseOrderDetail() {
                 value={newUnitPrice}
                 onChange={(e) => setNewUnitPrice(e.target.value)}
               />
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={updateCatalogPrice}
+                  onChange={(e) => setUpdateCatalogPrice(e.target.checked)}
+                />
+                עדכון מחיר זה גם בקטלוג המוצרים
+              </label>
               {error && <p className="text-destructive text-sm">{error}</p>}
               <Button disabled={submitting} onClick={handleAddItem}>
                 הוספת פריט

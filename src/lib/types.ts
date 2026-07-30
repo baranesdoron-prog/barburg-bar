@@ -185,6 +185,7 @@ export interface Supplier {
   phone: string | null
   email: string | null
   notes: string | null
+  average_delivery_days: number | null
   active: boolean
   created_at: string
   updated_at: string
