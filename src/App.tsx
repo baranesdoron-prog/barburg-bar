@@ -31,6 +31,7 @@ import { Reorder } from '@/pages/Reorder'
 import { PurchaseOrderDetail } from '@/pages/PurchaseOrderDetail'
 import { Reports } from '@/pages/Reports'
 import { Users } from '@/pages/Users'
+import { WeeklyChecklist } from '@/pages/WeeklyChecklist'
 
 function RequireApproved() {
   const { loading, session, appUser } = useAppUser()
@@ -85,6 +86,7 @@ export function App() {
           <Route path="/shifts/:id/close" element={<ShiftClosing />} />
           <Route path="/shifts/:id/report" element={<ShiftReport />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/weekly-checklist" element={<WeeklyChecklist />} />
         </Route>
         <Route element={<RequireRole roles={ROLES_MANAGING_SHIFTS} />}>
           <Route path="/shifts/new" element={<ShiftForm />} />

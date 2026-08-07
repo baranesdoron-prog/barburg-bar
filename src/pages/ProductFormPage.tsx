@@ -3,28 +3,25 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
 import { ProductForm } from '@/components/ProductForm'
-import type { InventoryItem, Supplier } from '@/lib/types'
+import type { InventoryItem, ProductCategory, Supplier } from '@/lib/types'
 
 export function ProductFormPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [item, setItem] = useState<InventoryItem | null | undefined>(id ? undefined : null)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
-  const [categoryOptions, setCategoryOptions] = useState<string[]>([])
+  const [categories, setCategories] = useState<ProductCategory[]>([])
 
   useEffect(() => {
     async function load() {
-      const [suppliersRes, itemsRes, itemRes] = await Promise.all([
+      const [suppliersRes, categoriesRes, itemRes] = await Promise.all([
         supabase.from('suppliers').select('*').eq('active', true).order('name'),
-        supabase.from('inventory_items').select('category').not('category', 'is', null),
+        supabase.from('product_categories').select('*').order('sort_order'),
         id ? supabase.from('inventory_items').select('*').eq('id', id).single() : Promise.resolve({ data: null }),
       ])
 
       setSuppliers((suppliersRes.data as Supplier[]) ?? [])
-      const categories = new Set(
-        ((itemsRes.data as { category: string }[]) ?? []).map((r) => r.category).filter(Boolean),
-      )
-      setCategoryOptions([...categories].sort())
+      setCategories((categoriesRes.data as ProductCategory[]) ?? [])
       if (id) setItem(itemRes.data as InventoryItem)
     }
 
@@ -38,7 +35,7 @@ export function ProductFormPage() {
       <ProductForm
         item={item}
         suppliers={suppliers}
-        categoryOptions={categoryOptions}
+        categories={categories}
         onSaved={() => navigate('/inventory/items')}
         onCancel={() => navigate('/inventory/items')}
       />

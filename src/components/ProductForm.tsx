@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import type { InventoryItem, InventoryUnitType, Supplier } from '@/lib/types'
+import type { InventoryItem, InventoryUnitType, ProductCategory, Supplier } from '@/lib/types'
 
 const selectClass =
   'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
@@ -13,15 +13,15 @@ const selectClass =
 interface ProductFormProps {
   item: InventoryItem | null
   suppliers: Supplier[]
-  categoryOptions: string[]
+  categories: ProductCategory[]
   onSaved: () => void
   onCancel: () => void
 }
 
-export function ProductForm({ item, suppliers, categoryOptions, onSaved, onCancel }: ProductFormProps) {
+export function ProductForm({ item, suppliers, categories, onSaved, onCancel }: ProductFormProps) {
   const [name, setName] = useState(item?.name ?? '')
   const [unit, setUnit] = useState(item?.unit ?? '')
-  const [category, setCategory] = useState(item?.category ?? '')
+  const [categoryId, setCategoryId] = useState(item?.category_id ?? '')
   const [vendor, setVendor] = useState(item?.vendor ?? '')
   const [sku, setSku] = useState(item?.sku ?? '')
   const [supplierId, setSupplierId] = useState(item?.supplier_id ?? '')
@@ -55,6 +55,17 @@ export function ProductForm({ item, suppliers, categoryOptions, onSaved, onCance
     setImageUrl(data.publicUrl)
   }
 
+  function handleCategoryChange(newCategoryId: string) {
+    setCategoryId(newCategoryId)
+
+    if (!supplierId) {
+      const category = categories.find((c) => c.id === newCategoryId)
+      if (category?.default_supplier_id) {
+        setSupplierId(category.default_supplier_id)
+      }
+    }
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
@@ -74,7 +85,7 @@ export function ProductForm({ item, suppliers, categoryOptions, onSaved, onCance
     const payload = {
       name: name.trim(),
       unit: unit.trim() || null,
-      category: category.trim() || null,
+      category_id: categoryId || null,
       vendor: vendor.trim() || null,
       sku: sku.trim() || null,
       supplier_id: supplierId || null,
@@ -120,17 +131,19 @@ export function ProductForm({ item, suppliers, categoryOptions, onSaved, onCance
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="product-category">קטגוריה</Label>
-            <Input
+            <select
               id="product-category"
-              list="category-options"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-            />
-            <datalist id="category-options">
-              {categoryOptions.map((c) => (
-                <option key={c} value={c} />
+              className={selectClass}
+              value={categoryId}
+              onChange={(e) => handleCategoryChange(e.target.value)}
+            >
+              <option value="">— ללא —</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
               ))}
-            </datalist>
+            </select>
           </div>
 
           <div className="flex flex-col gap-2">

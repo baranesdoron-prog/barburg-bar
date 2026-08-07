@@ -6,7 +6,7 @@ import { parseCsv, toCsv } from '@/lib/csv'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import type { InventoryItem, InventoryItemWithStock, InventoryUnitType, Supplier } from '@/lib/types'
+import type { InventoryItem, InventoryItemWithStock, InventoryUnitType, ProductCategory, Supplier } from '@/lib/types'
 
 const selectClass =
   'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
@@ -27,7 +27,7 @@ const CSV_TEMPLATE_HEADER = [
 export function InventoryItems() {
   const [items, setItems] = useState<InventoryItemWithStock[] | null>(null)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
-  const [categoryOptions, setCategoryOptions] = useState<string[]>([])
+  const [categories, setCategories] = useState<ProductCategory[]>([])
 
   const [nameFilter, setNameFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
@@ -37,15 +37,12 @@ export function InventoryItems() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function loadFilters() {
-    const [suppliersRes, itemsRes] = await Promise.all([
+    const [suppliersRes, categoriesRes] = await Promise.all([
       supabase.from('suppliers').select('*').eq('active', true).order('name'),
-      supabase.from('inventory_items').select('category').not('category', 'is', null),
+      supabase.from('product_categories').select('*').order('sort_order'),
     ])
     setSuppliers((suppliersRes.data as Supplier[]) ?? [])
-    const categories = new Set(
-      ((itemsRes.data as { category: string }[]) ?? []).map((r) => r.category).filter(Boolean),
-    )
-    setCategoryOptions([...categories].sort())
+    setCategories((categoriesRes.data as ProductCategory[]) ?? [])
   }
 
   async function search(overrides?: { name?: string; category?: string; supplier?: string }) {
@@ -56,7 +53,7 @@ export function InventoryItems() {
     let query = supabase.from('inventory_items_with_latest_count').select('*')
 
     if (name.trim()) query = query.ilike('name', `%${name.trim()}%`)
-    if (category.trim()) query = query.ilike('category', `%${category.trim()}%`)
+    if (category) query = query.eq('category_id', category)
     if (supplier) query = query.eq('supplier_id', supplier)
 
     const { data } = await query.order('name')
@@ -83,7 +80,7 @@ export function InventoryItems() {
   function handleDownloadTemplate() {
     const csv = toCsv([
       CSV_TEMPLATE_HEADER,
-      ['וודקה', 'אלכוהול', 'Absolut', 'ספק לדוגמה', 'SKU-001', 'בקבוקים', 'box', '12', '45.5', '10'],
+      ['וודקה', 'בקבוקי אלכוהול', 'Absolut', 'ספק לדוגמה', 'SKU-001', 'בקבוקים', 'box', '12', '45.5', '10'],
     ])
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -107,7 +104,9 @@ export function InventoryItems() {
     const colIndex = (col: string) => header.indexOf(col)
 
     const supplierByName = new Map(suppliers.map((s) => [s.name, s.id]))
+    const categoryByName = new Map(categories.map((c) => [c.name, c.id]))
     const unmatchedSuppliers = new Set<string>()
+    const unmatchedCategories = new Set<string>()
 
     const payload = dataRows
       .filter((row) => row.some((cell) => cell.trim() !== ''))
@@ -124,13 +123,20 @@ export function InventoryItems() {
           if (!supplierId) unmatchedSuppliers.add(supplierName)
         }
 
+        const categoryName = get('category')
+        let categoryId: string | null = null
+        if (categoryName) {
+          categoryId = categoryByName.get(categoryName) ?? null
+          if (!categoryId) unmatchedCategories.add(categoryName)
+        }
+
         const unitTypeRaw = get('unit_type').toLowerCase()
         const unitType: InventoryUnitType = unitTypeRaw === 'box' ? 'box' : 'single'
         const unitsPerBoxRaw = get('units_per_box')
 
         return {
           name: get('name'),
-          category: get('category') || null,
+          category_id: categoryId,
           vendor: get('vendor') || null,
           supplier_id: supplierId,
           sku: get('sku') || null,
@@ -158,6 +164,9 @@ export function InventoryItems() {
       if (unmatchedSuppliers.size > 0) {
         summary += ` ספקים שלא נמצאו (יובאו ללא ספק): ${[...unmatchedSuppliers].join(', ')}`
       }
+      if (unmatchedCategories.size > 0) {
+        summary += ` קטגוריות שלא נמצאו (יובאו ללא קטגוריה): ${[...unmatchedCategories].join(', ')}`
+      }
       setImportSummary(summary)
       loadFilters()
       search()
@@ -178,17 +187,18 @@ export function InventoryItems() {
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           <Input placeholder="שם מוצר" value={nameFilter} onChange={(e) => setNameFilter(e.target.value)} />
-          <Input
-            placeholder="קטגוריה"
-            list="category-options-search"
+          <select
+            className={selectClass}
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-          />
-          <datalist id="category-options-search">
-            {categoryOptions.map((c) => (
-              <option key={c} value={c} />
+          >
+            <option value="">כל הקטגוריות</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
             ))}
-          </datalist>
+          </select>
           <select className={selectClass} value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)}>
             <option value="">כל הספקים</option>
             {suppliers.map((s) => (
@@ -213,6 +223,7 @@ export function InventoryItems() {
           {items.length === 0 && <p className="text-muted-foreground text-sm">לא נמצאו פריטים.</p>}
           {items.map((item) => {
             const supplierName = suppliers.find((s) => s.id === item.supplier_id)?.name
+            const categoryName = categories.find((c) => c.id === item.category_id)?.name
             const isLowStock = item.is_low_stock
 
             return (
@@ -226,7 +237,7 @@ export function InventoryItems() {
                     {item.unit && <span className="text-muted-foreground"> ({item.unit})</span>}
                   </p>
                   <p className="text-muted-foreground text-xs">
-                    {[item.category, item.vendor, supplierName, item.sku].filter(Boolean).join(' · ')}
+                    {[categoryName, item.vendor, supplierName, item.sku].filter(Boolean).join(' · ')}
                   </p>
                   <p className="text-muted-foreground text-xs">
                     {item.unit_type === 'box' ? `קופסה (${item.units_per_box} יח')` : 'בודד'}

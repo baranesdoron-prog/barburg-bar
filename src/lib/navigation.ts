@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   Calendar,
   CalendarClock,
+  CheckSquare,
   Package,
   Truck,
   ClipboardList,
@@ -27,6 +28,7 @@ export function getNavItems(role: AppRole): NavItem[] {
   if (ROLES_VIEWING_SHIFTS.includes(role)) {
     items.push({ to: '/shifts', label: 'משמרות', icon: CalendarClock })
     items.push({ to: '/reports', label: 'דוחות', icon: FileText })
+    items.push({ to: '/weekly-checklist', label: 'רשימת משימות שבועית', icon: CheckSquare })
   }
 
   if (ROLES_REQUIRING_EMPLOYEE.includes(role)) {

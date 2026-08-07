@@ -114,11 +114,18 @@ export interface JournalEntry {
 
 export type InventoryUnitType = 'single' | 'box'
 
+export interface ProductCategory {
+  id: string
+  name: string
+  default_supplier_id: string | null
+  sort_order: number
+}
+
 export interface InventoryItem {
   id: string
   name: string
   unit: string | null
-  category: string | null
+  category_id: string | null
   vendor: string | null
   sku: string | null
   supplier_id: string | null
@@ -212,5 +219,16 @@ export interface PurchaseOrderItem {
   inventory_item_id: string
   quantity: number
   unit_price: number | null
+  created_at: string
+}
+
+export interface WeeklyChecklistItem {
+  id: string
+  week_start: string
+  sort_order: number
+  title: string
+  completed: boolean
+  completed_by: string | null
+  completed_at: string | null
   created_at: string
 }
