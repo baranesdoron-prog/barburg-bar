@@ -10,6 +10,7 @@ import { purchaseOrderStatusBadgeClass, purchaseOrderStatusLabels } from '@/lib/
 import { useAppUserContext } from '@/lib/outletContext'
 import { effectiveStatusLabels } from '@/lib/shiftLabels'
 import { cn, formatDate, formatDateTime, formatTime } from '@/lib/utils'
+import { activeWeekStart, addDays, parseDateStr, toDateStr } from '@/lib/weeklyChecklist'
 import { SelfCheckIn } from '@/components/SelfCheckIn'
 import type {
   EffectiveShiftStatus,
@@ -18,8 +19,14 @@ import type {
   ReplacementRequest,
   Shift,
   ShiftAssignment,
+  ShiftManagerAssignment,
   Supplier,
+  WeeklyChecklistItem,
 } from '@/lib/types'
+
+const selectClass =
+  'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
+const weekLabelFormatter = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'long' })
 
 interface EmployeeNameRow {
   id: string
@@ -338,11 +345,224 @@ function ManagerSummary({ shifts }: { shifts: Shift[] }) {
   )
 }
 
+interface ShiftManagerEmployee {
+  id: string
+  full_name: string
+}
+
+function ShiftManagerAssignmentCard({ onAssigned }: { onAssigned: () => void }) {
+  const weeks = [toDateStr(activeWeekStart()), toDateStr(addDays(activeWeekStart(), 7))]
+  const [employees, setEmployees] = useState<ShiftManagerEmployee[]>([])
+  const [assignments, setAssignments] = useState<Map<string, string>>(new Map())
+  const [saving, setSaving] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function load() {
+    const [employeesRes, assignmentsRes] = await Promise.all([
+      supabase.rpc('list_shift_manager_employees'),
+      supabase.from('shift_manager_assignments').select('*').in('week_start', weeks),
+    ])
+    setEmployees((employeesRes.data as ShiftManagerEmployee[]) ?? [])
+    setAssignments(
+      new Map(((assignmentsRes.data as ShiftManagerAssignment[]) ?? []).map((a) => [a.week_start, a.employee_id])),
+    )
+  }
+
+  useEffect(() => {
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function handleAssign(week: string, employeeId: string) {
+    if (!employeeId) return
+    setSaving(week)
+    const { error: assignError } = await supabase.rpc('set_weekly_shift_manager', {
+      p_week_start: week,
+      p_employee_id: employeeId,
+    })
+    setSaving(null)
+    if (assignError) {
+      setError(assignError.message)
+      return
+    }
+    load()
+    onAssigned()
+  }
+
+  const missingCount = weeks.filter((w) => !assignments.get(w)).length
+
+  return (
+    <Card className={missingCount > 0 ? 'border-amber-500/60 bg-amber-50 dark:bg-amber-950/20' : undefined}>
+      <CardHeader>
+        <CardTitle className="text-base">שיבוץ אחראי משמרת</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">
+        {weeks.map((week) => {
+          const assigned = assignments.get(week) ?? ''
+          return (
+            <div key={week} className="flex items-center justify-between gap-2 text-sm">
+              <span>שבוע {weekLabelFormatter.format(parseDateStr(week))}</span>
+              <select
+                className={cn(selectClass, 'w-40', !assigned && 'border-amber-500')}
+                value={assigned}
+                disabled={saving === week}
+                onChange={(e) => handleAssign(week, e.target.value)}
+              >
+                <option value="">— לא שובץ —</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.full_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )
+        })}
+        {error && <p className="text-destructive text-sm">{error}</p>}
+      </CardContent>
+    </Card>
+  )
+}
+
+function NextManagerCard() {
+  const [manager, setManager] = useState<{ name: string; weekStart: string } | null>(null)
+  const [loaded, setLoaded] = useState(false)
+  const [taskStats, setTaskStats] = useState<{ open: number; late: number } | null>(null)
+
+  useEffect(() => {
+    async function load() {
+      const weekStart = toDateStr(activeWeekStart())
+      const { data: assignment } = await supabase
+        .from('shift_manager_assignments')
+        .select('*')
+        .eq('week_start', weekStart)
+        .maybeSingle()
+
+      if (!assignment) {
+        setManager(null)
+        setLoaded(true)
+        return
+      }
+
+      const { data: employee } = await supabase
+        .from('employees')
+        .select('full_name')
+        .eq('id', (assignment as ShiftManagerAssignment).employee_id)
+        .single()
+
+      setManager({ name: (employee as { full_name: string } | null)?.full_name ?? '—', weekStart })
+
+      const { data: items } = await supabase.rpc('ensure_weekly_checklist', { p_week_start: weekStart })
+      const todayStr = toDateStr(new Date())
+      const openItems = ((items as WeeklyChecklistItem[]) ?? []).filter((i) => !i.completed)
+      setTaskStats({
+        open: openItems.length,
+        late: openItems.filter((i) => i.due_date < todayStr).length,
+      })
+      setLoaded(true)
+    }
+
+    load()
+  }, [])
+
+  if (!loaded) return null
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-base">אחראי/ת המשמרת הקרובה</CardTitle>
+        {manager && (
+          <Link to={`/weekly-checklist?week=${manager.weekStart}`} className="text-muted-foreground text-xs hover:underline">
+            לרשימת המשימות
+          </Link>
+        )}
+      </CardHeader>
+      <CardContent>
+        {manager ? (
+          <div className="flex flex-col gap-1 text-sm">
+            <p className="font-medium">{manager.name}</p>
+            {taskStats && (
+              <p className={taskStats.late > 0 ? 'text-destructive' : 'text-muted-foreground'}>
+                {taskStats.open} משימות פתוחות
+                {taskStats.late > 0 && ` — ${taskStats.late} באיחור`}
+              </p>
+            )}
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-sm">לא שובץ אחראי משמרת לשבוע הקרוב.</p>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function MyWeeklyTasksCard({ employeeId }: { employeeId: string }) {
+  const [weekStart, setWeekStart] = useState<string | null>(null)
+  const [items, setItems] = useState<WeeklyChecklistItem[]>([])
+  const [loaded, setLoaded] = useState(false)
+
+  useEffect(() => {
+    async function load() {
+      const week = toDateStr(activeWeekStart())
+      const { data: assignment } = await supabase
+        .from('shift_manager_assignments')
+        .select('*')
+        .eq('week_start', week)
+        .maybeSingle()
+
+      if (!assignment || (assignment as ShiftManagerAssignment).employee_id !== employeeId) {
+        setWeekStart(null)
+        setLoaded(true)
+        return
+      }
+
+      setWeekStart(week)
+      const { data } = await supabase.rpc('ensure_weekly_checklist', { p_week_start: week })
+      setItems((data as WeeklyChecklistItem[]) ?? [])
+      setLoaded(true)
+    }
+
+    load()
+  }, [employeeId])
+
+  if (!loaded || !weekStart) return null
+
+  const todayStr = toDateStr(new Date())
+  const openItems = items.filter((i) => !i.completed)
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-base">המשימות שלי לשבוע</CardTitle>
+        <Link to={`/weekly-checklist?week=${weekStart}`} className="text-muted-foreground text-xs hover:underline">
+          לרשימה המלאה
+        </Link>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">
+        {openItems.length === 0 && <p className="text-muted-foreground text-sm">כל המשימות לשבוע הושלמו.</p>}
+        {openItems.map((item) => {
+          const isLate = item.due_date < todayStr
+          return (
+            <div key={item.id} className="rounded-md border p-2 text-sm">
+              <p>{item.title}</p>
+              <p className={isLate ? 'text-destructive text-xs font-medium' : 'text-muted-foreground text-xs'}>
+                {weekLabelFormatter.format(parseDateStr(item.due_date))}
+                {isLate && ' — באיחור'}
+              </p>
+            </div>
+          )
+        })}
+      </CardContent>
+    </Card>
+  )
+}
+
 function ManagerDashboard() {
-  const { effectiveRole } = useAppUserContext()
+  const { appUser, effectiveRole } = useAppUserContext()
   const [shifts, setShifts] = useState<Shift[] | null>(null)
   const [pendingRequestShifts, setPendingRequestShifts] = useState<Shift[]>([])
   const [employeeNames, setEmployeeNames] = useState<Map<string, string>>(new Map())
+  const [nextManagerRefreshKey, setNextManagerRefreshKey] = useState(0)
 
   useEffect(() => {
     async function load() {
@@ -402,6 +622,17 @@ function ManagerDashboard() {
         <h1 className="text-xl font-semibold">לוח בקרה</h1>
         <p className="text-muted-foreground text-sm">ברבורג — ניהול הבר הקהילתי</p>
       </div>
+
+      {canManage && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <ShiftManagerAssignmentCard onAssigned={() => setNextManagerRefreshKey((k) => k + 1)} />
+          <NextManagerCard key={nextManagerRefreshKey} />
+        </div>
+      )}
+
+      {effectiveRole === 'shift_manager' && appUser.employee_id && (
+        <MyWeeklyTasksCard employeeId={appUser.employee_id} />
+      )}
 
       {canManage && <ManagerSummary shifts={shifts} />}
 

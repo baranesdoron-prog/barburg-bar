@@ -50,11 +50,19 @@ export interface Shift {
   notes: string | null
   status: ShiftStatus
   required_staff_count: number | null
+  cancellation_reason: string | null
   created_by: string
   created_at: string
   updated_at: string
   effective_status: EffectiveShiftStatus
   assigned_count: number
+}
+
+export interface ShiftManagerAssignment {
+  week_start: string
+  employee_id: string
+  assigned_by: string | null
+  assigned_at: string
 }
 
 export interface ShiftAssignment {
@@ -227,6 +235,7 @@ export interface WeeklyChecklistItem {
   week_start: string
   sort_order: number
   title: string
+  due_date: string
   completed: boolean
   completed_by: string | null
   completed_at: string | null

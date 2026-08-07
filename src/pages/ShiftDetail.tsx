@@ -36,6 +36,8 @@ export function ShiftDetail() {
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
   const [error, setError] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState(false)
+  const [showCancelForm, setShowCancelForm] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
   const [addingEmployeeId, setAddingEmployeeId] = useState('')
 
   const employeeNames = new Map(employees.map((e) => [e.id, e.full_name]))
@@ -92,12 +94,12 @@ export function ShiftDetail() {
   }, [id])
 
   async function handleCancel() {
-    if (!confirm('לבטל את המשמרת?')) return
+    if (!cancelReason.trim()) return
 
     setCancelling(true)
     const { error: cancelError } = await supabase
       .from('shifts')
-      .update({ status: 'cancelled' })
+      .update({ status: 'cancelled', cancellation_reason: cancelReason.trim() })
       .eq('id', id)
     setCancelling(false)
 
@@ -106,6 +108,8 @@ export function ShiftDetail() {
       return
     }
 
+    setShowCancelForm(false)
+    setCancelReason('')
     load()
   }
 
@@ -231,20 +235,51 @@ export function ShiftDetail() {
               {shift.notes}
             </p>
           )}
+          {shift.status === 'cancelled' && shift.cancellation_reason && (
+            <p>
+              <span className="text-muted-foreground">סיבת ביטול: </span>
+              {shift.cancellation_reason}
+            </p>
+          )}
         </CardContent>
-        {canManageShift && shift.status !== 'cancelled' && (
+        {canManageShift && shift.status !== 'cancelled' && !showCancelForm && (
           <CardFooter className="flex gap-2">
             <Button asChild variant="outline" className="flex-1">
               <Link to={`/shifts/${shift.id}/edit`}>עריכה</Link>
             </Button>
-            <Button
-              variant="destructive"
-              className="flex-1"
-              disabled={cancelling}
-              onClick={handleCancel}
-            >
+            <Button variant="destructive" className="flex-1" onClick={() => setShowCancelForm(true)}>
               ביטול משמרת
             </Button>
+          </CardFooter>
+        )}
+        {canManageShift && shift.status !== 'cancelled' && showCancelForm && (
+          <CardFooter className="flex flex-col gap-2">
+            <textarea
+              className={selectClass + ' min-h-20'}
+              placeholder="סיבת הביטול (חובה)"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+            />
+            <div className="flex w-full gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setShowCancelForm(false)
+                  setCancelReason('')
+                }}
+              >
+                חזרה
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                disabled={cancelling || !cancelReason.trim()}
+                onClick={handleCancel}
+              >
+                אישור ביטול
+              </Button>
+            </div>
           </CardFooter>
         )}
       </Card>
