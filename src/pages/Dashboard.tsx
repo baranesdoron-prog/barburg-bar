@@ -645,7 +645,7 @@ function ManagerDashboard() {
       <ShiftSection title={effectiveStatusLabels.active} shifts={byStatus('active')} />
       <ShiftSection title="משמרות בתת-איוש" shifts={understaffed} />
       <ShiftSection title="בקשות החלפה ממתינות" shifts={pendingRequestShifts} />
-      <ShiftSection title={effectiveStatusLabels.published} shifts={byStatus('published')} />
+      {canManage && <ShiftSection title={effectiveStatusLabels.published} shifts={byStatus('published')} />}
       <ShiftSection title={effectiveStatusLabels.waiting_for_closure} shifts={byStatus('waiting_for_closure')} />
     </div>
   )
