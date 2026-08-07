@@ -393,8 +393,11 @@ function ShiftManagerAssignmentCard({ onAssigned }: { onAssigned: () => void }) 
 
   return (
     <Card className={missingCount > 0 ? 'border-amber-500/60 bg-amber-50 dark:bg-amber-950/20' : undefined}>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-base">שיבוץ אחראי משמרת</CardTitle>
+        <Link to="/admin/shift-manager-schedule" className="text-muted-foreground text-xs hover:underline">
+          שיבוץ לפי שנה
+        </Link>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
         {weeks.map((week) => {

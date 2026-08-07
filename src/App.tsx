@@ -33,6 +33,7 @@ import { Reports } from '@/pages/Reports'
 import { Users } from '@/pages/Users'
 import { WeeklyChecklist } from '@/pages/WeeklyChecklist'
 import { Procedures } from '@/pages/Procedures'
+import { ShiftManagerSchedule } from '@/pages/ShiftManagerSchedule'
 
 function RequireApproved() {
   const { loading, session, appUser } = useAppUser()
@@ -104,6 +105,7 @@ export function App() {
         <Route element={<RequireRole roles={['administrator']} />}>
           <Route path="/admin/approvals" element={<AdminApprovals />} />
           <Route path="/admin/users" element={<Users />} />
+          <Route path="/admin/shift-manager-schedule" element={<ShiftManagerSchedule />} />
         </Route>
       </Route>
     </Routes>
