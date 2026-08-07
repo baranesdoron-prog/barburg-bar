@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { toDateStr, parseDateStr } from '@/lib/weeklyChecklist'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { ShiftManagerAssignment } from '@/lib/types'
 
@@ -11,6 +12,10 @@ const selectClass =
   'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
 
 const weekLabelFormatter = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'long' })
+
+// The bar didn't operate before this week, so there's nothing to schedule
+// earlier than it regardless of which year is selected.
+const EARLIEST_WEEK_START = '2026-07-19'
 
 interface ShiftManagerEmployee {
   id: string
@@ -31,16 +36,87 @@ function sundaysInYear(year: number): Date[] {
 const currentYear = new Date().getFullYear()
 const YEAR_OPTIONS = [currentYear - 1, currentYear, currentYear + 1, currentYear + 2]
 
+function WeekRow({
+  week,
+  assignedEmployeeId,
+  employees,
+  onAssigned,
+}: {
+  week: string
+  assignedEmployeeId: string
+  employees: ShiftManagerEmployee[]
+  onAssigned: () => void
+}) {
+  const [selected, setSelected] = useState(assignedEmployeeId)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setSelected(assignedEmployeeId)
+  }, [assignedEmployeeId])
+
+  async function handleApprove() {
+    if (!selected) return
+    setSaving(true)
+    setError(null)
+    const { error: assignError } = await supabase.rpc('set_weekly_shift_manager', {
+      p_week_start: week,
+      p_employee_id: selected,
+    })
+    setSaving(false)
+    if (assignError) {
+      setError(assignError.message)
+      return
+    }
+    onAssigned()
+  }
+
+  return (
+    <div className="flex flex-col gap-1 rounded-md border p-2 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span>{weekLabelFormatter.format(parseDateStr(week))}</span>
+        <div className="flex items-center gap-2">
+          <select
+            className={cn(selectClass, 'w-40', !assignedEmployeeId && 'border-amber-500')}
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+          >
+            <option value="">— לא שובץ —</option>
+            {employees.map((emp) => (
+              <option key={emp.id} value={emp.id}>
+                {emp.full_name}
+              </option>
+            ))}
+          </select>
+          <Button size="sm" disabled={!selected || selected === assignedEmployeeId || saving} onClick={handleApprove}>
+            אישור
+          </Button>
+          <Link to={`/weekly-checklist?week=${week}`} className="text-muted-foreground text-xs hover:underline">
+            לרשימת המשימות
+          </Link>
+        </div>
+      </div>
+      {error && <p className="text-destructive text-xs">{error}</p>}
+    </div>
+  )
+}
+
 export function ShiftManagerSchedule() {
   const [year, setYear] = useState(currentYear)
   const [employees, setEmployees] = useState<ShiftManagerEmployee[]>([])
   const [assignments, setAssignments] = useState<Map<string, string>>(new Map())
-  const [saving, setSaving] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
-  const weeks = sundaysInYear(year).map(toDateStr)
+  const weeks = sundaysInYear(year)
+    .map(toDateStr)
+    .filter((w) => w >= EARLIEST_WEEK_START)
 
   async function load() {
+    if (weeks.length === 0) {
+      setEmployees([])
+      setAssignments(new Map())
+      return
+    }
+
     const [employeesRes, assignmentsRes] = await Promise.all([
       supabase.rpc('list_shift_manager_employees'),
       supabase
@@ -60,21 +136,6 @@ export function ShiftManagerSchedule() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [year])
 
-  async function handleAssign(week: string, employeeId: string) {
-    if (!employeeId) return
-    setSaving(week)
-    const { error: assignError } = await supabase.rpc('set_weekly_shift_manager', {
-      p_week_start: week,
-      p_employee_id: employeeId,
-    })
-    setSaving(null)
-    if (assignError) {
-      setError(assignError.message)
-      return
-    }
-    load()
-  }
-
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -93,30 +154,16 @@ export function ShiftManagerSchedule() {
           <CardTitle className="text-base">שבועות {year}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
-          {weeks.map((week) => {
-            const assigned = assignments.get(week) ?? ''
-            return (
-              <div key={week} className="flex items-center justify-between gap-2 text-sm">
-                <Link to={`/weekly-checklist?week=${week}`} className="hover:underline">
-                  {weekLabelFormatter.format(parseDateStr(week))}
-                </Link>
-                <select
-                  className={cn(selectClass, 'w-40', !assigned && 'border-amber-500')}
-                  value={assigned}
-                  disabled={saving === week}
-                  onChange={(e) => handleAssign(week, e.target.value)}
-                >
-                  <option value="">— לא שובץ —</option>
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.full_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )
-          })}
-          {error && <p className="text-destructive text-sm">{error}</p>}
+          {weeks.length === 0 && <p className="text-muted-foreground text-sm">אין שבועות להצגה בשנה זו.</p>}
+          {weeks.map((week) => (
+            <WeekRow
+              key={week}
+              week={week}
+              assignedEmployeeId={assignments.get(week) ?? ''}
+              employees={employees}
+              onAssigned={load}
+            />
+          ))}
         </CardContent>
       </Card>
     </div>
