@@ -32,6 +32,7 @@ import { PurchaseOrderDetail } from '@/pages/PurchaseOrderDetail'
 import { Reports } from '@/pages/Reports'
 import { Users } from '@/pages/Users'
 import { WeeklyChecklist } from '@/pages/WeeklyChecklist'
+import { Procedures } from '@/pages/Procedures'
 
 function RequireApproved() {
   const { loading, session, appUser } = useAppUser()
@@ -76,6 +77,7 @@ export function App() {
       <Route element={<RequireApproved />}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/profile" element={<Profile />} />
+        <Route path="/procedures" element={<Procedures />} />
         <Route element={<RequireRole roles={['bartender', 'shift_manager']} />}>
           <Route path="/my-shifts" element={<MyShifts />} />
         </Route>

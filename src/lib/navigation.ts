@@ -7,6 +7,7 @@ import {
   Truck,
   ClipboardList,
   FileText,
+  BookOpen,
   User,
   UserCheck,
   Users,
@@ -23,7 +24,10 @@ export interface NavItem {
 }
 
 export function getNavItems(role: AppRole): NavItem[] {
-  const items: NavItem[] = [{ to: '/', label: 'לוח בקרה', icon: LayoutDashboard }]
+  const items: NavItem[] = [
+    { to: '/', label: 'לוח בקרה', icon: LayoutDashboard },
+    { to: '/procedures', label: 'נהלים', icon: BookOpen },
+  ]
 
   if (ROLES_VIEWING_SHIFTS.includes(role)) {
     items.push({ to: '/shifts', label: 'משמרות', icon: CalendarClock })
