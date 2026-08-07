@@ -7,6 +7,7 @@ import type { AppRole } from '@/lib/types'
 export interface Employee {
   id: string
   full_name: string
+  photo_url: string | null
 }
 
 type ResolveResult = { employeeId: string | null; error?: undefined } | { employeeId?: undefined; error: string }
@@ -21,6 +22,7 @@ export function useRoleEmployeeAssignment(initial?: {
   const [employeeId, setEmployeeId] = useState(initial?.employeeId ?? '')
   const [newName, setNewName] = useState('')
   const [newPhone, setNewPhone] = useState('')
+  const [newPhotoUrl, setNewPhotoUrl] = useState<string | null>(null)
 
   const needsEmployee = role !== '' && ROLES_REQUIRING_EMPLOYEE.includes(role)
 
@@ -46,8 +48,8 @@ export function useRoleEmployeeAssignment(initial?: {
 
     const { data: employee, error } = await supabase
       .from('employees')
-      .insert({ full_name: newName.trim(), phone: newPhone.trim() || null })
-      .select('id, full_name')
+      .insert({ full_name: newName.trim(), phone: newPhone.trim() || null, photo_url: newPhotoUrl })
+      .select('id, full_name, photo_url')
       .single()
 
     if (error) {
@@ -69,6 +71,8 @@ export function useRoleEmployeeAssignment(initial?: {
     setNewName,
     newPhone,
     setNewPhone,
+    newPhotoUrl,
+    setNewPhotoUrl,
     needsEmployee,
     resolve,
   }

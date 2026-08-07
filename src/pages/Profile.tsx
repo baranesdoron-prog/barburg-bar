@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 interface Employee {
   full_name: string
   phone: string | null
+  photo_url: string | null
 }
 
 export function Profile() {
@@ -19,7 +20,7 @@ export function Profile() {
 
     supabase
       .from('employees')
-      .select('full_name, phone')
+      .select('full_name, phone, photo_url')
       .eq('id', appUser.employee_id)
       .single()
       .then(({ data }) => setEmployee(data))
@@ -28,6 +29,13 @@ export function Profile() {
   return (
     <Card className="mx-auto max-w-md text-center">
       <CardHeader>
+        {employee?.photo_url && (
+          <img
+            src={employee.photo_url}
+            alt=""
+            className="mx-auto size-20 rounded-full object-cover"
+          />
+        )}
         <CardTitle>{employee ? employee.full_name : 'הפרופיל שלי'}</CardTitle>
         <CardDescription>{roleLabels[appUser.role!]}</CardDescription>
       </CardHeader>

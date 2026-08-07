@@ -457,7 +457,7 @@ function NextManagerCard() {
       const openItems = ((items as WeeklyChecklistItem[]) ?? []).filter((i) => !i.completed)
       setTaskStats({
         open: openItems.length,
-        late: openItems.filter((i) => i.due_date < todayStr).length,
+        late: openItems.filter((i) => !i.is_optional && i.due_date < todayStr).length,
       })
       setLoaded(true)
     }
@@ -528,12 +528,15 @@ function MyWeeklyTasksCard({ employeeId }: { employeeId: string }) {
   if (!loaded || !weekStart) return null
 
   const todayStr = toDateStr(new Date())
-  const openItems = items.filter((i) => !i.completed)
+  const openItems = items
+    .filter((i) => !i.completed)
+    .sort((a, b) => a.due_date.localeCompare(b.due_date))
+    .slice(0, 5)
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base">המשימות שלי לשבוע</CardTitle>
+        <CardTitle className="text-base">המשימות הקרובות שלי</CardTitle>
         <Link to={`/weekly-checklist?week=${weekStart}`} className="text-muted-foreground text-xs hover:underline">
           לרשימה המלאה
         </Link>
@@ -541,10 +544,13 @@ function MyWeeklyTasksCard({ employeeId }: { employeeId: string }) {
       <CardContent className="flex flex-col gap-2">
         {openItems.length === 0 && <p className="text-muted-foreground text-sm">כל המשימות לשבוע הושלמו.</p>}
         {openItems.map((item) => {
-          const isLate = item.due_date < todayStr
+          const isLate = !item.is_optional && item.due_date < todayStr
           return (
             <div key={item.id} className="rounded-md border p-2 text-sm">
-              <p>{item.title}</p>
+              <p>
+                {item.title}
+                {item.is_optional && <span className="text-muted-foreground"> (אופציונלי)</span>}
+              </p>
               <p className={isLate ? 'text-destructive text-xs font-medium' : 'text-muted-foreground text-xs'}>
                 {weekLabelFormatter.format(parseDateStr(item.due_date))}
                 {isLate && ' — באיחור'}

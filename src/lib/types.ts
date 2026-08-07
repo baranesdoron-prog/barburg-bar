@@ -236,8 +236,20 @@ export interface WeeklyChecklistItem {
   sort_order: number
   title: string
   due_date: string
+  is_optional: boolean
   completed: boolean
   completed_by: string | null
   completed_at: string | null
+  created_at: string
+}
+
+export interface WeeklyChecklistSubtask {
+  id: string
+  checklist_item_id: string
+  title: string
+  completed: boolean
+  completed_by: string | null
+  completed_at: string | null
+  source_journal_entry_id: string | null
   created_at: string
 }

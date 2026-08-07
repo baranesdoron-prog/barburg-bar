@@ -6,10 +6,11 @@ import { useAppUserContext } from '@/lib/outletContext'
 import { addDays, sundayOf, toDateStr, parseDateStr, activeWeekStart } from '@/lib/weeklyChecklist'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import type { ShiftManagerAssignment, WeeklyChecklistItem } from '@/lib/types'
+import type { ShiftManagerAssignment, WeeklyChecklistItem, WeeklyChecklistSubtask } from '@/lib/types'
 
 const PROTOCOL_URL = 'https://drive.google.com/file/d/1T2uBgG66MbfVCceC4J-sEJYZaccDGkkY/view?usp=sharing'
-const OPENING_PROTOCOL_SORT_ORDER = 9
+const OPENING_PROTOCOL_SORT_ORDER = 10
+const ISSUES_SORT_ORDER = 2
 
 const selectClass =
   'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
@@ -27,6 +28,7 @@ export function WeeklyChecklist() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [weekOffset, setWeekOffset] = useState(0)
   const [items, setItems] = useState<WeeklyChecklistItem[] | null>(null)
+  const [subtasks, setSubtasks] = useState<WeeklyChecklistSubtask[]>([])
   const [error, setError] = useState<string | null>(null)
   const [assignments, setAssignments] = useState<ShiftManagerAssignment[]>([])
   const [employeeNames, setEmployeeNames] = useState<Map<string, string>>(new Map())
@@ -39,14 +41,26 @@ export function WeeklyChecklist() {
   useEffect(() => {
     let cancelled = false
     setItems(null)
+    setSubtasks([])
 
-    supabase.rpc('ensure_weekly_checklist', { p_week_start: weekStartStr }).then(({ data, error: rpcError }) => {
+    supabase.rpc('ensure_weekly_checklist', { p_week_start: weekStartStr }).then(async ({ data, error: rpcError }) => {
       if (cancelled) return
       if (rpcError) {
         setError(rpcError.message)
         return
       }
-      setItems((data as WeeklyChecklistItem[]) ?? [])
+      const loadedItems = (data as WeeklyChecklistItem[]) ?? []
+      setItems(loadedItems)
+
+      const issuesItem = loadedItems.find((i) => i.sort_order === ISSUES_SORT_ORDER)
+      if (!issuesItem) return
+
+      const { data: subtaskData } = await supabase
+        .from('weekly_checklist_subtasks')
+        .select('*')
+        .eq('checklist_item_id', issuesItem.id)
+      if (cancelled) return
+      setSubtasks((subtaskData as WeeklyChecklistSubtask[]) ?? [])
     })
 
     return () => {
@@ -108,6 +122,26 @@ export function WeeklyChecklist() {
     setItems((prev) => prev?.map((i) => (i.id === item.id ? { ...i, completed: nowCompleted } : i)) ?? null)
   }
 
+  async function handleToggleSubtask(subtask: WeeklyChecklistSubtask) {
+    const nowCompleted = !subtask.completed
+
+    const { error: updateError } = await supabase
+      .from('weekly_checklist_subtasks')
+      .update({
+        completed: nowCompleted,
+        completed_by: nowCompleted ? appUser.id : null,
+        completed_at: nowCompleted ? new Date().toISOString() : null,
+      })
+      .eq('id', subtask.id)
+
+    if (updateError) {
+      setError(updateError.message)
+      return
+    }
+
+    setSubtasks((prev) => prev.map((s) => (s.id === subtask.id ? { ...s, completed: nowCompleted } : s)))
+  }
+
   const todayStr = toDateStr(new Date())
   const historyOptions = assignments.filter((a) => a.week_start <= toDateStr(activeWeekStart()))
 
@@ -147,32 +181,57 @@ export function WeeklyChecklist() {
         <CardContent className="flex flex-col gap-2">
           {items === null && <p className="text-muted-foreground text-sm">טוען...</p>}
           {items?.map((item) => {
-            const isLate = !item.completed && item.due_date < todayStr
+            const isLate = !item.completed && !item.is_optional && item.due_date < todayStr
+            const isIssuesItem = item.sort_order === ISSUES_SORT_ORDER
             return (
-              <div key={item.id} className="flex items-start gap-2 rounded-md border p-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={item.completed}
-                  onChange={() => handleToggle(item)}
-                />
-                <div className="flex flex-col">
-                  <span className={item.completed ? 'text-muted-foreground line-through' : ''}>
-                    {item.title}
-                    {item.sort_order === OPENING_PROTOCOL_SORT_ORDER && (
-                      <>
-                        {' '}
-                        <a href={PROTOCOL_URL} target="_blank" rel="noreferrer" className="text-primary underline">
-                          (פרוטוקול פתיחה)
-                        </a>
-                      </>
-                    )}
-                  </span>
-                  <span className={isLate ? 'text-destructive text-xs font-medium' : 'text-muted-foreground text-xs'}>
-                    {dueDateFormatter.format(parseDateStr(item.due_date))}
-                    {isLate && ' — באיחור'}
-                  </span>
+              <div key={item.id} className="flex flex-col gap-2 rounded-md border p-2 text-sm">
+                <div className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={item.completed}
+                    onChange={() => handleToggle(item)}
+                  />
+                  <div className="flex flex-col">
+                    <span className={item.completed ? 'text-muted-foreground line-through' : ''}>
+                      {item.title}
+                      {item.is_optional && <span className="text-muted-foreground"> (אופציונלי)</span>}
+                      {item.sort_order === OPENING_PROTOCOL_SORT_ORDER && (
+                        <>
+                          {' '}
+                          <a href={PROTOCOL_URL} target="_blank" rel="noreferrer" className="text-primary underline">
+                            (פרוטוקול פתיחה)
+                          </a>
+                        </>
+                      )}
+                    </span>
+                    <span className={isLate ? 'text-destructive text-xs font-medium' : 'text-muted-foreground text-xs'}>
+                      {dueDateFormatter.format(parseDateStr(item.due_date))}
+                      {isLate && ' — באיחור'}
+                    </span>
+                  </div>
                 </div>
+
+                {isIssuesItem && (
+                  <div className="mr-6 flex flex-col gap-1 border-r pr-3">
+                    {subtasks.length === 0 && (
+                      <p className="text-muted-foreground text-xs">לא דווחו בעיות במשמרת הקודמת.</p>
+                    )}
+                    {subtasks.map((subtask) => (
+                      <label key={subtask.id} className="flex items-start gap-2 text-xs">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={subtask.completed}
+                          onChange={() => handleToggleSubtask(subtask)}
+                        />
+                        <span className={subtask.completed ? 'text-muted-foreground line-through' : ''}>
+                          {subtask.title}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           })}

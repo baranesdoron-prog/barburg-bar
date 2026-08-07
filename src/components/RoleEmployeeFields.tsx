@@ -1,3 +1,6 @@
+import { useState } from 'react'
+
+import { supabase } from '@/lib/supabase'
 import { roleLabels } from '@/lib/roleLabels'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -27,8 +30,33 @@ export function RoleEmployeeFields({
     setNewName,
     newPhone,
     setNewPhone,
+    newPhotoUrl,
+    setNewPhotoUrl,
     needsEmployee,
   } = assignment
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+
+  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    setUploadError(null)
+
+    const path = `${crypto.randomUUID()}-${file.name}`
+    const { error: uploadErr } = await supabase.storage.from('employee-photos').upload(path, file)
+
+    setUploading(false)
+
+    if (uploadErr) {
+      setUploadError(uploadErr.message)
+      return
+    }
+
+    const { data } = supabase.storage.from('employee-photos').getPublicUrl(path)
+    setNewPhotoUrl(data.publicUrl)
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -99,6 +127,13 @@ export function RoleEmployeeFields({
                 value={newPhone}
                 onChange={(e) => setNewPhone(e.target.value)}
               />
+              <div className="flex items-center gap-3">
+                {newPhotoUrl && (
+                  <img src={newPhotoUrl} alt="" className="size-12 shrink-0 rounded-full object-cover" />
+                )}
+                <Input type="file" accept="image/*" disabled={uploading} onChange={handlePhotoChange} />
+              </div>
+              {uploadError && <p className="text-destructive text-sm">{uploadError}</p>}
             </div>
           )}
         </div>

@@ -53,7 +53,7 @@ export function Users() {
   async function load() {
     const [usersRes, employeesRes, invitesRes] = await Promise.all([
       supabase.rpc('list_app_users_for_admin'),
-      supabase.from('employees').select('id, full_name').eq('active', true).order('full_name'),
+      supabase.from('employees').select('id, full_name, photo_url').eq('active', true).order('full_name'),
       supabase.from('employee_invites').select('*').order('created_at', { ascending: false }),
     ])
 
@@ -187,7 +187,29 @@ function InviteForm({
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const assignment = useRoleEmployeeAssignment({ employeeMode: 'create' })
+
+  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    setError(null)
+
+    const path = `${crypto.randomUUID()}-${file.name}`
+    const { error: uploadError } = await supabase.storage.from('employee-photos').upload(path, file)
+
+    setUploading(false)
+
+    if (uploadError) {
+      setError(uploadError.message)
+      return
+    }
+
+    const { data } = supabase.storage.from('employee-photos').getPublicUrl(path)
+    assignment.setNewPhotoUrl(data.publicUrl)
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -278,6 +300,20 @@ function InviteForm({
             />
           </div>
 
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="invite-photo">תמונה (לא חובה)</Label>
+            <div className="flex items-center gap-3">
+              {assignment.newPhotoUrl && (
+                <img
+                  src={assignment.newPhotoUrl}
+                  alt=""
+                  className="size-12 shrink-0 rounded-full object-cover"
+                />
+              )}
+              <Input id="invite-photo" type="file" accept="image/*" disabled={uploading} onChange={handlePhotoChange} />
+            </div>
+          </div>
+
           {error && <p className="text-destructive text-sm">{error}</p>}
         </CardContent>
         <CardFooter className="flex gap-2">
@@ -308,6 +344,7 @@ function UserRow({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const assignment = useRoleEmployeeAssignment({ role: user.role, employeeId: user.employee_id })
+  const employeePhotoUrl = employees.find((e) => e.id === user.employee_id)?.photo_url
 
   async function handleSave() {
     setError(null)
@@ -384,10 +421,15 @@ function UserRow({
               {user.role ? roleLabels[user.role] : '—'}
             </p>
             {user.employee_name && (
-              <p>
-                <span className="text-muted-foreground">עובד/ת: </span>
-                {user.employee_name}
-              </p>
+              <div className="flex items-center gap-2">
+                {employeePhotoUrl && (
+                  <img src={employeePhotoUrl} alt="" className="size-8 shrink-0 rounded-full object-cover" />
+                )}
+                <p>
+                  <span className="text-muted-foreground">עובד/ת: </span>
+                  {user.employee_name}
+                </p>
+              </div>
             )}
           </>
         )}
