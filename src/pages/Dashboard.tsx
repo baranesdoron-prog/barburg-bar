@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { AlertTriangle, Clock, Package, ShoppingCart, Truck, Users, CalendarDays, type LucideIcon } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
@@ -11,7 +11,6 @@ import { useAppUserContext } from '@/lib/outletContext'
 import { effectiveStatusLabels, shiftTypeLabel } from '@/lib/shiftLabels'
 import { cn, formatDate, formatDateTime, formatTime } from '@/lib/utils'
 import { activeWeekStart, addDays, parseDateStr, toDateStr } from '@/lib/weeklyChecklist'
-import { SelfCheckIn } from '@/components/SelfCheckIn'
 import type {
   EffectiveShiftStatus,
   PurchaseOrder,
@@ -652,108 +651,15 @@ function ManagerDashboard() {
   )
 }
 
-function EmployeeDashboard({ employeeId }: { employeeId: string }) {
-  const [upcoming, setUpcoming] = useState<Shift[] | null>(null)
-  const [assignmentIdByShiftId, setAssignmentIdByShiftId] = useState<Map<string, string>>(new Map())
-  const [pendingRequestCount, setPendingRequestCount] = useState(0)
-
-  useEffect(() => {
-    async function load() {
-      const { data: assignments } = await supabase
-        .from('shift_assignments')
-        .select('*')
-        .eq('employee_id', employeeId)
-
-      const loadedAssignments = (assignments as ShiftAssignment[]) ?? []
-      setAssignmentIdByShiftId(new Map(loadedAssignments.map((a) => [a.shift_id, a.id])))
-
-      if (loadedAssignments.length === 0) {
-        setUpcoming([])
-        setPendingRequestCount(0)
-        return
-      }
-
-      const [shiftsRes, requestsRes] = await Promise.all([
-        supabase
-          .from('shifts_with_effective_status')
-          .select('*')
-          .in(
-            'id',
-            loadedAssignments.map((a) => a.shift_id),
-          )
-          .in('effective_status', ['published', 'active'])
-          .order('start_time', { ascending: true }),
-        supabase
-          .from('replacement_requests')
-          .select('id')
-          .in(
-            'shift_assignment_id',
-            loadedAssignments.map((a) => a.id),
-          )
-          .eq('status', 'pending'),
-      ])
-
-      setUpcoming((shiftsRes.data as Shift[]) ?? [])
-      setPendingRequestCount(requestsRes.data?.length ?? 0)
-    }
-
-    load()
-  }, [employeeId])
-
-  if (upcoming === null) return null
-
-  const [nextShift, ...rest] = upcoming
-
-  return (
-    <div className="mx-auto flex max-w-md flex-col gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">המשמרת הבאה שלי</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {nextShift ? (
-            <>
-              <Link to="/my-shifts" className="flex flex-col text-sm">
-                <span className="font-medium">{shiftTypeLabel(nextShift.shift_type)}</span>
-                <span className="text-muted-foreground">
-                  {formatDateTime(nextShift.start_time)} – {formatDateTime(nextShift.end_time)}
-                </span>
-              </Link>
-              {nextShift.effective_status === 'active' &&
-                assignmentIdByShiftId.get(nextShift.id) && (
-                  <SelfCheckIn shiftAssignmentId={assignmentIdByShiftId.get(nextShift.id)!} />
-                )}
-            </>
-          ) : (
-            <p className="text-muted-foreground text-sm">אין משמרות קרובות.</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {rest.length > 0 && <ShiftSection title="משמרות קרובות" shifts={rest} />}
-
-      {pendingRequestCount > 0 && (
-        <Card>
-          <CardContent className="pt-6 text-sm">
-            <Link to="/my-shifts" className="text-muted-foreground">
-              {pendingRequestCount} בקש{pendingRequestCount === 1 ? 'ת' : 'ות'} החלפה ממתינות לאישור
-            </Link>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  )
-}
-
 export function Dashboard() {
-  const { appUser, effectiveRole } = useAppUserContext()
+  const { effectiveRole } = useAppUserContext()
 
   if (ROLES_VIEWING_SHIFTS.includes(effectiveRole)) {
     return <ManagerDashboard />
   }
 
-  if (effectiveRole === 'bartender' && appUser.employee_id) {
-    return <EmployeeDashboard employeeId={appUser.employee_id} />
+  if (effectiveRole === 'bartender') {
+    return <Navigate to="/my-shifts" replace />
   }
 
   return (
