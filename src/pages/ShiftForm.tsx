@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
 import { shiftTypeLabels } from '@/lib/shiftLabels'
-import { sundayOf, addDays, toDateStr, parseDateStr } from '@/lib/weeklyChecklist'
+import { activeWeekStart, addDays, toDateStr, parseDateStr } from '@/lib/weeklyChecklist'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,11 +12,14 @@ import type { Shift, ShiftStatus, ShiftType } from '@/lib/types'
 
 const weekLabelFormatter = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'long', year: 'numeric' })
 
-function weekOptions() {
-  const thisWeek = sundayOf(new Date())
+function weekOptions(alwaysInclude?: string) {
+  const active = activeWeekStart()
   const options: string[] = []
-  for (let i = -8; i <= 12; i++) {
-    options.push(toDateStr(addDays(thisWeek, i * 7)))
+  for (let i = 0; i <= 12; i++) {
+    options.push(toDateStr(addDays(active, i * 7)))
+  }
+  if (alwaysInclude && !options.includes(alwaysInclude)) {
+    options.unshift(alwaysInclude)
   }
   return options
 }
@@ -142,6 +145,12 @@ export function ShiftForm() {
       return
     }
 
+    if (saveError?.code === '42501') {
+      setSubmitting(false)
+      setError('לא ניתן לפתוח משמרת חדשה עבור שבוע שכבר חלף')
+      return
+    }
+
     setSubmitting(false)
 
     if (saveError) {
@@ -172,7 +181,7 @@ export function ShiftForm() {
               <option value="" disabled>
                 בחר שבוע
               </option>
-              {weekOptions().map((w) => (
+              {weekOptions(weekStart || undefined).map((w) => (
                 <option key={w} value={w}>
                   שבוע {weekLabelFormatter.format(parseDateStr(w))}
                 </option>
