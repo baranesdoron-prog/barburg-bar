@@ -3,11 +3,23 @@ import { useNavigate, useParams } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
 import { shiftTypeLabels } from '@/lib/shiftLabels'
+import { sundayOf, addDays, toDateStr, parseDateStr } from '@/lib/weeklyChecklist'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import type { Shift, ShiftStatus, ShiftType } from '@/lib/types'
+
+const weekLabelFormatter = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'long', year: 'numeric' })
+
+function weekOptions() {
+  const thisWeek = sundayOf(new Date())
+  const options: string[] = []
+  for (let i = -8; i <= 12; i++) {
+    options.push(toDateStr(addDays(thisWeek, i * 7)))
+  }
+  return options
+}
 
 interface Employee {
   id: string
@@ -41,6 +53,7 @@ export function ShiftForm() {
   const navigate = useNavigate()
 
   const [employees, setEmployees] = useState<Employee[]>([])
+  const [weekStart, setWeekStart] = useState('')
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
   const [shiftType, setShiftType] = useState<ShiftType | ''>('')
@@ -73,6 +86,7 @@ export function ShiftForm() {
           return
         }
         const shift = data as Shift
+        setWeekStart(shift.week_start)
         setStartTime(toDatetimeLocal(shift.start_time))
         setEndTime(toDatetimeLocal(shift.end_time))
         setShiftType(shift.shift_type)
@@ -95,8 +109,8 @@ export function ShiftForm() {
     e.preventDefault()
     setError(null)
 
-    if (!startTime || !endTime || !shiftType) {
-      setError('יש למלא תאריך/שעת התחלה, סיום וסוג משמרת')
+    if (!weekStart || !startTime || !endTime || !shiftType) {
+      setError('יש למלא שבוע, תאריך/שעת התחלה, סיום וסוג משמרת')
       return
     }
 
@@ -108,6 +122,7 @@ export function ShiftForm() {
     setSubmitting(true)
 
     const payload = {
+      week_start: weekStart,
       start_time: new Date(startTime).toISOString(),
       end_time: new Date(endTime).toISOString(),
       shift_type: shiftType,
@@ -120,6 +135,12 @@ export function ShiftForm() {
     const { error: saveError, data: saved } = isEdit
       ? await supabase.from('shifts').update(payload).eq('id', id).select('id').single()
       : await supabase.from('shifts').insert(payload).select('id').single()
+
+    if (saveError?.code === '23505') {
+      setSubmitting(false)
+      setError('כבר קיימת משמרת מסוג זה לשבוע שנבחר')
+      return
+    }
 
     setSubmitting(false)
 
@@ -140,6 +161,25 @@ export function ShiftForm() {
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="week-start">שבוע</Label>
+            <select
+              id="week-start"
+              className={selectClass}
+              value={weekStart}
+              onChange={(e) => setWeekStart(e.target.value)}
+            >
+              <option value="" disabled>
+                בחר שבוע
+              </option>
+              {weekOptions().map((w) => (
+                <option key={w} value={w}>
+                  שבוע {weekLabelFormatter.format(parseDateStr(w))}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="flex flex-col gap-2">
             <Label htmlFor="shift-type">סוג משמרת</Label>
             <select

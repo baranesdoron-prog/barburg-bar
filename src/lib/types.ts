@@ -57,6 +57,7 @@ export interface Shift {
   id: string
   start_time: string
   end_time: string
+  week_start: string
   shift_type: ShiftType
   shift_manager_id: string | null
   notes: string | null
