@@ -4,6 +4,7 @@ import {
   CalendarClock,
   CheckSquare,
   Package,
+  ClipboardCheck,
   Truck,
   ClipboardList,
   FileText,
@@ -18,9 +19,10 @@ import type { AppRole } from '@/lib/types'
 import { ROLES_MANAGING_SHIFTS, ROLES_REQUIRING_EMPLOYEE, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
 
 export interface NavItem {
-  to: string
+  to?: string
   label: string
   icon: LucideIcon
+  children?: NavItem[]
 }
 
 export function getNavItems(role: AppRole): NavItem[] {
@@ -40,7 +42,14 @@ export function getNavItems(role: AppRole): NavItem[] {
   }
 
   if (ROLES_MANAGING_SHIFTS.includes(role)) {
-    items.push({ to: '/inventory/items', label: 'פריטי מלאי', icon: Package })
+    items.push({
+      label: 'מלאי',
+      icon: Package,
+      children: [
+        { to: '/inventory/items', label: 'פריטי מלאי', icon: Package },
+        { to: '/inventory/checks', label: 'בדיקות מלאי', icon: ClipboardCheck },
+      ],
+    })
     items.push({ to: '/suppliers', label: 'ספקים', icon: Truck })
     items.push({ to: '/purchase-orders', label: 'הזמנות רכש', icon: ClipboardList })
   }
