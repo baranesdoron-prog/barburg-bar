@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
-import { attendanceStatusLabels } from '@/lib/shiftLabels'
+import { attendanceStatusLabels, shiftTypeLabel } from '@/lib/shiftLabels'
 import { journalCategoryLabels } from '@/lib/journalLabels'
 import { formatDateTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -52,7 +52,7 @@ export function ShiftReport() {
 
       <Card>
         <CardHeader>
-          <CardTitle>דוח סגירת משמרת — {snapshot.shift.shift_type}</CardTitle>
+          <CardTitle>דוח סגירת משמרת — {shiftTypeLabel(snapshot.shift.shift_type)}</CardTitle>
           <CardDescription>
             {formatDateTime(snapshot.shift.start_time)} – {formatDateTime(snapshot.shift.end_time)}
           </CardDescription>

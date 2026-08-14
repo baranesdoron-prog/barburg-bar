@@ -1,4 +1,15 @@
-import type { AttendanceStatus, EffectiveShiftStatus } from '@/lib/types'
+import type { AttendanceStatus, EffectiveShiftStatus, ShiftType } from '@/lib/types'
+
+export const shiftTypeLabels: Record<ShiftType, string> = {
+  opening: 'פתיחה',
+  closing: 'סגירה',
+}
+
+// shift_reports.snapshot is a frozen historical dump and can still hold
+// pre-migration free text, so this must tolerate unrecognized values.
+export function shiftTypeLabel(value: string): string {
+  return shiftTypeLabels[value as ShiftType] ?? value
+}
 
 export const effectiveStatusLabels: Record<EffectiveShiftStatus, string> = {
   draft: 'טיוטה',

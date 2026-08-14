@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
 import { ROLES_MANAGING_SHIFTS } from '@/lib/roleLabels'
-import { effectiveStatusLabels, effectiveStatusBadgeClass } from '@/lib/shiftLabels'
+import { effectiveStatusLabels, effectiveStatusBadgeClass, shiftTypeLabel } from '@/lib/shiftLabels'
 import { cn, formatDateTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -59,7 +59,7 @@ export function Shifts() {
           <Card className="hover:bg-accent/50 transition-colors">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base">{shift.shift_type}</CardTitle>
+                <CardTitle className="text-base">{shiftTypeLabel(shift.shift_type)}</CardTitle>
                 <span
                   className={cn(
                     'rounded-full px-2 py-1 text-xs font-medium',

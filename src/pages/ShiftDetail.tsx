@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
 import { ROLES_MANAGING_SHIFTS, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
-import { attendanceStatusLabels, effectiveStatusLabels, effectiveStatusBadgeClass } from '@/lib/shiftLabels'
+import { attendanceStatusLabels, effectiveStatusLabels, effectiveStatusBadgeClass, shiftTypeLabel } from '@/lib/shiftLabels'
 import { cn, formatDateTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -196,7 +196,7 @@ export function ShiftDetail() {
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle>{shift.shift_type}</CardTitle>
+            <CardTitle>{shiftTypeLabel(shift.shift_type)}</CardTitle>
             <span
               className={cn(
                 'rounded-full px-2 py-1 text-xs font-medium',
@@ -284,7 +284,9 @@ export function ShiftDetail() {
         )}
       </Card>
 
-      {canManageStaffing && (shift.effective_status === 'waiting_for_closure' || shift.effective_status === 'reopened') && (
+      {canManageStaffing &&
+        shift.shift_type === 'closing' &&
+        (shift.effective_status === 'waiting_for_closure' || shift.effective_status === 'reopened') && (
         <Button asChild>
           <Link to={`/shifts/${shift.id}/close`}>סגירת משמרת</Link>
         </Button>

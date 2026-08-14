@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
 import { AttendanceStep } from '@/components/AttendanceStep'
+import { shiftTypeLabel } from '@/lib/shiftLabels'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import type { Shift } from '@/lib/types'
@@ -33,7 +34,7 @@ export function AttendanceForm() {
   return (
     <Card className="mx-auto max-w-md">
       <CardHeader>
-        <CardTitle>רישום נוכחות — {shift.shift_type}</CardTitle>
+        <CardTitle>רישום נוכחות — {shiftTypeLabel(shift.shift_type)}</CardTitle>
       </CardHeader>
       <CardContent>
         <AttendanceStep shiftId={shift.id} />

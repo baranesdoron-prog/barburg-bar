@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
-import { effectiveStatusLabels, effectiveStatusBadgeClass } from '@/lib/shiftLabels'
+import { effectiveStatusLabels, effectiveStatusBadgeClass, shiftTypeLabel } from '@/lib/shiftLabels'
 import { cn, formatDateTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -138,7 +138,7 @@ function ShiftRow({
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">{shift.shift_type}</CardTitle>
+          <CardTitle className="text-base">{shiftTypeLabel(shift.shift_type)}</CardTitle>
           <span
             className={cn(
               'rounded-full px-2 py-1 text-xs font-medium',

@@ -51,11 +51,13 @@ export type EffectiveShiftStatus =
   | 'cancelled'
   | 'reopened'
 
+export type ShiftType = 'opening' | 'closing'
+
 export interface Shift {
   id: string
   start_time: string
   end_time: string
-  shift_type: string
+  shift_type: ShiftType
   shift_manager_id: string | null
   notes: string | null
   status: ShiftStatus

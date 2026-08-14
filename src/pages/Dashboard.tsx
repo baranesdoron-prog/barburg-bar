@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { roleLabels, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
 import { purchaseOrderStatusBadgeClass, purchaseOrderStatusLabels } from '@/lib/purchaseOrderLabels'
 import { useAppUserContext } from '@/lib/outletContext'
-import { effectiveStatusLabels } from '@/lib/shiftLabels'
+import { effectiveStatusLabels, shiftTypeLabel } from '@/lib/shiftLabels'
 import { cn, formatDate, formatDateTime, formatTime } from '@/lib/utils'
 import { activeWeekStart, addDays, parseDateStr, toDateStr } from '@/lib/weeklyChecklist'
 import { SelfCheckIn } from '@/components/SelfCheckIn'
@@ -47,7 +47,7 @@ function ShiftSection({ title, shifts }: { title: string; shifts: Shift[] }) {
             to={`/shifts/${shift.id}`}
             className="hover:bg-accent flex flex-col rounded-md border p-3 text-sm transition-colors"
           >
-            <span className="font-medium">{shift.shift_type}</span>
+            <span className="font-medium">{shiftTypeLabel(shift.shift_type)}</span>
             <span className="text-muted-foreground">
               {formatDateTime(shift.start_time)} – {formatDateTime(shift.end_time)}
             </span>
@@ -60,7 +60,7 @@ function ShiftSection({ title, shifts }: { title: string; shifts: Shift[] }) {
 
 function ClosingAlertCard({ shifts, employeeNames }: { shifts: Shift[]; employeeNames: Map<string, string> }) {
   const needsClosing = shifts.filter(
-    (s) => s.effective_status === 'waiting_for_closure' || s.effective_status === 'reopened',
+    (s) => s.shift_type === 'closing' && (s.effective_status === 'waiting_for_closure' || s.effective_status === 'reopened'),
   )
 
   if (needsClosing.length === 0) return null
@@ -82,9 +82,7 @@ function ClosingAlertCard({ shifts, employeeNames }: { shifts: Shift[]; employee
             className="bg-background flex items-center justify-between gap-3 rounded-md border border-amber-500/40 p-3 text-sm"
           >
             <div>
-              <p className="font-medium">
-                {formatDate(shift.start_time)} — {shift.shift_type}
-              </p>
+              <p className="font-medium">{formatDate(shift.start_time)}</p>
               <p className="text-muted-foreground">
                 {shift.shift_manager_id ? (employeeNames.get(shift.shift_manager_id) ?? '—') : 'לא הוגדר אחראי משמרת'}
                 {' • '}
@@ -332,7 +330,7 @@ function ManagerSummary({ shifts }: { shifts: Shift[] }) {
                 to={`/shifts/${shift.id}`}
                 className="hover:bg-accent flex flex-col rounded-md border p-2 text-sm transition-colors"
               >
-                <span className="font-medium">{shift.shift_type}</span>
+                <span className="font-medium">{shiftTypeLabel(shift.shift_type)}</span>
                 <span className="text-muted-foreground">
                   {formatDateTime(shift.start_time)} – {formatDateTime(shift.end_time)}
                 </span>
@@ -716,7 +714,7 @@ function EmployeeDashboard({ employeeId }: { employeeId: string }) {
           {nextShift ? (
             <>
               <Link to="/my-shifts" className="flex flex-col text-sm">
-                <span className="font-medium">{nextShift.shift_type}</span>
+                <span className="font-medium">{shiftTypeLabel(nextShift.shift_type)}</span>
                 <span className="text-muted-foreground">
                   {formatDateTime(nextShift.start_time)} – {formatDateTime(nextShift.end_time)}
                 </span>

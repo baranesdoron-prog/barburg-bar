@@ -2,11 +2,12 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
+import { shiftTypeLabels } from '@/lib/shiftLabels'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import type { Shift, ShiftStatus } from '@/lib/types'
+import type { Shift, ShiftStatus, ShiftType } from '@/lib/types'
 
 interface Employee {
   id: string
@@ -16,10 +17,22 @@ interface Employee {
 const selectClass =
   'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
 
+const TYPE_DEFAULT_HOURS: Record<ShiftType, { startHM: string; endHM: string; endNextDay: boolean }> = {
+  opening: { startHM: '19:30', endHM: '22:00', endNextDay: false },
+  closing: { startHM: '22:00', endHM: '00:30', endNextDay: true },
+}
+
 function toDatetimeLocal(iso: string) {
   const d = new Date(iso)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function addDaysToDateStr(dateStr: string, days: number) {
+  const d = new Date(`${dateStr}T00:00:00`)
+  d.setDate(d.getDate() + days)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
 export function ShiftForm() {
@@ -30,7 +43,7 @@ export function ShiftForm() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [startTime, setStartTime] = useState('')
   const [endTime, setEndTime] = useState('')
-  const [shiftType, setShiftType] = useState('')
+  const [shiftType, setShiftType] = useState<ShiftType | ''>('')
   const [shiftManagerId, setShiftManagerId] = useState('')
   const [notes, setNotes] = useState('')
   const [requiredStaffCount, setRequiredStaffCount] = useState('')
@@ -70,11 +83,19 @@ export function ShiftForm() {
       })
   }, [id])
 
+  function handleTypeChange(newType: ShiftType) {
+    setShiftType(newType)
+    const referenceDate = (startTime || endTime || toDatetimeLocal(new Date().toISOString())).slice(0, 10)
+    const { startHM, endHM, endNextDay } = TYPE_DEFAULT_HOURS[newType]
+    setStartTime(`${referenceDate}T${startHM}`)
+    setEndTime(`${endNextDay ? addDaysToDateStr(referenceDate, 1) : referenceDate}T${endHM}`)
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
 
-    if (!startTime || !endTime || !shiftType.trim()) {
+    if (!startTime || !endTime || !shiftType) {
       setError('יש למלא תאריך/שעת התחלה, סיום וסוג משמרת')
       return
     }
@@ -89,7 +110,7 @@ export function ShiftForm() {
     const payload = {
       start_time: new Date(startTime).toISOString(),
       end_time: new Date(endTime).toISOString(),
-      shift_type: shiftType.trim(),
+      shift_type: shiftType,
       shift_manager_id: shiftManagerId || null,
       notes: notes.trim() || null,
       required_staff_count: requiredStaffCount ? Number(requiredStaffCount) : null,
@@ -121,7 +142,21 @@ export function ShiftForm() {
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
             <Label htmlFor="shift-type">סוג משמרת</Label>
-            <Input id="shift-type" value={shiftType} onChange={(e) => setShiftType(e.target.value)} />
+            <select
+              id="shift-type"
+              className={selectClass}
+              value={shiftType}
+              onChange={(e) => handleTypeChange(e.target.value as ShiftType)}
+            >
+              <option value="" disabled>
+                בחר סוג משמרת
+              </option>
+              {(Object.keys(shiftTypeLabels) as ShiftType[]).map((t) => (
+                <option key={t} value={t}>
+                  {shiftTypeLabels[t]}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="flex flex-col gap-2">

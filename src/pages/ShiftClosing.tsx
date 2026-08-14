@@ -4,6 +4,7 @@ import { Link, Navigate, useParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { AttendanceStep } from '@/components/AttendanceStep'
 import { journalCategoryLabels } from '@/lib/journalLabels'
+import { shiftTypeLabel } from '@/lib/shiftLabels'
 import { formatDateTime } from '@/lib/utils'
 import { useAppUserContext } from '@/lib/outletContext'
 import { Button } from '@/components/ui/button'
@@ -43,7 +44,10 @@ export function ShiftClosing() {
   if (error) return <p className="text-destructive text-center text-sm">{error}</p>
   if (!shift) return null
 
-  if (shift.effective_status !== 'waiting_for_closure' && shift.effective_status !== 'reopened') {
+  if (
+    shift.shift_type !== 'closing' ||
+    (shift.effective_status !== 'waiting_for_closure' && shift.effective_status !== 'reopened')
+  ) {
     return <Navigate to={`/shifts/${id}`} replace />
   }
 
@@ -72,7 +76,7 @@ export function ShiftClosing() {
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
-      <h1 className="text-xl font-semibold">סגירת משמרת — {shift.shift_type}</h1>
+      <h1 className="text-xl font-semibold">סגירת משמרת — {shiftTypeLabel(shift.shift_type)}</h1>
 
       <Card>
         <CardHeader>
