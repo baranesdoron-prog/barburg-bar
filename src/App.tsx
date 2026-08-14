@@ -37,13 +37,13 @@ import { Procedures } from '@/pages/Procedures'
 import { ShiftManagerSchedule } from '@/pages/ShiftManagerSchedule'
 
 function RequireApproved() {
-  const { loading, session, appUser } = useAppUser()
+  const { loading, session, appUser, activeRole } = useAppUser()
 
   if (loading) return null
   if (!session) return <Navigate to="/login" replace />
   if (!appUser || appUser.status !== 'approved') return <PendingApproval />
   return (
-    <ImpersonationProvider realRole={appUser.role!}>
+    <ImpersonationProvider realRole={activeRole ?? appUser.role!}>
       <AppShell appUser={appUser} session={session} />
     </ImpersonationProvider>
   )

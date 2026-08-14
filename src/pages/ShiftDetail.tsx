@@ -27,7 +27,7 @@ const selectClass =
 
 export function ShiftDetail() {
   const { id } = useParams()
-  const { appUser } = useAppUserContext()
+  const { effectiveRole } = useAppUserContext()
   const [shift, setShift] = useState<Shift | null>(null)
   const [managerName, setManagerName] = useState<string | null>(null)
   const [assignments, setAssignments] = useState<ShiftAssignment[]>([])
@@ -183,8 +183,8 @@ export function ShiftDetail() {
   if (error) return <p className="text-destructive text-center text-sm">{error}</p>
   if (!shift) return null
 
-  const canManageShift = ROLES_MANAGING_SHIFTS.includes(appUser.role!)
-  const canManageStaffing = ROLES_VIEWING_SHIFTS.includes(appUser.role!)
+  const canManageShift = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
+  const canManageStaffing = ROLES_VIEWING_SHIFTS.includes(effectiveRole)
   const availableEmployees = employees.filter(
     (e) => !assignments.some((a) => a.employee_id === e.id),
   )

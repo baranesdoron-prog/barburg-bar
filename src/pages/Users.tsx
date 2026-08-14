@@ -8,8 +8,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { cn, formatDateTime } from '@/lib/utils'
-import type { AppRole, AppUserStatus, EmployeeInvite } from '@/lib/types'
+import { cn, formatDate, formatDateTime } from '@/lib/utils'
+import { toDateStr } from '@/lib/weeklyChecklist'
+import type { AppRole, AppUserStatus, EmployeeInvite, RoleDelegation } from '@/lib/types'
+
+const todayStr = toDateStr(new Date())
 
 const selectClass =
   'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
@@ -47,14 +50,16 @@ export function Users() {
   const [users, setUsers] = useState<AdminAppUserRow[] | null>(null)
   const [employees, setEmployees] = useState<Employee[]>([])
   const [invites, setInvites] = useState<EmployeeInvite[]>([])
+  const [delegations, setDelegations] = useState<RoleDelegation[]>([])
   const [showInviteForm, setShowInviteForm] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
 
   async function load() {
-    const [usersRes, employeesRes, invitesRes] = await Promise.all([
+    const [usersRes, employeesRes, invitesRes, delegationsRes] = await Promise.all([
       supabase.rpc('list_app_users_for_admin'),
       supabase.from('employees').select('id, full_name, photo_url').eq('active', true).order('full_name'),
       supabase.from('employee_invites').select('*').order('created_at', { ascending: false }),
+      supabase.from('role_delegations').select('*').order('starts_on', { ascending: false }),
     ])
 
     if (usersRes.error) {
@@ -65,6 +70,7 @@ export function Users() {
     setUsers(usersRes.data as AdminAppUserRow[])
     setEmployees((employeesRes.data as Employee[]) ?? [])
     setInvites((invitesRes.data as EmployeeInvite[]) ?? [])
+    setDelegations((delegationsRes.data as RoleDelegation[]) ?? [])
   }
 
   useEffect(() => {
@@ -145,6 +151,7 @@ export function Users() {
           key={user.id}
           user={user}
           employees={employees}
+          delegations={delegations.filter((d) => d.app_user_id === user.id)}
           onChanged={load}
           onEmployeeCreated={handleEmployeeCreated}
         />
@@ -332,19 +339,23 @@ function InviteForm({
 function UserRow({
   user,
   employees,
+  delegations,
   onChanged,
   onEmployeeCreated,
 }: {
   user: AdminAppUserRow
   employees: Employee[]
+  delegations: RoleDelegation[]
   onChanged: () => void
   onEmployeeCreated: (employee: Employee) => void
 }) {
   const [editing, setEditing] = useState(false)
+  const [showDelegation, setShowDelegation] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const assignment = useRoleEmployeeAssignment({ role: user.role, employeeId: user.employee_id })
   const employeePhotoUrl = employees.find((e) => e.id === user.employee_id)?.photo_url
+  const activeDelegation = delegations.find((d) => d.starts_on <= todayStr && todayStr <= d.ends_on)
 
   async function handleSave() {
     setError(null)
@@ -403,6 +414,31 @@ function UserRow({
     onChanged()
   }
 
+  async function handleAddDelegation(role: AppRole, startsOn: string, endsOn: string) {
+    setError(null)
+    const { error: insertError } = await supabase
+      .from('role_delegations')
+      .insert({ app_user_id: user.id, delegated_role: role, starts_on: startsOn, ends_on: endsOn })
+
+    if (insertError) {
+      setError(insertError.message)
+      return
+    }
+
+    onChanged()
+  }
+
+  async function handleDeleteDelegation(delegationId: string) {
+    const { error: deleteError } = await supabase.from('role_delegations').delete().eq('id', delegationId)
+
+    if (deleteError) {
+      setError(deleteError.message)
+      return
+    }
+
+    onChanged()
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -420,6 +456,11 @@ function UserRow({
               <span className="text-muted-foreground">תפקיד: </span>
               {user.role ? roleLabels[user.role] : '—'}
             </p>
+            {activeDelegation && (
+              <p className="text-amber-600 dark:text-amber-400">
+                פועל/ת כרגע כ־{roleLabels[activeDelegation.delegated_role]} עד {formatDate(activeDelegation.ends_on)}
+              </p>
+            )}
             {user.employee_name && (
               <div className="flex items-center gap-2">
                 {employeePhotoUrl && (
@@ -454,6 +495,11 @@ function UserRow({
                 עריכת תפקיד
               </Button>
               {user.status === 'approved' && (
+                <Button variant="outline" className="flex-1" onClick={() => setShowDelegation((v) => !v)}>
+                  הרשאה זמנית
+                </Button>
+              )}
+              {user.status === 'approved' && (
                 <Button variant="destructive" className="flex-1" onClick={handleSuspend}>
                   השהיה
                 </Button>
@@ -466,7 +512,84 @@ function UserRow({
             </>
           )}
         </div>
+
+        {showDelegation && (
+          <DelegationPanel
+            idPrefix={user.id}
+            delegations={delegations}
+            onAdd={handleAddDelegation}
+            onDelete={handleDeleteDelegation}
+          />
+        )}
       </CardContent>
     </Card>
+  )
+}
+
+function DelegationPanel({
+  idPrefix,
+  delegations,
+  onAdd,
+  onDelete,
+}: {
+  idPrefix: string
+  delegations: RoleDelegation[]
+  onAdd: (role: AppRole, startsOn: string, endsOn: string) => void
+  onDelete: (delegationId: string) => void
+}) {
+  const [role, setRole] = useState<AppRole | ''>('')
+  const [startsOn, setStartsOn] = useState(todayStr)
+  const [endsOn, setEndsOn] = useState('')
+
+  function handleSubmit() {
+    if (!role || !startsOn || !endsOn) return
+    onAdd(role, startsOn, endsOn)
+    setRole('')
+    setEndsOn('')
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-md border p-3">
+      {delegations.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {delegations.map((d) => (
+            <div key={d.id} className="flex items-center justify-between gap-2 text-sm">
+              <span>
+                {roleLabels[d.delegated_role]} · {formatDate(d.starts_on)} – {formatDate(d.ends_on)}
+              </span>
+              <Button variant="ghost" size="sm" onClick={() => onDelete(d.id)}>
+                ביטול
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor={`delegation-role-${idPrefix}`}>שיוך תפקיד זמני</Label>
+        <select
+          id={`delegation-role-${idPrefix}`}
+          className={selectClass}
+          value={role}
+          onChange={(e) => setRole(e.target.value as AppRole)}
+        >
+          <option value="" disabled>
+            בחר תפקיד
+          </option>
+          {(Object.keys(roleLabels) as AppRole[]).map((r) => (
+            <option key={r} value={r}>
+              {roleLabels[r]}
+            </option>
+          ))}
+        </select>
+        <div className="flex gap-2">
+          <Input type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} />
+          <Input type="date" value={endsOn} onChange={(e) => setEndsOn(e.target.value)} />
+        </div>
+        <Button size="sm" disabled={!role || !startsOn || !endsOn} onClick={handleSubmit}>
+          הוספה
+        </Button>
+      </div>
+    </div>
   )
 }

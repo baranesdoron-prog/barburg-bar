@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { Shift } from '@/lib/types'
 
 export function Shifts() {
-  const { appUser } = useAppUserContext()
+  const { effectiveRole } = useAppUserContext()
   const [shifts, setShifts] = useState<Shift[] | null>(null)
   const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({})
 
@@ -37,7 +37,7 @@ export function Shifts() {
     load()
   }, [])
 
-  const canManage = ROLES_MANAGING_SHIFTS.includes(appUser.role!)
+  const canManage = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">

@@ -18,7 +18,7 @@ const journalCategories = Object.keys(journalCategoryLabels) as JournalCategory[
 
 export function ShiftClosing() {
   const { id } = useParams()
-  const { appUser } = useAppUserContext()
+  const { appUser, effectiveRole } = useAppUserContext()
   const [shift, setShift] = useState<Shift | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reportId, setReportId] = useState<string | null>(null)
@@ -52,7 +52,7 @@ export function ShiftClosing() {
   }
 
   const canClose =
-    appUser.role === 'administrator' ||
+    effectiveRole === 'administrator' ||
     (appUser.employee_id !== null && appUser.employee_id === shift.shift_manager_id)
 
   if (!canClose) {

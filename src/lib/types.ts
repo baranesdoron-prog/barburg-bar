@@ -16,6 +16,16 @@ export interface AppUser {
   updated_at: string
 }
 
+export interface RoleDelegation {
+  id: string
+  app_user_id: string
+  delegated_role: AppRole
+  starts_on: string
+  ends_on: string
+  granted_by: string | null
+  created_at: string
+}
+
 export type EmployeeInviteStatus = 'pending' | 'claimed' | 'cancelled'
 
 export interface EmployeeInvite {

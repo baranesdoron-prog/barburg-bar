@@ -14,8 +14,8 @@ import { cn } from '@/lib/utils'
 
 const PREVIEWABLE_ROLES: AppRole[] = ['bartender', 'shift_manager']
 
-function SidebarContent({ appUser, onNavigate }: { appUser: AppUser; onNavigate?: () => void }) {
-  const { effectiveRole, isPreviewing, startPreview, stopPreview } = useImpersonation()
+function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+  const { realRole, effectiveRole, isPreviewing, startPreview, stopPreview } = useImpersonation()
   const navItems = getNavItems(effectiveRole)
 
   return (
@@ -24,7 +24,7 @@ function SidebarContent({ appUser, onNavigate }: { appUser: AppUser; onNavigate?
         <img src="/logo.png" alt="ברבורג" className="size-10 shrink-0 rounded-full object-cover" />
         <div>
           <p className="text-lg font-semibold">ברבורג</p>
-          <p className="text-muted-foreground text-sm">{roleLabels[appUser.role!]}</p>
+          <p className="text-muted-foreground text-sm">{roleLabels[effectiveRole]}</p>
         </div>
       </div>
 
@@ -77,7 +77,7 @@ function SidebarContent({ appUser, onNavigate }: { appUser: AppUser; onNavigate?
         )}
       </nav>
 
-      {appUser.role === 'administrator' && (
+      {realRole === 'administrator' && (
         <div className="flex flex-col gap-2 border-t pt-3">
           <label className="text-muted-foreground text-xs">תצוגה מקדימה כתפקיד</label>
           <select
@@ -132,7 +132,7 @@ export function AppShell({ appUser, session }: { appUser: AppUser; session: Sess
   return (
     <div className="flex min-h-svh">
       <aside className="hidden w-64 shrink-0 border-e p-4 md:flex print:hidden">
-        <SidebarContent appUser={appUser} />
+        <SidebarContent />
       </aside>
 
       {drawerOpen && (
@@ -150,7 +150,7 @@ export function AppShell({ appUser, session }: { appUser: AppUser; session: Sess
             >
               <X className="size-5" />
             </Button>
-            <SidebarContent appUser={appUser} onNavigate={() => setDrawerOpen(false)} />
+            <SidebarContent onNavigate={() => setDrawerOpen(false)} />
           </aside>
         </div>
       )}

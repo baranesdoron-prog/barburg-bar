@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 
 import { supabase } from '@/lib/supabase'
-import type { AppUser } from '@/lib/types'
+import type { AppRole, AppUser } from '@/lib/types'
 
 interface AppUserState {
   loading: boolean
   session: Session | null
   appUser: AppUser | null
+  activeRole: AppRole | null
 }
 
 /**
@@ -20,6 +21,7 @@ export function useAppUser(): AppUserState {
     loading: true,
     session: null,
     appUser: null,
+    activeRole: null,
   })
 
   useEffect(() => {
@@ -27,24 +29,23 @@ export function useAppUser(): AppUserState {
 
     async function loadAppUser(session: Session | null) {
       if (!session) {
-        if (isMounted) setState({ loading: false, session: null, appUser: null })
+        if (isMounted) setState({ loading: false, session: null, appUser: null, activeRole: null })
         return
       }
 
-      const { data, error } = await supabase
-        .from('app_users')
-        .select('*')
-        .eq('id', session.user.id)
-        .single()
+      const [{ data, error }, { data: activeRole }] = await Promise.all([
+        supabase.from('app_users').select('*').eq('id', session.user.id).single(),
+        supabase.rpc('current_app_role'),
+      ])
 
       if (!isMounted) return
 
       if (error) {
-        setState({ loading: false, session, appUser: null })
+        setState({ loading: false, session, appUser: null, activeRole: null })
         return
       }
 
-      setState({ loading: false, session, appUser: data })
+      setState({ loading: false, session, appUser: data, activeRole: (activeRole as AppRole | null) ?? null })
     }
 
     supabase.auth.getSession().then(({ data }) => loadAppUser(data.session))

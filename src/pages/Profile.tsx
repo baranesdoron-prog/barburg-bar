@@ -12,7 +12,7 @@ interface Employee {
 }
 
 export function Profile() {
-  const { appUser, session } = useAppUserContext()
+  const { appUser, session, effectiveRole } = useAppUserContext()
   const [employee, setEmployee] = useState<Employee | null>(null)
 
   useEffect(() => {
@@ -37,7 +37,7 @@ export function Profile() {
           />
         )}
         <CardTitle>{employee ? employee.full_name : 'הפרופיל שלי'}</CardTitle>
-        <CardDescription>{roleLabels[appUser.role!]}</CardDescription>
+        <CardDescription>{roleLabels[effectiveRole]}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-1 text-sm">
         <p>
