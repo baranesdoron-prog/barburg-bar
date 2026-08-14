@@ -26,10 +26,13 @@ export interface NavItem {
 }
 
 export function getNavItems(role: AppRole): NavItem[] {
-  const items: NavItem[] = [
-    { to: '/', label: 'לוח בקרה', icon: LayoutDashboard },
-    { to: '/procedures', label: 'נהלים', icon: BookOpen },
-  ]
+  const items: NavItem[] = []
+
+  if (role !== 'bartender') {
+    items.push({ to: '/', label: 'לוח בקרה', icon: LayoutDashboard })
+  }
+
+  items.push({ to: '/procedures', label: 'נהלים', icon: BookOpen })
 
   if (ROLES_VIEWING_SHIFTS.includes(role)) {
     items.push({ to: '/shifts', label: 'משמרות', icon: CalendarClock })
