@@ -36,7 +36,18 @@ export function getNavItems(role: AppRole): NavItem[] {
   items.push({ to: '/procedures', label: 'נהלים', icon: BookOpen })
 
   if (ROLES_VIEWING_SHIFTS.includes(role)) {
-    items.push({ to: '/shifts', label: 'משמרות', icon: CalendarClock })
+    if (role === 'administrator') {
+      items.push({
+        label: 'משמרות',
+        icon: CalendarClock,
+        children: [
+          { to: '/shifts', label: 'רשימת משמרות', icon: CalendarClock },
+          { to: '/admin/shift-manager-schedule', label: 'שיבוץ אחראי משמרת', icon: CalendarRange },
+        ],
+      })
+    } else {
+      items.push({ to: '/shifts', label: 'משמרות', icon: CalendarClock })
+    }
     items.push({ to: '/reports', label: 'דוחות', icon: FileText })
     items.push({ to: '/weekly-checklist', label: 'רשימת משימות שבועית', icon: CheckSquare })
   }
@@ -62,14 +73,7 @@ export function getNavItems(role: AppRole): NavItem[] {
 
   if (role === 'administrator') {
     items.push({ to: '/admin/approvals', label: 'בקשות הצטרפות', icon: UserCheck })
-    items.push({
-      label: 'ניהול משתמשים',
-      icon: Users,
-      children: [
-        { to: '/admin/users', label: 'משתמשים', icon: Users },
-        { to: '/admin/shift-manager-schedule', label: 'שיבוץ אחראי משמרת', icon: CalendarRange },
-      ],
-    })
+    items.push({ to: '/admin/users', label: 'משתמשים', icon: Users })
   }
 
   return items
