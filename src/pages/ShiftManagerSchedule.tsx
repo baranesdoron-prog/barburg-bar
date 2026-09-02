@@ -2,7 +2,14 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
-import { toDateStr, parseDateStr } from '@/lib/weeklyChecklist'
+import {
+  toDateStr,
+  parseDateStr,
+  sundaysInYear,
+  EARLIEST_WEEK_START,
+  weekLabelFormatter,
+  YEAR_OPTIONS,
+} from '@/lib/weeklyChecklist'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,30 +18,12 @@ import type { ShiftManagerAssignment } from '@/lib/types'
 const selectClass =
   'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
 
-const weekLabelFormatter = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'long' })
-
-// The bar didn't operate before this week, so there's nothing to schedule
-// earlier than it regardless of which year is selected.
-const EARLIEST_WEEK_START = '2026-07-19'
-
 interface ShiftManagerEmployee {
   id: string
   full_name: string
 }
 
-function sundaysInYear(year: number): Date[] {
-  const result: Date[] = []
-  const d = new Date(year, 0, 1)
-  while (d.getDay() !== 0) d.setDate(d.getDate() + 1)
-  while (d.getFullYear() === year) {
-    result.push(new Date(d))
-    d.setDate(d.getDate() + 7)
-  }
-  return result
-}
-
 const currentYear = new Date().getFullYear()
-const YEAR_OPTIONS = [currentYear - 1, currentYear, currentYear + 1, currentYear + 2]
 
 function WeekRow({
   week,
