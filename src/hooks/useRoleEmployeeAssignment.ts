@@ -7,6 +7,7 @@ import type { AppRole } from '@/lib/types'
 export interface Employee {
   id: string
   full_name: string
+  phone: string | null
   photo_url: string | null
 }
 
@@ -18,13 +19,22 @@ export function useRoleEmployeeAssignment(initial?: {
   employeeMode?: 'link' | 'create'
 }) {
   const [role, setRole] = useState<AppRole | ''>(initial?.role ?? '')
-  const [employeeMode, setEmployeeMode] = useState<'link' | 'create'>(initial?.employeeMode ?? 'link')
+  const [employeeMode, setEmployeeModeRaw] = useState<'link' | 'create'>(initial?.employeeMode ?? 'link')
   const [employeeId, setEmployeeId] = useState(initial?.employeeId ?? '')
   const [newName, setNewName] = useState('')
   const [newPhone, setNewPhone] = useState('')
   const [newPhotoUrl, setNewPhotoUrl] = useState<string | null>(null)
 
   const needsEmployee = role !== '' && ROLES_REQUIRING_EMPLOYEE.includes(role)
+
+  function setEmployeeMode(mode: 'link' | 'create') {
+    setEmployeeModeRaw(mode)
+    if (mode === 'create') {
+      setNewName('')
+      setNewPhone('')
+      setNewPhotoUrl(null)
+    }
+  }
 
   async function resolve(onEmployeeCreated?: (employee: Employee) => void): Promise<ResolveResult> {
     if (!role) {
@@ -39,6 +49,20 @@ export function useRoleEmployeeAssignment(initial?: {
       if (!employeeId) {
         return { error: 'יש לבחור עובד/ת קיים/ת' }
       }
+
+      if (!newName.trim()) {
+        return { error: 'יש להזין שם מלא' }
+      }
+
+      const { error } = await supabase
+        .from('employees')
+        .update({ full_name: newName.trim(), phone: newPhone.trim() || null, photo_url: newPhotoUrl })
+        .eq('id', employeeId)
+
+      if (error) {
+        return { error: error.message }
+      }
+
       return { employeeId }
     }
 
@@ -49,7 +73,7 @@ export function useRoleEmployeeAssignment(initial?: {
     const { data: employee, error } = await supabase
       .from('employees')
       .insert({ full_name: newName.trim(), phone: newPhone.trim() || null, photo_url: newPhotoUrl })
-      .select('id, full_name, photo_url')
+      .select('id, full_name, phone, photo_url')
       .single()
 
     if (error) {

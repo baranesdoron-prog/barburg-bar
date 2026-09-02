@@ -23,7 +23,7 @@ export function AdminApprovals() {
         supabase.rpc('list_pending_app_users'),
         supabase
           .from('employees')
-          .select('id, full_name')
+          .select('id, full_name, phone, photo_url')
           .eq('active', true)
           .order('full_name'),
       ])

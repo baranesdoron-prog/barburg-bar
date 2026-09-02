@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import { supabase } from '@/lib/supabase'
 import { roleLabels } from '@/lib/roleLabels'
@@ -36,6 +36,16 @@ export function RoleEmployeeFields({
   } = assignment
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (employeeMode !== 'link' || !employeeId) return
+    const emp = employees.find((e) => e.id === employeeId)
+    if (emp) {
+      setNewName(emp.full_name)
+      setNewPhone(emp.phone ?? '')
+      setNewPhotoUrl(emp.photo_url)
+    }
+  }, [employeeMode, employeeId, employees, setNewName, setNewPhone, setNewPhotoUrl])
 
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -100,7 +110,7 @@ export function RoleEmployeeFields({
             </label>
           </div>
 
-          {employeeMode === 'link' ? (
+          {employeeMode === 'link' && (
             <select
               className={selectClass}
               value={employeeId}
@@ -115,7 +125,9 @@ export function RoleEmployeeFields({
                 </option>
               ))}
             </select>
-          ) : (
+          )}
+
+          {(employeeMode === 'create' || (employeeMode === 'link' && employeeId)) && (
             <div className="flex flex-col gap-2">
               <Input
                 placeholder="שם מלא"
