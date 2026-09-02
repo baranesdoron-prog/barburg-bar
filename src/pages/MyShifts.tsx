@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
 import { effectiveStatusLabels, effectiveStatusBadgeClass, shiftTypeLabel } from '@/lib/shiftLabels'
+import { activeWeekStart, toDateStr } from '@/lib/weeklyChecklist'
 import { cn, formatDateTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,57 +18,85 @@ interface Employee {
   full_name: string
 }
 
-interface AssignedShift {
-  assignment: ShiftAssignment
+interface AssignedStaffer {
+  assignmentId: string
+  employeeId: string
+  name: string
+}
+
+interface UpcomingShift {
   shift: Shift
+  assignedStaff: AssignedStaffer[]
+  ownAssignment: ShiftAssignment | null
   pendingRequest: ReplacementRequest | null
 }
 
 export function MyShifts() {
   const { appUser } = useAppUserContext()
-  const [items, setItems] = useState<AssignedShift[] | null>(null)
+  const [items, setItems] = useState<UpcomingShift[] | null>(null)
   const [employees, setEmployees] = useState<Employee[]>([])
+  const currentWeekStart = toDateStr(activeWeekStart())
 
   async function load() {
-    const { data: assignments } = await supabase
-      .from('shift_assignments')
+    const { data: shiftsData } = await supabase
+      .from('shifts_with_effective_status')
       .select('*')
-      .eq('employee_id', appUser.employee_id)
+      .eq('status', 'published')
+      .gte('week_start', currentWeekStart)
+      .order('start_time')
 
-    const loadedAssignments = (assignments as ShiftAssignment[]) ?? []
+    const shifts = (shiftsData as Shift[]) ?? []
 
-    if (loadedAssignments.length === 0) {
+    if (shifts.length === 0) {
       setItems([])
+      setEmployees([])
       return
     }
 
-    const shiftIds = loadedAssignments.map((a) => a.shift_id)
-    const assignmentIds = loadedAssignments.map((a) => a.id)
+    const shiftIds = shifts.map((s) => s.id)
 
-    const [shiftsRes, requestsRes, employeesRes] = await Promise.all([
-      supabase.from('shifts_with_effective_status').select('*').in('id', shiftIds),
-      supabase
-        .from('replacement_requests')
-        .select('*')
-        .in('shift_assignment_id', assignmentIds)
-        .eq('status', 'pending'),
+    const [assignmentsRes, employeesRes] = await Promise.all([
+      supabase.from('shift_assignments').select('*').in('shift_id', shiftIds),
       supabase.from('employees').select('id, full_name').eq('active', true).order('full_name'),
     ])
 
-    const shiftsById = new Map((shiftsRes.data as Shift[]).map((s) => [s.id, s]))
-    const requestsByAssignment = new Map(
-      (requestsRes.data as ReplacementRequest[]).map((r) => [r.shift_assignment_id, r]),
-    )
-    setEmployees((employeesRes.data as Employee[]) ?? [])
+    const assignments = (assignmentsRes.data as ShiftAssignment[]) ?? []
+    const activeEmployees = (employeesRes.data as Employee[]) ?? []
+    setEmployees(activeEmployees)
+    const employeeNames = new Map(activeEmployees.map((e) => [e.id, e.full_name]))
 
-    const merged = loadedAssignments
-      .map((assignment) => ({
-        assignment,
-        shift: shiftsById.get(assignment.shift_id)!,
-        pendingRequest: requestsByAssignment.get(assignment.id) ?? null,
-      }))
-      .filter((item) => item.shift)
-      .sort((a, b) => a.shift.start_time.localeCompare(b.shift.start_time))
+    const ownAssignmentIds = assignments
+      .filter((a) => a.employee_id === appUser.employee_id)
+      .map((a) => a.id)
+
+    const { data: requestsData } =
+      ownAssignmentIds.length > 0
+        ? await supabase
+            .from('replacement_requests')
+            .select('*')
+            .in('shift_assignment_id', ownAssignmentIds)
+            .eq('status', 'pending')
+        : { data: [] }
+
+    const requestsByAssignment = new Map(
+      ((requestsData as ReplacementRequest[]) ?? []).map((r) => [r.shift_assignment_id, r]),
+    )
+
+    const merged = shifts.map((shift) => {
+      const shiftAssignments = assignments.filter((a) => a.shift_id === shift.id)
+      const ownAssignment = shiftAssignments.find((a) => a.employee_id === appUser.employee_id) ?? null
+
+      return {
+        shift,
+        assignedStaff: shiftAssignments.map((a) => ({
+          assignmentId: a.id,
+          employeeId: a.employee_id,
+          name: employeeNames.get(a.employee_id) ?? '—',
+        })),
+        ownAssignment,
+        pendingRequest: ownAssignment ? (requestsByAssignment.get(ownAssignment.id) ?? null) : null,
+      }
+    })
 
     setItems(merged)
   }
@@ -80,14 +109,21 @@ export function MyShifts() {
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
-      <h1 className="text-xl font-semibold">המשמרות שלי</h1>
+      <h1 className="text-xl font-semibold">משמרות קרובות</h1>
 
       {items.length === 0 && (
-        <p className="text-muted-foreground text-sm">אין לך משמרות משובצות כרגע.</p>
+        <p className="text-muted-foreground text-sm">אין משמרות פתוחות כרגע.</p>
       )}
 
       {items.map((item) => (
-        <ShiftRow key={item.assignment.id} item={item} employees={employees} onChanged={load} />
+        <ShiftRow
+          key={item.shift.id}
+          item={item}
+          employees={employees}
+          currentWeekStart={currentWeekStart}
+          employeeId={appUser.employee_id!}
+          onChanged={load}
+        />
       ))}
     </div>
   )
@@ -96,27 +132,70 @@ export function MyShifts() {
 function ShiftRow({
   item,
   employees,
+  currentWeekStart,
+  employeeId,
   onChanged,
 }: {
-  item: AssignedShift
+  item: UpcomingShift
   employees: Employee[]
+  currentWeekStart: string
+  employeeId: string
   onChanged: () => void
 }) {
-  const { shift, assignment, pendingRequest } = item
+  const { shift, assignedStaff, ownAssignment, pendingRequest } = item
   const [showForm, setShowForm] = useState(false)
   const [reason, setReason] = useState('')
   const [substituteId, setSubstituteId] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const isFutureWeek = shift.week_start > currentWeekStart
+  const isFull = shift.required_staff_count !== null && assignedStaff.length >= shift.required_staff_count
   const canRequestReplacement = shift.effective_status === 'published' && !pendingRequest
 
-  async function handleSubmit() {
+  async function handleJoin() {
+    setSubmitting(true)
+    setError(null)
+
+    const { error: joinError } = await supabase
+      .from('shift_assignments')
+      .insert({ shift_id: shift.id, employee_id: employeeId })
+
+    setSubmitting(false)
+
+    if (joinError) {
+      setError('לא ניתן להצטרף למשמרת זו כרגע')
+      return
+    }
+
+    onChanged()
+  }
+
+  async function handleLeave() {
+    if (!ownAssignment) return
+    if (!confirm('לעזוב את המשמרת?')) return
+
+    const { error: leaveError } = await supabase
+      .from('shift_assignments')
+      .delete()
+      .eq('id', ownAssignment.id)
+
+    if (leaveError) {
+      setError('לא ניתן לעזוב את המשמרת')
+      return
+    }
+
+    onChanged()
+  }
+
+  async function handleSubmitReplacement() {
+    if (!ownAssignment) return
+
     setSubmitting(true)
     setError(null)
 
     const { error: requestError } = await supabase.rpc('request_replacement', {
-      p_shift_assignment_id: assignment.id,
+      p_shift_assignment_id: ownAssignment.id,
       p_reason: reason.trim() || null,
       p_substitute_employee_id: substituteId || null,
     })
@@ -153,53 +232,74 @@ function ShiftRow({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {(shift.effective_status === 'active' || shift.effective_status === 'waiting_for_closure') && (
-          <SelfCheckIn shiftAssignmentId={assignment.id} />
-        )}
+        <p className="text-sm">
+          <span className="text-muted-foreground">משובצים: </span>
+          {assignedStaff.length > 0 ? assignedStaff.map((s) => s.name).join(', ') : 'אין עדיין משובצים'}
+        </p>
 
-        {pendingRequest && (
-          <p className="text-muted-foreground text-sm">בקשת החלפה נשלחה, ממתינה לאישור.</p>
-        )}
+        {(shift.effective_status === 'active' || shift.effective_status === 'waiting_for_closure') &&
+          ownAssignment && <SelfCheckIn shiftAssignmentId={ownAssignment.id} />}
 
-        {canRequestReplacement && !showForm && (
-          <Button variant="outline" onClick={() => setShowForm(true)}>
-            בקש/י החלפה
+        {!ownAssignment && (
+          <Button disabled={isFull || submitting} onClick={handleJoin}>
+            {isFull ? 'המשמרת מלאה' : 'הצטרפות למשמרת'}
           </Button>
         )}
 
-        {canRequestReplacement && showForm && (
-          <div className="flex flex-col gap-2">
-            <textarea
-              className={selectClass + ' min-h-16'}
-              placeholder="סיבה (לא חובה)"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-            />
-            <select
-              className={selectClass}
-              value={substituteId}
-              onChange={(e) => setSubstituteId(e.target.value)}
-            >
-              <option value="">הצעת מחליף/ה (לא חובה)</option>
-              {employees
-                .filter((e) => e.id !== assignment.employee_id)
-                .map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.full_name}
-                  </option>
-                ))}
-            </select>
-            {error && <p className="text-destructive text-sm">{error}</p>}
-            <div className="flex gap-2">
-              <Button className="flex-1" disabled={submitting} onClick={handleSubmit}>
-                שליחת בקשה
-              </Button>
-              <Button variant="ghost" className="flex-1" onClick={() => setShowForm(false)}>
-                ביטול
-              </Button>
-            </div>
-          </div>
+        {ownAssignment && isFutureWeek && (
+          <Button variant="outline" onClick={handleLeave}>
+            עזיבת משמרת
+          </Button>
         )}
+
+        {ownAssignment && !isFutureWeek && (
+          <>
+            {pendingRequest && (
+              <p className="text-muted-foreground text-sm">בקשת החלפה נשלחה, ממתינה לאישור.</p>
+            )}
+
+            {canRequestReplacement && !showForm && (
+              <Button variant="outline" onClick={() => setShowForm(true)}>
+                בקש/י החלפה
+              </Button>
+            )}
+
+            {canRequestReplacement && showForm && (
+              <div className="flex flex-col gap-2">
+                <textarea
+                  className={selectClass + ' min-h-16'}
+                  placeholder="סיבה (לא חובה)"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
+                <select
+                  className={selectClass}
+                  value={substituteId}
+                  onChange={(e) => setSubstituteId(e.target.value)}
+                >
+                  <option value="">הצעת מחליף/ה (לא חובה)</option>
+                  {employees
+                    .filter((e) => e.id !== ownAssignment.employee_id)
+                    .map((e) => (
+                      <option key={e.id} value={e.id}>
+                        {e.full_name}
+                      </option>
+                    ))}
+                </select>
+                <div className="flex gap-2">
+                  <Button className="flex-1" disabled={submitting} onClick={handleSubmitReplacement}>
+                    שליחת בקשה
+                  </Button>
+                  <Button variant="ghost" className="flex-1" onClick={() => setShowForm(false)}>
+                    ביטול
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {error && <p className="text-destructive text-sm">{error}</p>}
       </CardContent>
     </Card>
   )
