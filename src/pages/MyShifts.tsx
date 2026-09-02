@@ -3,12 +3,12 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
 import { effectiveStatusLabels, effectiveStatusBadgeClass, shiftTypeLabel } from '@/lib/shiftLabels'
-import { activeWeekStart, toDateStr } from '@/lib/weeklyChecklist'
+import { activeWeekStart, toDateStr, weekLabelFormatter, parseDateStr } from '@/lib/weeklyChecklist'
 import { cn, formatDateTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { SelfCheckIn } from '@/components/SelfCheckIn'
-import type { ReplacementRequest, Shift, ShiftAssignment } from '@/lib/types'
+import type { ReplacementRequest, Shift, ShiftAssignment, ShiftType } from '@/lib/types'
 
 const selectClass =
   'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
@@ -31,9 +31,14 @@ interface UpcomingShift {
   pendingRequest: ReplacementRequest | null
 }
 
+interface WeekShifts {
+  opening?: UpcomingShift
+  closing?: UpcomingShift
+}
+
 export function MyShifts() {
   const { appUser } = useAppUserContext()
-  const [items, setItems] = useState<UpcomingShift[] | null>(null)
+  const [shiftsByWeek, setShiftsByWeek] = useState<Map<string, WeekShifts> | null>(null)
   const [employees, setEmployees] = useState<Employee[]>([])
   const currentWeekStart = toDateStr(activeWeekStart())
 
@@ -48,7 +53,7 @@ export function MyShifts() {
     const shifts = (shiftsData as Shift[]) ?? []
 
     if (shifts.length === 0) {
-      setItems([])
+      setShiftsByWeek(new Map())
       setEmployees([])
       return
     }
@@ -82,11 +87,12 @@ export function MyShifts() {
       ((requestsData as ReplacementRequest[]) ?? []).map((r) => [r.shift_assignment_id, r]),
     )
 
-    const merged = shifts.map((shift) => {
+    const grouped = new Map<string, WeekShifts>()
+    for (const shift of shifts) {
       const shiftAssignments = assignments.filter((a) => a.shift_id === shift.id)
       const ownAssignment = shiftAssignments.find((a) => a.employee_id === appUser.employee_id) ?? null
 
-      return {
+      const item: UpcomingShift = {
         shift,
         assignedStaff: shiftAssignments.map((a) => ({
           assignmentId: a.id,
@@ -96,29 +102,36 @@ export function MyShifts() {
         ownAssignment,
         pendingRequest: ownAssignment ? (requestsByAssignment.get(ownAssignment.id) ?? null) : null,
       }
-    })
 
-    setItems(merged)
+      const entry = grouped.get(shift.week_start) ?? {}
+      entry[shift.shift_type as ShiftType] = item
+      grouped.set(shift.week_start, entry)
+    }
+
+    setShiftsByWeek(grouped)
   }
 
   useEffect(() => {
     load()
   }, [])
 
-  if (items === null) return null
+  if (shiftsByWeek === null) return null
+
+  const weeks = [...shiftsByWeek.keys()].sort()
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
       <h1 className="text-xl font-semibold">משמרות קרובות</h1>
 
-      {items.length === 0 && (
+      {weeks.length === 0 && (
         <p className="text-muted-foreground text-sm">אין משמרות פתוחות כרגע.</p>
       )}
 
-      {items.map((item) => (
-        <ShiftRow
-          key={item.shift.id}
-          item={item}
+      {weeks.map((week) => (
+        <WeekCard
+          key={week}
+          week={week}
+          weekShifts={shiftsByWeek.get(week)!}
           employees={employees}
           currentWeekStart={currentWeekStart}
           employeeId={appUser.employee_id!}
@@ -129,7 +142,58 @@ export function MyShifts() {
   )
 }
 
-function ShiftRow({
+function WeekCard({
+  week,
+  weekShifts,
+  employees,
+  currentWeekStart,
+  employeeId,
+  onChanged,
+}: {
+  week: string
+  weekShifts: WeekShifts
+  employees: Employee[]
+  currentWeekStart: string
+  employeeId: string
+  onChanged: () => void
+}) {
+  const managerId = weekShifts.opening?.shift.shift_manager_id ?? weekShifts.closing?.shift.shift_manager_id
+  const managerName = managerId ? (employees.find((e) => e.id === managerId)?.full_name ?? '—') : '—'
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base">שבוע {weekLabelFormatter.format(parseDateStr(week))}</CardTitle>
+          <span className="text-muted-foreground text-xs">אחראי/ת משמרת: {managerName}</span>
+        </div>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {weekShifts.opening && (
+          <ShiftSlot
+            item={weekShifts.opening}
+            employees={employees}
+            currentWeekStart={currentWeekStart}
+            employeeId={employeeId}
+            onChanged={onChanged}
+          />
+        )}
+        {weekShifts.opening && weekShifts.closing && <div className="border-t" />}
+        {weekShifts.closing && (
+          <ShiftSlot
+            item={weekShifts.closing}
+            employees={employees}
+            currentWeekStart={currentWeekStart}
+            employeeId={employeeId}
+            onChanged={onChanged}
+          />
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function ShiftSlot({
   item,
   employees,
   currentWeekStart,
@@ -214,93 +278,90 @@ function ShiftRow({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base">{shiftTypeLabel(shift.shift_type)}</CardTitle>
-          <span
-            className={cn(
-              'rounded-full px-2 py-1 text-xs font-medium',
-              effectiveStatusBadgeClass[shift.effective_status],
-            )}
-          >
-            {effectiveStatusLabels[shift.effective_status]}
-          </span>
-        </div>
-        <CardDescription>
-          {formatDateTime(shift.start_time)} – {formatDateTime(shift.end_time)}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-3">
-        <p className="text-sm">
-          <span className="text-muted-foreground">משובצים: </span>
-          {assignedStaff.length > 0 ? assignedStaff.map((s) => s.name).join(', ') : 'אין עדיין משובצים'}
-        </p>
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <span className="font-medium">{shiftTypeLabel(shift.shift_type)}</span>
+        <span
+          className={cn(
+            'rounded-full px-2 py-1 text-xs font-medium',
+            effectiveStatusBadgeClass[shift.effective_status],
+          )}
+        >
+          {effectiveStatusLabels[shift.effective_status]}
+        </span>
+      </div>
+      <p className="text-muted-foreground text-sm">
+        {formatDateTime(shift.start_time)} – {formatDateTime(shift.end_time)}
+      </p>
 
-        {(shift.effective_status === 'active' || shift.effective_status === 'waiting_for_closure') &&
-          ownAssignment && <SelfCheckIn shiftAssignmentId={ownAssignment.id} />}
+      <p className="text-sm">
+        <span className="text-muted-foreground">משובצים: </span>
+        {assignedStaff.length > 0 ? assignedStaff.map((s) => s.name).join(', ') : 'אין עדיין משובצים'}
+      </p>
 
-        {!ownAssignment && (
-          <Button disabled={isFull || submitting} onClick={handleJoin}>
-            {isFull ? 'המשמרת מלאה' : 'הצטרפות למשמרת'}
-          </Button>
-        )}
+      {(shift.effective_status === 'active' || shift.effective_status === 'waiting_for_closure') &&
+        ownAssignment && <SelfCheckIn shiftAssignmentId={ownAssignment.id} />}
 
-        {ownAssignment && isFutureWeek && (
-          <Button variant="outline" onClick={handleLeave}>
-            עזיבת משמרת
-          </Button>
-        )}
+      {!ownAssignment && (
+        <Button disabled={isFull || submitting} onClick={handleJoin}>
+          {isFull ? 'המשמרת מלאה' : 'הצטרפות למשמרת'}
+        </Button>
+      )}
 
-        {ownAssignment && !isFutureWeek && (
-          <>
-            {pendingRequest && (
-              <p className="text-muted-foreground text-sm">בקשת החלפה נשלחה, ממתינה לאישור.</p>
-            )}
+      {ownAssignment && isFutureWeek && (
+        <Button variant="outline" onClick={handleLeave}>
+          עזיבת משמרת
+        </Button>
+      )}
 
-            {canRequestReplacement && !showForm && (
-              <Button variant="outline" onClick={() => setShowForm(true)}>
-                בקש/י החלפה
-              </Button>
-            )}
+      {ownAssignment && !isFutureWeek && (
+        <>
+          {pendingRequest && (
+            <p className="text-muted-foreground text-sm">בקשת החלפה נשלחה, ממתינה לאישור.</p>
+          )}
 
-            {canRequestReplacement && showForm && (
-              <div className="flex flex-col gap-2">
-                <textarea
-                  className={selectClass + ' min-h-16'}
-                  placeholder="סיבה (לא חובה)"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                />
-                <select
-                  className={selectClass}
-                  value={substituteId}
-                  onChange={(e) => setSubstituteId(e.target.value)}
-                >
-                  <option value="">הצעת מחליף/ה (לא חובה)</option>
-                  {employees
-                    .filter((e) => e.id !== ownAssignment.employee_id)
-                    .map((e) => (
-                      <option key={e.id} value={e.id}>
-                        {e.full_name}
-                      </option>
-                    ))}
-                </select>
-                <div className="flex gap-2">
-                  <Button className="flex-1" disabled={submitting} onClick={handleSubmitReplacement}>
-                    שליחת בקשה
-                  </Button>
-                  <Button variant="ghost" className="flex-1" onClick={() => setShowForm(false)}>
-                    ביטול
-                  </Button>
-                </div>
+          {canRequestReplacement && !showForm && (
+            <Button variant="outline" onClick={() => setShowForm(true)}>
+              בקש/י החלפה
+            </Button>
+          )}
+
+          {canRequestReplacement && showForm && (
+            <div className="flex flex-col gap-2">
+              <textarea
+                className={selectClass + ' min-h-16'}
+                placeholder="סיבה (לא חובה)"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+              <select
+                className={selectClass}
+                value={substituteId}
+                onChange={(e) => setSubstituteId(e.target.value)}
+              >
+                <option value="">הצעת מחליף/ה (לא חובה)</option>
+                {employees
+                  .filter((e) => e.id !== ownAssignment.employee_id)
+                  .map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.full_name}
+                    </option>
+                  ))}
+              </select>
+              <div className="flex gap-2">
+                <Button className="flex-1" disabled={submitting} onClick={handleSubmitReplacement}>
+                  שליחת בקשה
+                </Button>
+                <Button variant="ghost" className="flex-1" onClick={() => setShowForm(false)}>
+                  ביטול
+                </Button>
               </div>
-            )}
-          </>
-        )}
+            </div>
+          )}
+        </>
+      )}
 
-        {error && <p className="text-destructive text-sm">{error}</p>}
-      </CardContent>
-    </Card>
+      {error && <p className="text-destructive text-sm">{error}</p>}
+    </div>
   )
 }
