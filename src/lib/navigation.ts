@@ -12,6 +12,7 @@ import {
   User,
   UserCheck,
   Users,
+  CalendarRange,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -61,7 +62,14 @@ export function getNavItems(role: AppRole): NavItem[] {
 
   if (role === 'administrator') {
     items.push({ to: '/admin/approvals', label: 'בקשות הצטרפות', icon: UserCheck })
-    items.push({ to: '/admin/users', label: 'משתמשים', icon: Users })
+    items.push({
+      label: 'ניהול משתמשים',
+      icon: Users,
+      children: [
+        { to: '/admin/users', label: 'משתמשים', icon: Users },
+        { to: '/admin/shift-manager-schedule', label: 'שיבוץ אחראי משמרת', icon: CalendarRange },
+      ],
+    })
   }
 
   return items
