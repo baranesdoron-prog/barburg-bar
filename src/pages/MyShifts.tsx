@@ -119,6 +119,18 @@ export function MyShifts() {
 
   const weeks = [...shiftsByWeek.keys()].sort()
 
+  if (!appUser.employee_id) {
+    return (
+      <div className="mx-auto flex max-w-md flex-col gap-4">
+        <h1 className="text-xl font-semibold">משמרות קרובות</h1>
+        <p className="text-muted-foreground text-sm">
+          תצוגה זו זמינה רק למשתמש/ת המשויכ/ת לעובד/ת. אם זו תצוגה מקדימה של תפקיד ברמן/ית, פעולות כמו הצטרפות למשמרת
+          אינן זמינות בתצוגה מקדימה.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
       <h1 className="text-xl font-semibold">משמרות קרובות</h1>
