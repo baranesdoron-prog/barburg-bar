@@ -128,7 +128,7 @@ export function ShiftManagerSchedule() {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">שיבוץ אחראי משמרת לפי שנה</h1>
+        <h1 className="text-xl font-semibold">שיבוץ מנהל בר לפי שנה</h1>
         <select className={cn(selectClass, 'w-28')} value={year} onChange={(e) => setYear(Number(e.target.value))}>
           {YEAR_OPTIONS.map((y) => (
             <option key={y} value={y}>

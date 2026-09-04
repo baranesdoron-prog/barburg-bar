@@ -6,9 +6,9 @@ import { useAppUser } from '@/hooks/useAppUser'
 import { useAppUserContext, type AppOutletContext } from '@/lib/outletContext'
 import { ImpersonationProvider, useImpersonation } from '@/lib/impersonation'
 import type { AppRole } from '@/lib/types'
-import { ROLES_MANAGING_SHIFTS, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
+import { ROLES_MANAGING_SHIFTS, ROLES_REQUIRING_EMPLOYEE, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
 import { AppShell } from '@/components/AppShell'
-import { SignUp } from '@/pages/SignUp'
+import { SignUp } from '@/pages/Signup'
 import { Login } from '@/pages/Login'
 import { ForgotPassword } from '@/pages/ForgotPassword'
 import { ResetPassword } from '@/pages/ResetPassword'
@@ -80,7 +80,7 @@ export function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/procedures" element={<Procedures />} />
-        <Route element={<RequireRole roles={['bartender', 'shift_manager']} />}>
+        <Route element={<RequireRole roles={ROLES_REQUIRING_EMPLOYEE} />}>
           <Route path="/my-shifts" element={<MyShifts />} />
         </Route>
         <Route element={<RequireRole roles={ROLES_VIEWING_SHIFTS} />}>

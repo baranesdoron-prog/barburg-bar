@@ -122,7 +122,7 @@ function WeekRow({
     <div className="flex flex-col gap-1 rounded-md border p-2 text-sm">
       <div className="flex items-center justify-between gap-2">
         <span>{weekLabelFormatter.format(parseDateStr(week))}</span>
-        <span className="text-muted-foreground text-xs">אחראי/ת: {managerName}</span>
+        <span className="text-muted-foreground text-xs">מנהל/ת בר: {managerName}</span>
       </div>
       <div className="flex gap-2">
         <ShiftSlot shift={shifts.opening} type="opening" />

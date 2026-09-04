@@ -217,7 +217,7 @@ export function ShiftDetail() {
             {formatDateTime(shift.end_time)}
           </p>
           <p>
-            <span className="text-muted-foreground">אחראי/ת: </span>
+            <span className="text-muted-foreground">מנהל/ת בר: </span>
             {managerName ?? '—'}
           </p>
           {shift.required_staff_count !== null && (

@@ -22,6 +22,7 @@ interface AssignedStaffer {
   assignmentId: string
   employeeId: string
   name: string
+  role: string | null
 }
 
 interface UpcomingShift {
@@ -60,15 +61,22 @@ export function MyShifts() {
 
     const shiftIds = shifts.map((s) => s.id)
 
-    const [assignmentsRes, employeesRes] = await Promise.all([
+    const [assignmentsRes, employeesRes, rolesRes] = await Promise.all([
       supabase.from('shift_assignments').select('*').in('shift_id', shiftIds),
       supabase.from('employees').select('id, full_name').eq('active', true).order('full_name'),
+      supabase.rpc('list_employee_roles'),
     ])
 
     const assignments = (assignmentsRes.data as ShiftAssignment[]) ?? []
     const activeEmployees = (employeesRes.data as Employee[]) ?? []
     setEmployees(activeEmployees)
     const employeeNames = new Map(activeEmployees.map((e) => [e.id, e.full_name]))
+    const employeeRoles = new Map(
+      ((rolesRes.data as { employee_id: string; role: string | null }[]) ?? []).map((u) => [
+        u.employee_id,
+        u.role,
+      ]),
+    )
 
     const ownAssignmentIds = assignments
       .filter((a) => a.employee_id === appUser.employee_id)
@@ -98,6 +106,7 @@ export function MyShifts() {
           assignmentId: a.id,
           employeeId: a.employee_id,
           name: employeeNames.get(a.employee_id) ?? '—',
+          role: employeeRoles.get(a.employee_id) ?? null,
         })),
         ownAssignment,
         pendingRequest: ownAssignment ? (requestsByAssignment.get(ownAssignment.id) ?? null) : null,
@@ -147,6 +156,7 @@ export function MyShifts() {
           employees={employees}
           currentWeekStart={currentWeekStart}
           employeeId={appUser.employee_id!}
+          viewerRole={appUser.role}
           onChanged={load}
         />
       ))}
@@ -160,6 +170,7 @@ function WeekCard({
   employees,
   currentWeekStart,
   employeeId,
+  viewerRole,
   onChanged,
 }: {
   week: string
@@ -167,17 +178,21 @@ function WeekCard({
   employees: Employee[]
   currentWeekStart: string
   employeeId: string
+  viewerRole: string | null
   onChanged: () => void
 }) {
   const managerId = weekShifts.opening?.shift.shift_manager_id ?? weekShifts.closing?.shift.shift_manager_id
   const managerName = managerId ? (employees.find((e) => e.id === managerId)?.full_name ?? '—') : '—'
+
+  const weekStaff = [...(weekShifts.opening?.assignedStaff ?? []), ...(weekShifts.closing?.assignedStaff ?? [])]
+  const weekAreaManagerId = weekStaff.find((s) => s.role === 'area_manager')?.employeeId ?? null
 
   return (
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">שבוע {weekLabelFormatter.format(parseDateStr(week))}</CardTitle>
-          <span className="text-muted-foreground text-xs">אחראי/ת משמרת: {managerName}</span>
+          <span className="text-muted-foreground text-xs">מנהל/ת בר: {managerName}</span>
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -187,6 +202,8 @@ function WeekCard({
             employees={employees}
             currentWeekStart={currentWeekStart}
             employeeId={employeeId}
+            viewerRole={viewerRole}
+            weekAreaManagerId={weekAreaManagerId}
             onChanged={onChanged}
           />
         )}
@@ -197,6 +214,8 @@ function WeekCard({
             employees={employees}
             currentWeekStart={currentWeekStart}
             employeeId={employeeId}
+            viewerRole={viewerRole}
+            weekAreaManagerId={weekAreaManagerId}
             onChanged={onChanged}
           />
         )}
@@ -210,12 +229,16 @@ function ShiftSlot({
   employees,
   currentWeekStart,
   employeeId,
+  viewerRole,
+  weekAreaManagerId,
   onChanged,
 }: {
   item: UpcomingShift
   employees: Employee[]
   currentWeekStart: string
   employeeId: string
+  viewerRole: string | null
+  weekAreaManagerId: string | null
   onChanged: () => void
 }) {
   const { shift, assignedStaff, ownAssignment, pendingRequest } = item
@@ -226,7 +249,11 @@ function ShiftSlot({
   const [error, setError] = useState<string | null>(null)
 
   const isFutureWeek = shift.week_start > currentWeekStart
-  const isFull = shift.required_staff_count !== null && assignedStaff.length >= shift.required_staff_count
+  const isAreaManagerTaken =
+    viewerRole === 'area_manager' && weekAreaManagerId !== null && weekAreaManagerId !== employeeId
+  const isFull =
+    (shift.required_staff_count !== null && assignedStaff.length >= shift.required_staff_count) ||
+    isAreaManagerTaken
   const canRequestReplacement = shift.effective_status === 'published' && !pendingRequest
 
   async function handleJoin() {

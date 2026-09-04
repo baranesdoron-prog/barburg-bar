@@ -155,7 +155,7 @@ export function WeeklyChecklist() {
             if (e.target.value) goToWeek(parseDateStr(e.target.value))
           }}
         >
-          <option value="">עיון בשבועות קודמים לפי אחראי משמרת...</option>
+          <option value="">עיון בשבועות קודמים לפי מנהל בר...</option>
           {historyOptions.map((a) => (
             <option key={a.week_start} value={a.week_start}>
               שבוע {weekLabelFormatter.format(parseDateStr(a.week_start))} — {employeeNames.get(a.employee_id) ?? '—'}
@@ -176,7 +176,7 @@ export function WeeklyChecklist() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">רשימת משימות שבועית — אחראי/ת משמרת</CardTitle>
+          <CardTitle className="text-base">רשימת משימות שבועית — מנהל/ת בר</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {items === null && <p className="text-muted-foreground text-sm">טוען...</p>}

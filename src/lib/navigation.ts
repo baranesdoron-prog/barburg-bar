@@ -10,7 +10,6 @@ import {
   FileText,
   BookOpen,
   User,
-  UserCheck,
   Users,
   CalendarRange,
   type LucideIcon,
@@ -29,7 +28,7 @@ export interface NavItem {
 export function getNavItems(role: AppRole): NavItem[] {
   const items: NavItem[] = []
 
-  if (role !== 'bartender') {
+  if (role !== 'bartender' && role !== 'area_manager') {
     items.push({ to: '/', label: 'לוח בקרה', icon: LayoutDashboard })
   }
 
@@ -42,7 +41,7 @@ export function getNavItems(role: AppRole): NavItem[] {
         icon: CalendarClock,
         children: [
           { to: '/shifts', label: 'רשימת משמרות', icon: CalendarClock },
-          { to: '/admin/shift-manager-schedule', label: 'שיבוץ אחראי משמרת', icon: CalendarRange },
+          { to: '/admin/shift-manager-schedule', label: 'שיבוץ מנהל בר', icon: CalendarRange },
         ],
       })
     } else {
@@ -72,7 +71,6 @@ export function getNavItems(role: AppRole): NavItem[] {
   items.push({ to: '/profile', label: 'הפרופיל שלי', icon: User })
 
   if (role === 'administrator') {
-    items.push({ to: '/admin/approvals', label: 'בקשות הצטרפות', icon: UserCheck })
     items.push({ to: '/admin/users', label: 'משתמשים', icon: Users })
   }
 

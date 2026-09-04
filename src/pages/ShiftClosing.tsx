@@ -67,7 +67,7 @@ export function ShiftClosing() {
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground text-sm">
-            רק אחראי/ת המשמרת שמונה/תה למשמרת זו, או מנהל/ת בר, יכולים לסגור אותה.
+            רק מנהל/ת הבר שמונה/תה למשמרת זו, או מנהל/ת מערכת, יכולים לסגור אותה.
           </p>
         </CardContent>
       </Card>

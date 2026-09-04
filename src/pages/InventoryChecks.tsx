@@ -122,7 +122,7 @@ export function InventoryChecks() {
                   <div>
                     <p className="font-medium">{formatDate(check.shiftDate)}</p>
                     <p className="text-muted-foreground text-xs">
-                      אחראי/ת משמרת: {check.managerName} · {check.counts.length} פריטים נספרו
+                      מנהל/ת בר: {check.managerName} · {check.counts.length} פריטים נספרו
                     </p>
                   </div>
                   <Button variant="ghost" size="sm" onClick={() => toggleExpanded(check.shiftId)}>

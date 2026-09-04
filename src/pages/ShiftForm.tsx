@@ -118,7 +118,7 @@ export function ShiftForm() {
     }
 
     if (status === 'published' && !shiftManagerId) {
-      setError('פרסום משמרת דורש בחירת אחראי/ת משמרת')
+      setError('פרסום משמרת דורש בחירת מנהל/ת בר')
       return
     }
 
@@ -229,7 +229,7 @@ export function ShiftForm() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="shift-manager">אחראי/ת משמרת</Label>
+            <Label htmlFor="shift-manager">מנהל/ת בר</Label>
             <select
               id="shift-manager"
               className={selectClass}

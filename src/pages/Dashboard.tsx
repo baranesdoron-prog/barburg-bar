@@ -83,7 +83,7 @@ function ClosingAlertCard({ shifts, employeeNames }: { shifts: Shift[]; employee
             <div>
               <p className="font-medium">{formatDate(shift.start_time)}</p>
               <p className="text-muted-foreground">
-                {shift.shift_manager_id ? (employeeNames.get(shift.shift_manager_id) ?? '—') : 'לא הוגדר אחראי משמרת'}
+                {shift.shift_manager_id ? (employeeNames.get(shift.shift_manager_id) ?? '—') : 'לא הוגדר מנהל בר'}
                 {' • '}
                 {formatTime(shift.start_time)} - {formatTime(shift.end_time)}
               </p>
@@ -391,7 +391,7 @@ function ShiftManagerAssignmentCard({ onAssigned }: { onAssigned: () => void }) 
   return (
     <Card className={missingCount > 0 ? 'border-amber-500/60 bg-amber-50 dark:bg-amber-950/20' : undefined}>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base">שיבוץ אחראי משמרת</CardTitle>
+        <CardTitle className="text-base">שיבוץ מנהל בר</CardTitle>
         <Link to="/admin/shift-manager-schedule" className="text-muted-foreground text-xs hover:underline">
           שיבוץ לפי שנה
         </Link>
@@ -470,7 +470,7 @@ function NextManagerCard() {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base">אחראי/ת המשמרת הקרובה</CardTitle>
+        <CardTitle className="text-base">מנהל/ת הבר הקרוב/ה</CardTitle>
         {manager && (
           <Link to={`/weekly-checklist?week=${manager.weekStart}`} className="text-muted-foreground text-xs hover:underline">
             לרשימת המשימות
@@ -489,7 +489,7 @@ function NextManagerCard() {
             )}
           </div>
         ) : (
-          <p className="text-muted-foreground text-sm">לא שובץ אחראי משמרת לשבוע הקרוב.</p>
+          <p className="text-muted-foreground text-sm">לא שובץ מנהל בר לשבוע הקרוב.</p>
         )}
       </CardContent>
     </Card>
@@ -656,7 +656,7 @@ export function Dashboard() {
     return <ManagerDashboard />
   }
 
-  if (effectiveRole === 'bartender') {
+  if (effectiveRole === 'bartender' || effectiveRole === 'area_manager') {
     return <Navigate to="/my-shifts" replace />
   }
 
