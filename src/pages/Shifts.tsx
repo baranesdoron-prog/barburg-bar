@@ -12,8 +12,7 @@ import {
   YEAR_OPTIONS,
   toDateStr,
   parseDateStr,
-  sundayOf,
-  addDays,
+  archiveCutoff,
 } from '@/lib/weeklyChecklist'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -27,7 +26,7 @@ const currentYear = new Date().getFullYear()
 
 // Weeks starting before this are "old" and live in the archive instead of
 // the main list.
-const ARCHIVE_CUTOFF = toDateStr(sundayOf(addDays(new Date(), -30)))
+const ARCHIVE_CUTOFF = archiveCutoff()
 
 interface WeekShifts {
   opening?: Shift

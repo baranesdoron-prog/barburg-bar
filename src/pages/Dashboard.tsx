@@ -10,7 +10,7 @@ import { purchaseOrderStatusBadgeClass, purchaseOrderStatusLabels } from '@/lib/
 import { useAppUserContext } from '@/lib/outletContext'
 import { shiftTypeLabel } from '@/lib/shiftLabels'
 import { cn, formatDate, formatDateTime, formatTime } from '@/lib/utils'
-import { activeWeekStart, addDays, parseDateStr, toDateStr } from '@/lib/weeklyChecklist'
+import { activeWeekStart, addDays, archiveCutoff, parseDateStr, toDateStr } from '@/lib/weeklyChecklist'
 import type {
   PurchaseOrder,
   PurchaseOrderItem,
@@ -57,8 +57,12 @@ function ShiftSection({ title, shifts }: { title: string; shifts: Shift[] }) {
 }
 
 function ClosingAlertCard({ shifts, employeeNames }: { shifts: Shift[]; employeeNames: Map<string, string> }) {
+  const cutoff = archiveCutoff()
   const needsClosing = shifts.filter(
-    (s) => s.shift_type === 'closing' && (s.effective_status === 'waiting_for_closure' || s.effective_status === 'reopened'),
+    (s) =>
+      s.shift_type === 'closing' &&
+      (s.effective_status === 'waiting_for_closure' || s.effective_status === 'reopened') &&
+      s.week_start >= cutoff,
   )
 
   if (needsClosing.length === 0) return null

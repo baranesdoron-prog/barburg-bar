@@ -35,6 +35,15 @@ export function addDays(date: Date, days: number) {
 // earlier than it regardless of which year is selected.
 export const EARLIEST_WEEK_START = '2026-07-19'
 
+// Weeks before the current calendar month's first week move to the
+// archive (and drop out of the dashboard's closing-shifts widget) -- a
+// week that straddles the month boundary (e.g. contains the 1st) still
+// counts as "this month" and stays live.
+export function archiveCutoff() {
+  const now = new Date()
+  return toDateStr(sundayOf(new Date(now.getFullYear(), now.getMonth(), 1)))
+}
+
 export const weekLabelFormatter = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'long' })
 
 const currentYear = new Date().getFullYear()
