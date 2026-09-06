@@ -155,6 +155,7 @@ export interface InventoryItem {
   units_per_box: number | null
   unit_price: number | null
   minimum_quantity: number | null
+  ideal_quantity: number | null
   current_stock: number
   image_url: string | null
   active: boolean

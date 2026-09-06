@@ -17,12 +17,18 @@ const selectClass =
 
 const journalCategories = Object.keys(journalCategoryLabels) as JournalCategory[]
 
+interface ReorderSummary {
+  orders: { supplier_name: string; order_number: string; item_count: number }[]
+  skipped_no_supplier: number
+}
+
 export function ShiftClosing() {
   const { id } = useParams()
   const { appUser, effectiveRole } = useAppUserContext()
   const [shift, setShift] = useState<Shift | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reportId, setReportId] = useState<string | null>(null)
+  const [reorderSummary, setReorderSummary] = useState<ReorderSummary | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const bumpRefresh = () => setRefreshKey((k) => k + 1)
 
@@ -52,7 +58,7 @@ export function ShiftClosing() {
   }
 
   if (reportId) {
-    return <ClosingComplete shiftId={shift.id} />
+    return <ClosingComplete shiftId={shift.id} reorderSummary={reorderSummary} />
   }
 
   const canClose =
@@ -89,7 +95,14 @@ export function ShiftClosing() {
 
       <JournalSection shiftId={shift.id} onSaved={bumpRefresh} />
       <InventorySection shiftId={shift.id} onSaved={bumpRefresh} />
-      <SummarySection shift={shift} refreshKey={refreshKey} onFinished={setReportId} />
+      <SummarySection
+        shift={shift}
+        refreshKey={refreshKey}
+        onFinished={(id, summary) => {
+          setReorderSummary(summary)
+          setReportId(id)
+        }}
+      />
     </div>
   )
 }
@@ -323,7 +336,7 @@ function SummarySection({
 }: {
   shift: Shift
   refreshKey: number
-  onFinished: (reportId: string) => void
+  onFinished: (reportId: string, reorderSummary: ReorderSummary | null) => void
 }) {
   const [attendanceCount, setAttendanceCount] = useState(0)
   const [journalCount, setJournalCount] = useState(0)
@@ -372,14 +385,16 @@ function SummarySection({
       p_shift_id: shift.id,
     })
 
-    setFinishing(false)
-
     if (finishError) {
+      setFinishing(false)
       setError(finishError.message)
       return
     }
 
-    onFinished(data.id)
+    const { data: reorderData } = await supabase.rpc('generate_reorder_purchase_orders')
+
+    setFinishing(false)
+    onFinished(data.id, (reorderData as ReorderSummary | null) ?? null)
   }
 
   const missingJournal = journalCount === 0
@@ -417,15 +432,37 @@ function SummarySection({
   )
 }
 
-function ClosingComplete({ shiftId }: { shiftId: string }) {
+function ClosingComplete({
+  shiftId,
+  reorderSummary,
+}: {
+  shiftId: string
+  reorderSummary: ReorderSummary | null
+}) {
   return (
     <Card className="mx-auto max-w-md text-center">
       <CardHeader>
         <CardTitle>המשמרת הושלמה בהצלחה</CardTitle>
         <CardDescription>הדוח נוצר ונשמר.</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        {/* Reserved space for a future WhatsApp share action — not implemented yet. */}
+      <CardContent className="flex flex-col gap-2 text-sm">
+        {reorderSummary && reorderSummary.orders.length > 0 && (
+          <div className="rounded-md border p-3 text-start">
+            <p className="mb-1 font-medium">נוצרו {reorderSummary.orders.length} הזמנות רכש חדשות:</p>
+            <ul className="text-muted-foreground list-inside list-disc">
+              {reorderSummary.orders.map((o) => (
+                <li key={o.order_number}>
+                  {o.supplier_name} ({o.order_number}) — {o.item_count} פריטים
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {reorderSummary && reorderSummary.skipped_no_supplier > 0 && (
+          <p className="text-amber-600 dark:text-amber-400">
+            {reorderSummary.skipped_no_supplier} פריטים דורשים הזמנה אך אין להם ספק משויך — לא הוזמנו אוטומטית.
+          </p>
+        )}
       </CardContent>
       <CardFooter className="flex flex-col gap-2">
         <Button asChild className="w-full">
