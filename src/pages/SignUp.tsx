@@ -42,7 +42,7 @@ export function SignUp() {
     setSubmitting(false)
 
     if (error) {
-      setError(error.message)
+      setError('אירעה שגיאה בהרשמה. נסה/י שוב, ואם הבעיה נמשכת פנה/י למנהל המערכת.')
       return
     }
 
@@ -54,10 +54,8 @@ export function SignUp() {
       <div className="flex min-h-svh items-center justify-center p-4">
         <Card className="w-full max-w-sm text-center">
           <CardHeader>
-            <CardTitle>תודה שנרשמת!</CardTitle>
-            <CardDescription>
-              החשבון שלך מוכן. אשר/י את כתובת האימייל שלך דרך המייל שנשלח אליך כדי להתחבר.
-            </CardDescription>
+            <CardTitle>איזה כיף שהצטרפת אלינו!</CardTitle>
+            <CardDescription>אתה יכול עכשיו להתחבר למערכת ולשבץ את עצמך!</CardDescription>
           </CardHeader>
           <CardFooter className="justify-center">
             <Button asChild>
