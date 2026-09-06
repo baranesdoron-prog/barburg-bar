@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import {
@@ -23,6 +24,75 @@ interface Employee {
 }
 
 const currentYear = new Date().getFullYear()
+
+function BartenderMultiSelect({
+  options,
+  selectedIds,
+  onToggle,
+}: {
+  options: Employee[]
+  selectedIds: string[]
+  onToggle: (employeeId: string, checked: boolean) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [open])
+
+  const selectedNames = options.filter((emp) => selectedIds.includes(emp.id)).map((emp) => emp.full_name)
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(selectClass, 'flex items-center justify-between text-start')}
+      >
+        <span className={selectedNames.length === 0 ? 'text-muted-foreground' : undefined}>
+          {selectedNames.length > 0 ? selectedNames.join(', ') : '— לא שובץ —'}
+        </span>
+        <ChevronDown className="size-4 shrink-0 opacity-50" />
+      </button>
+
+      {open && (
+        <div className="bg-background absolute z-10 mt-1 w-full rounded-md border p-2 shadow-md">
+          {options.length === 0 && <p className="text-muted-foreground text-sm">אין ברמנים/יות זמינים.</p>}
+          <div className="flex flex-col gap-1">
+            {options.map((emp) => {
+              const checked = selectedIds.includes(emp.id)
+              const disabled = !checked && selectedIds.length >= 3
+              return (
+                <label
+                  key={emp.id}
+                  className={cn('flex items-center gap-2 text-sm', disabled && 'text-muted-foreground')}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={disabled}
+                    onChange={(e) => onToggle(emp.id, e.target.checked)}
+                  />
+                  {emp.full_name}
+                </label>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function WeekRow({
   week,
@@ -117,23 +187,7 @@ function WeekRow({
 
       <div className="flex flex-col gap-1">
         <Label className="text-muted-foreground text-xs">ברמנים/יות (עד 3)</Label>
-        <div className="flex flex-col gap-1">
-          {bartenderEligible.map((emp) => {
-            const checked = bartenderIds.includes(emp.id)
-            const disabled = !checked && bartenderIds.length >= 3
-            return (
-              <label key={emp.id} className={cn('flex items-center gap-2', disabled && 'text-muted-foreground')}>
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={disabled}
-                  onChange={(e) => handleBartenderToggle(emp.id, e.target.checked)}
-                />
-                {emp.full_name}
-              </label>
-            )
-          })}
-        </div>
+        <BartenderMultiSelect options={bartenderEligible} selectedIds={bartenderIds} onToggle={handleBartenderToggle} />
       </div>
 
       {error && <p className="text-destructive text-xs">{error}</p>}
