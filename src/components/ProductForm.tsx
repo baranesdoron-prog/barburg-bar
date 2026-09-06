@@ -34,6 +34,11 @@ export function ProductForm({ item, suppliers, categories, onSaved, onCancel }: 
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
+  const selectedCategory = categories.find((c) => c.id === categoryId)
+  const categoryDefaultSupplier = selectedCategory?.default_supplier_id
+    ? suppliers.find((s) => s.id === selectedCategory.default_supplier_id)
+    : undefined
+
   async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -53,17 +58,6 @@ export function ProductForm({ item, suppliers, categories, onSaved, onCancel }: 
 
     const { data } = supabase.storage.from('inventory-images').getPublicUrl(path)
     setImageUrl(data.publicUrl)
-  }
-
-  function handleCategoryChange(newCategoryId: string) {
-    setCategoryId(newCategoryId)
-
-    if (!supplierId) {
-      const category = categories.find((c) => c.id === newCategoryId)
-      if (category?.default_supplier_id) {
-        setSupplierId(category.default_supplier_id)
-      }
-    }
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -135,7 +129,7 @@ export function ProductForm({ item, suppliers, categories, onSaved, onCancel }: 
               id="product-category"
               className={selectClass}
               value={categoryId}
-              onChange={(e) => handleCategoryChange(e.target.value)}
+              onChange={(e) => setCategoryId(e.target.value)}
             >
               <option value="">— ללא —</option>
               {categories.map((c) => (
@@ -164,13 +158,20 @@ export function ProductForm({ item, suppliers, categories, onSaved, onCancel }: 
               value={supplierId}
               onChange={(e) => setSupplierId(e.target.value)}
             >
-              <option value="">— ללא —</option>
+              <option value="">
+                {categoryDefaultSupplier ? `— לפי קטגוריה (${categoryDefaultSupplier.name}) —` : '— ללא —'}
+              </option>
               {suppliers.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
               ))}
             </select>
+            {!supplierId && categoryDefaultSupplier && (
+              <p className="text-muted-foreground text-xs">
+                המוצר יורש את הספק מהקטגוריה. בחירת ספק כאן תבטל את הירושה.
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">

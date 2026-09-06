@@ -54,7 +54,7 @@ export function InventoryItems() {
 
     if (name.trim()) query = query.ilike('name', `%${name.trim()}%`)
     if (category) query = query.eq('category_id', category)
-    if (supplier) query = query.eq('supplier_id', supplier)
+    if (supplier) query = query.eq('resolved_supplier_id', supplier)
 
     const { data } = await query.order('name')
     setItems((data as InventoryItemWithStock[]) ?? [])
@@ -232,7 +232,9 @@ export function InventoryItems() {
         <CardContent className="flex flex-col gap-2 pt-6">
           {items.length === 0 && <p className="text-muted-foreground text-sm">לא נמצאו פריטים.</p>}
           {sortedItems.map(({ item, categoryName }, index) => {
-            const supplierName = suppliers.find((s) => s.id === item.supplier_id)?.name
+            const isInherited = !item.supplier_id && !!item.resolved_supplier_id
+            const supplierName = suppliers.find((s) => s.id === item.resolved_supplier_id)?.name
+            const supplierLabel = supplierName && (isInherited ? `${supplierName} (בירושה)` : supplierName)
             const isLowStock = item.is_low_stock
             const showCategoryHeader = categoryName !== sortedItems[index - 1]?.categoryName
 
@@ -253,7 +255,7 @@ export function InventoryItems() {
                       {item.unit && <span className="text-muted-foreground"> ({item.unit})</span>}
                     </p>
                     <p className="text-muted-foreground text-xs">
-                      {[categoryName, item.vendor, supplierName, item.sku].filter(Boolean).join(' · ')}
+                      {[categoryName, item.vendor, supplierLabel, item.sku].filter(Boolean).join(' · ')}
                     </p>
                     <p className="text-muted-foreground text-xs">
                       {item.unit_type === 'box' ? `קופסה (${item.units_per_box} יח')` : 'בודד'}

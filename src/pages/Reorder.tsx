@@ -31,9 +31,9 @@ export function Reorder() {
 
   const lowStockItems = items.filter((i) => i.is_low_stock)
   const supplierIds = [
-    ...new Set(lowStockItems.map((i) => i.supplier_id).filter((id): id is string => id !== null)),
+    ...new Set(lowStockItems.map((i) => i.resolved_supplier_id).filter((id): id is string => id !== null)),
   ]
-  const unassigned = lowStockItems.filter((i) => i.supplier_id === null)
+  const unassigned = lowStockItems.filter((i) => i.resolved_supplier_id === null)
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
@@ -50,8 +50,8 @@ export function Reorder() {
           <SupplierGroup
             key={supplierId}
             supplier={supplier}
-            lowStockItems={lowStockItems.filter((i) => i.supplier_id === supplierId)}
-            allSupplierItems={items.filter((i) => i.supplier_id === supplierId)}
+            lowStockItems={lowStockItems.filter((i) => i.resolved_supplier_id === supplierId)}
+            allSupplierItems={items.filter((i) => i.resolved_supplier_id === supplierId)}
           />
         )
       })}
