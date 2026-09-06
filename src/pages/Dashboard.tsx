@@ -576,12 +576,12 @@ function ManagerDashboard() {
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4">
-      <ClosingAlertCard shifts={shifts} employeeNames={employeeNames} />
-
       <div>
         <h1 className="text-xl font-semibold">לוח בקרה</h1>
         <p className="text-muted-foreground text-sm">ברבורג — ניהול הבר הקהילתי</p>
       </div>
+
+      <ClosingAlertCard shifts={shifts} employeeNames={employeeNames} />
 
       {canManage && <ShiftManagerAssignmentCard />}
 
