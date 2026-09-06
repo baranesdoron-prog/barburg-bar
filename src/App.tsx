@@ -17,7 +17,7 @@ import { Dashboard } from '@/pages/Dashboard'
 import { MyShifts } from '@/pages/MyShifts'
 import { Profile } from '@/pages/Profile'
 import { AdminApprovals } from '@/pages/AdminApprovals'
-import { Shifts } from '@/pages/Shifts'
+import { Shifts, ShiftsArchive } from '@/pages/Shifts'
 import { ShiftForm } from '@/pages/ShiftForm'
 import { ShiftDetail } from '@/pages/ShiftDetail'
 import { AttendanceForm } from '@/pages/AttendanceForm'
@@ -85,6 +85,7 @@ export function App() {
         </Route>
         <Route element={<RequireRole roles={ROLES_VIEWING_SHIFTS} />}>
           <Route path="/shifts" element={<Shifts />} />
+          <Route path="/shifts/archive" element={<ShiftsArchive />} />
           <Route path="/shifts/:id" element={<ShiftDetail />} />
           <Route path="/shifts/:id/attendance" element={<AttendanceForm />} />
           <Route path="/shifts/:id/close" element={<ShiftClosing />} />

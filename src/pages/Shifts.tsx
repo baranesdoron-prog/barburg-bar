@@ -5,7 +5,16 @@ import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
 import { ROLES_MANAGING_SHIFTS } from '@/lib/roleLabels'
 import { effectiveStatusLabels, effectiveStatusBadgeClass, shiftTypeLabel } from '@/lib/shiftLabels'
-import { sundaysInYear, EARLIEST_WEEK_START, weekLabelFormatter, YEAR_OPTIONS, toDateStr, parseDateStr } from '@/lib/weeklyChecklist'
+import {
+  sundaysInYear,
+  EARLIEST_WEEK_START,
+  weekLabelFormatter,
+  YEAR_OPTIONS,
+  toDateStr,
+  parseDateStr,
+  sundayOf,
+  addDays,
+} from '@/lib/weeklyChecklist'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,12 +25,24 @@ const selectClass =
 
 const currentYear = new Date().getFullYear()
 
+// Weeks starting before this are "old" and live in the archive instead of
+// the main list.
+const ARCHIVE_CUTOFF = toDateStr(sundayOf(addDays(new Date(), -30)))
+
 interface WeekShifts {
   opening?: Shift
   closing?: Shift
 }
 
 export function Shifts() {
+  return <ShiftsList isArchive={false} />
+}
+
+export function ShiftsArchive() {
+  return <ShiftsList isArchive={true} />
+}
+
+function ShiftsList({ isArchive }: { isArchive: boolean }) {
   const { effectiveRole } = useAppUserContext()
   const [year, setYear] = useState(currentYear)
   const [shiftsByWeek, setShiftsByWeek] = useState<Map<string, WeekShifts>>(new Map())
@@ -30,12 +51,13 @@ export function Shifts() {
   const weeks = sundaysInYear(year)
     .map(toDateStr)
     .filter((w) => w >= EARLIEST_WEEK_START)
+    .filter((w) => (isArchive ? w < ARCHIVE_CUTOFF : w >= ARCHIVE_CUTOFF))
 
   const canManage = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
 
   useEffect(() => {
     async function load() {
-      if (canManage) {
+      if (canManage && !isArchive) {
         await supabase.rpc('ensure_upcoming_shifts')
       }
 
@@ -71,17 +93,29 @@ export function Shifts() {
 
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year])
+  }, [year, isArchive])
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">משמרות</h1>
-        {canManage && (
-          <Button asChild>
-            <Link to="/shifts/new">משמרת חדשה</Link>
-          </Button>
-        )}
+        <h1 className="text-xl font-semibold">{isArchive ? 'ארכיון משמרות' : 'משמרות'}</h1>
+        <div className="flex gap-2">
+          {!isArchive && (
+            <Button asChild variant="outline">
+              <Link to="/shifts/archive">ארכיון</Link>
+            </Button>
+          )}
+          {isArchive && (
+            <Button asChild variant="outline">
+              <Link to="/shifts">חזרה למשמרות</Link>
+            </Button>
+          )}
+          {canManage && !isArchive && (
+            <Button asChild>
+              <Link to="/shifts/new">משמרת חדשה</Link>
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card>

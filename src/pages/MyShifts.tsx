@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
 import { effectiveStatusLabels, effectiveStatusBadgeClass, shiftTypeLabel } from '@/lib/shiftLabels'
-import { activeWeekStart, toDateStr, weekLabelFormatter, parseDateStr } from '@/lib/weeklyChecklist'
+import { activeWeekStart, toDateStr, weekLabelFormatter, parseDateStr, addDays } from '@/lib/weeklyChecklist'
 import { cn, formatDateTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -42,6 +42,7 @@ export function MyShifts() {
   const [shiftsByWeek, setShiftsByWeek] = useState<Map<string, WeekShifts> | null>(null)
   const [employees, setEmployees] = useState<Employee[]>([])
   const currentWeekStart = toDateStr(activeWeekStart())
+  const threeMonthsOut = toDateStr(addDays(activeWeekStart(), 13 * 7))
 
   async function load() {
     const { data: shiftsData } = await supabase
@@ -49,6 +50,7 @@ export function MyShifts() {
       .select('*')
       .eq('status', 'published')
       .gte('week_start', currentWeekStart)
+      .lte('week_start', threeMonthsOut)
       .order('start_time')
 
     const shifts = (shiftsData as Shift[]) ?? []
@@ -144,27 +146,34 @@ export function MyShifts() {
     <div className="mx-auto flex max-w-md flex-col gap-4">
       <h1 className="text-xl font-semibold">משמרות קרובות</h1>
 
-      {weeks.length === 0 && (
-        <p className="text-muted-foreground text-sm">אין משמרות פתוחות כרגע.</p>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">שלושת החודשים הקרובים</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          {weeks.length === 0 && (
+            <p className="text-muted-foreground text-sm">אין משמרות פתוחות כרגע.</p>
+          )}
 
-      {weeks.map((week) => (
-        <WeekCard
-          key={week}
-          week={week}
-          weekShifts={shiftsByWeek.get(week)!}
-          employees={employees}
-          currentWeekStart={currentWeekStart}
-          employeeId={appUser.employee_id!}
-          viewerRole={appUser.role}
-          onChanged={load}
-        />
-      ))}
+          {weeks.map((week) => (
+            <WeekRow
+              key={week}
+              week={week}
+              weekShifts={shiftsByWeek.get(week)!}
+              employees={employees}
+              currentWeekStart={currentWeekStart}
+              employeeId={appUser.employee_id!}
+              viewerRole={appUser.role}
+              onChanged={load}
+            />
+          ))}
+        </CardContent>
+      </Card>
     </div>
   )
 }
 
-function WeekCard({
+function WeekRow({
   week,
   weekShifts,
   employees,
@@ -188,39 +197,35 @@ function WeekCard({
   const weekAreaManagerId = weekStaff.find((s) => s.role === 'area_manager')?.employeeId ?? null
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base">שבוע {weekLabelFormatter.format(parseDateStr(week))}</CardTitle>
-          <span className="text-muted-foreground text-xs">מנהל/ת בר: {managerName}</span>
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {weekShifts.opening && (
-          <ShiftSlot
-            item={weekShifts.opening}
-            employees={employees}
-            currentWeekStart={currentWeekStart}
-            employeeId={employeeId}
-            viewerRole={viewerRole}
-            weekAreaManagerId={weekAreaManagerId}
-            onChanged={onChanged}
-          />
-        )}
-        {weekShifts.opening && weekShifts.closing && <div className="border-t" />}
-        {weekShifts.closing && (
-          <ShiftSlot
-            item={weekShifts.closing}
-            employees={employees}
-            currentWeekStart={currentWeekStart}
-            employeeId={employeeId}
-            viewerRole={viewerRole}
-            weekAreaManagerId={weekAreaManagerId}
-            onChanged={onChanged}
-          />
-        )}
-      </CardContent>
-    </Card>
+    <div className="flex flex-col gap-2 rounded-md border p-2 text-sm">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium">שבוע {weekLabelFormatter.format(parseDateStr(week))}</span>
+        <span className="text-muted-foreground text-xs">מנהל/ת בר: {managerName}</span>
+      </div>
+      {weekShifts.opening && (
+        <ShiftSlot
+          item={weekShifts.opening}
+          employees={employees}
+          currentWeekStart={currentWeekStart}
+          employeeId={employeeId}
+          viewerRole={viewerRole}
+          weekAreaManagerId={weekAreaManagerId}
+          onChanged={onChanged}
+        />
+      )}
+      {weekShifts.opening && weekShifts.closing && <div className="border-t" />}
+      {weekShifts.closing && (
+        <ShiftSlot
+          item={weekShifts.closing}
+          employees={employees}
+          currentWeekStart={currentWeekStart}
+          employeeId={employeeId}
+          viewerRole={viewerRole}
+          weekAreaManagerId={weekAreaManagerId}
+          onChanged={onChanged}
+        />
+      )}
+    </div>
   )
 }
 
