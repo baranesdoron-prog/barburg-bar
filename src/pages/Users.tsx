@@ -31,7 +31,15 @@ interface AdminAppUserRow {
 const statusLabels: Record<AppUserStatus, string> = {
   pending_approval: 'ממתין/ה לאישור',
   approved: 'פעיל/ה',
-  suspended: 'מושהה/ית',
+  suspended: 'לא פעיל/ה',
+}
+
+type StatusFilter = 'active' | 'inactive' | 'all'
+
+const statusFilterLabels: Record<StatusFilter, string> = {
+  active: 'פעילים',
+  inactive: 'לא פעילים',
+  all: 'הכל',
 }
 
 const statusBadgeClass: Record<AppUserStatus, string> = {
@@ -53,6 +61,7 @@ export function Users() {
   const [delegations, setDelegations] = useState<RoleDelegation[]>([])
   const [showInviteForm, setShowInviteForm] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
 
   async function load() {
     const [usersRes, employeesRes, invitesRes, delegationsRes] = await Promise.all([
@@ -90,7 +99,12 @@ export function Users() {
   if (loadError) return <p className="text-destructive text-center text-sm">{loadError}</p>
   if (users === null) return null
 
-  const activeUsers = users.filter((u) => u.status !== 'pending_approval')
+  const nonPendingUsers = users.filter((u) => u.status !== 'pending_approval')
+  const visibleUsers = nonPendingUsers.filter((u) => {
+    if (statusFilter === 'all') return true
+    if (statusFilter === 'active') return u.status === 'approved'
+    return u.status === 'suspended'
+  })
   const employeeNames = new Map(employees.map((e) => [e.id, e.full_name]))
   const pendingInvites = invites.filter((i) => i.status === 'pending')
   const resolvedInvites = invites.filter((i) => i.status !== 'pending')
@@ -142,11 +156,24 @@ export function Users() {
         </Card>
       )}
 
-      {activeUsers.length === 0 && (
-        <p className="text-muted-foreground text-sm">אין משתמשים מאושרים עדיין.</p>
+      <div className="flex gap-2">
+        {(Object.keys(statusFilterLabels) as StatusFilter[]).map((f) => (
+          <Button
+            key={f}
+            size="sm"
+            variant={statusFilter === f ? 'default' : 'outline'}
+            onClick={() => setStatusFilter(f)}
+          >
+            {statusFilterLabels[f]}
+          </Button>
+        ))}
+      </div>
+
+      {visibleUsers.length === 0 && (
+        <p className="text-muted-foreground text-sm">אין משתמשים להצגה.</p>
       )}
 
-      {activeUsers.map((user) => (
+      {visibleUsers.map((user) => (
         <UserRow
           key={user.id}
           user={user}
@@ -387,7 +414,7 @@ function UserRow({
   }
 
   async function handleSuspend() {
-    if (!confirm('להשהות את המשתמש/ת?')) return
+    if (!confirm('להסיר את המשתמש/ת? כל השיבוצים העתידיים שלו/ה יבוטלו.')) return
 
     const { error: suspendError } = await supabase.rpc('suspend_user', { p_user_id: user.id })
 
@@ -501,7 +528,7 @@ function UserRow({
               )}
               {user.status === 'approved' && (
                 <Button variant="destructive" className="flex-1" onClick={handleSuspend}>
-                  השהיה
+                  הסרה
                 </Button>
               )}
               {user.status === 'suspended' && (
