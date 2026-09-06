@@ -104,11 +104,11 @@ export function App() {
           <Route path="/purchase-orders" element={<PurchaseOrders />} />
           <Route path="/purchase-orders/reorder" element={<Reorder />} />
           <Route path="/purchase-orders/:id" element={<PurchaseOrderDetail />} />
+          <Route path="/admin/shift-manager-schedule" element={<ShiftManagerSchedule />} />
         </Route>
         <Route element={<RequireRole roles={['administrator']} />}>
           <Route path="/admin/approvals" element={<AdminApprovals />} />
           <Route path="/admin/users" element={<Users />} />
-          <Route path="/admin/shift-manager-schedule" element={<ShiftManagerSchedule />} />
         </Route>
       </Route>
     </Routes>

@@ -5,7 +5,7 @@ import { AlertTriangle, Clock, Package, ShoppingCart, Truck, Users, CalendarDays
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { roleLabels, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
+import { roleLabels, ROLES_MANAGING_SHIFTS, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
 import { purchaseOrderStatusBadgeClass, purchaseOrderStatusLabels } from '@/lib/purchaseOrderLabels'
 import { useAppUserContext } from '@/lib/outletContext'
 import { shiftTypeLabel } from '@/lib/shiftLabels'
@@ -572,7 +572,7 @@ function ManagerDashboard() {
 
   if (!shifts) return null
 
-  const canManage = effectiveRole === 'administrator'
+  const canManage = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4">

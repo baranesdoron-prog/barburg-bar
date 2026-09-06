@@ -35,7 +35,7 @@ export function getNavItems(role: AppRole): NavItem[] {
   items.push({ to: '/procedures', label: 'נהלים', icon: BookOpen })
 
   if (ROLES_VIEWING_SHIFTS.includes(role)) {
-    if (role === 'administrator') {
+    if (ROLES_MANAGING_SHIFTS.includes(role)) {
       items.push({
         label: 'משמרות',
         icon: CalendarClock,
