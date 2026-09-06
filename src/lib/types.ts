@@ -76,7 +76,6 @@ export interface ShiftManagerAssignment {
   week_start: string
   employee_id: string
   area_manager_id: string | null
-  bartender_ids: string[] | null
   assigned_by: string | null
   assigned_at: string
 }
