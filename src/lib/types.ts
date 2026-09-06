@@ -211,8 +211,10 @@ export interface ShiftReportRow {
 export interface Supplier {
   id: string
   name: string
-  contact_name: string | null
-  phone: string | null
+  bar_contact_name: string | null
+  bar_contact_phone: string | null
+  supplier_contact_name: string | null
+  supplier_contact_phone: string | null
   email: string | null
   notes: string | null
   average_delivery_days: number | null

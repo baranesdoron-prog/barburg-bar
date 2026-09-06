@@ -12,8 +12,10 @@ const selectClass =
 
 interface SupplierFormFields {
   name: string
-  contactName: string
-  phone: string
+  barContactName: string
+  barContactPhone: string
+  supplierContactName: string
+  supplierContactPhone: string
   email: string
   averageDeliveryDays: string
 }
@@ -38,19 +40,35 @@ function SupplierFields({
         />
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`${idPrefix}-contact`}>איש קשר (לא חובה)</Label>
+        <Label htmlFor={`${idPrefix}-bar-contact`}>איש קשר בברבורג (לא חובה)</Label>
         <Input
-          id={`${idPrefix}-contact`}
-          value={fields.contactName}
-          onChange={(e) => onChange({ ...fields, contactName: e.target.value })}
+          id={`${idPrefix}-bar-contact`}
+          value={fields.barContactName}
+          onChange={(e) => onChange({ ...fields, barContactName: e.target.value })}
         />
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`${idPrefix}-phone`}>טלפון (לא חובה)</Label>
+        <Label htmlFor={`${idPrefix}-bar-contact-phone`}>טלפון איש הקשר בברבורג (לא חובה)</Label>
         <Input
-          id={`${idPrefix}-phone`}
-          value={fields.phone}
-          onChange={(e) => onChange({ ...fields, phone: e.target.value })}
+          id={`${idPrefix}-bar-contact-phone`}
+          value={fields.barContactPhone}
+          onChange={(e) => onChange({ ...fields, barContactPhone: e.target.value })}
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor={`${idPrefix}-supplier-contact`}>איש קשר אצל הספק (לא חובה)</Label>
+        <Input
+          id={`${idPrefix}-supplier-contact`}
+          value={fields.supplierContactName}
+          onChange={(e) => onChange({ ...fields, supplierContactName: e.target.value })}
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor={`${idPrefix}-supplier-contact-phone`}>טלפון איש הקשר אצל הספק (לא חובה)</Label>
+        <Input
+          id={`${idPrefix}-supplier-contact-phone`}
+          value={fields.supplierContactPhone}
+          onChange={(e) => onChange({ ...fields, supplierContactPhone: e.target.value })}
         />
       </div>
       <div className="flex flex-col gap-2">
@@ -78,8 +96,10 @@ function SupplierFields({
 
 const emptyFields: SupplierFormFields = {
   name: '',
-  contactName: '',
-  phone: '',
+  barContactName: '',
+  barContactPhone: '',
+  supplierContactName: '',
+  supplierContactPhone: '',
   email: '',
   averageDeliveryDays: '',
 }
@@ -87,8 +107,10 @@ const emptyFields: SupplierFormFields = {
 function toPayload(fields: SupplierFormFields) {
   return {
     name: fields.name.trim(),
-    contact_name: fields.contactName.trim() || null,
-    phone: fields.phone.trim() || null,
+    bar_contact_name: fields.barContactName.trim() || null,
+    bar_contact_phone: fields.barContactPhone.trim() || null,
+    supplier_contact_name: fields.supplierContactName.trim() || null,
+    supplier_contact_phone: fields.supplierContactPhone.trim() || null,
     email: fields.email.trim() || null,
     average_delivery_days: fields.averageDeliveryDays ? Number(fields.averageDeliveryDays) : null,
   }
@@ -223,8 +245,10 @@ function SupplierRow({
   const [editing, setEditing] = useState(false)
   const [fields, setFields] = useState<SupplierFormFields>({
     name: supplier.name,
-    contactName: supplier.contact_name ?? '',
-    phone: supplier.phone ?? '',
+    barContactName: supplier.bar_contact_name ?? '',
+    barContactPhone: supplier.bar_contact_phone ?? '',
+    supplierContactName: supplier.supplier_contact_name ?? '',
+    supplierContactPhone: supplier.supplier_contact_phone ?? '',
     email: supplier.email ?? '',
     averageDeliveryDays: supplier.average_delivery_days?.toString() ?? '',
   })
@@ -273,9 +297,15 @@ function SupplierRow({
     <div className="flex items-center justify-between rounded-md border p-2 text-sm">
       <div className={supplier.active ? '' : 'text-muted-foreground line-through'}>
         <p className="font-medium">{supplier.name}</p>
-        {(supplier.contact_name || supplier.phone) && (
+        {(supplier.bar_contact_name || supplier.bar_contact_phone) && (
           <p className="text-muted-foreground">
-            {supplier.contact_name} {supplier.phone && `· ${supplier.phone}`}
+            איש קשר בברבורג: {supplier.bar_contact_name} {supplier.bar_contact_phone && `· ${supplier.bar_contact_phone}`}
+          </p>
+        )}
+        {(supplier.supplier_contact_name || supplier.supplier_contact_phone) && (
+          <p className="text-muted-foreground">
+            איש קשר אצל הספק: {supplier.supplier_contact_name}{' '}
+            {supplier.supplier_contact_phone && `· ${supplier.supplier_contact_phone}`}
           </p>
         )}
         {supplier.average_delivery_days !== null && (
