@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
 import { purchaseOrderStatusLabels, purchaseOrderStatusBadgeClass } from '@/lib/purchaseOrderLabels'
@@ -14,6 +14,7 @@ const selectClass =
 
 export function PurchaseOrderDetail() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [order, setOrder] = useState<PurchaseOrder | null>(null)
   const [supplier, setSupplier] = useState<Supplier | null>(null)
   const [items, setItems] = useState<PurchaseOrderItem[]>([])
@@ -127,6 +128,24 @@ export function PurchaseOrderDetail() {
     load()
   }
 
+  async function handleDelete() {
+    if (!confirm('למחוק את ההזמנה לצמיתות?')) return
+
+    const { error: itemsError } = await supabase.from('purchase_order_items').delete().eq('purchase_order_id', id)
+    if (itemsError) {
+      setError(itemsError.message)
+      return
+    }
+
+    const { error: deleteError } = await supabase.from('purchase_orders').delete().eq('id', id)
+    if (deleteError) {
+      setError(deleteError.message)
+      return
+    }
+
+    navigate('/purchase-orders')
+  }
+
   if (error) return <p className="text-destructive text-center text-sm">{error}</p>
   if (!order || !supplier) return null
 
@@ -180,6 +199,13 @@ export function PurchaseOrderDetail() {
             )}
             <Button variant="destructive" className="flex-1" onClick={() => handleSetStatus('cancelled')}>
               ביטול הזמנה
+            </Button>
+          </CardFooter>
+        )}
+        {order.status === 'cancelled' && (
+          <CardFooter>
+            <Button variant="destructive" className="w-full" onClick={handleDelete}>
+              מחיקת הזמנה
             </Button>
           </CardFooter>
         )}
