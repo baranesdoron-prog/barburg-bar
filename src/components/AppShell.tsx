@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import type { Session } from '@supabase/supabase-js'
 import { Menu, LogOut, X } from 'lucide-react'
@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils'
 
 const PREVIEWABLE_ROLES: AppRole[] = ['bartender', 'shift_manager']
 
-function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarContent({ greetingName, onNavigate }: { greetingName: string | null; onNavigate?: () => void }) {
   const { realRole, effectiveRole, isPreviewing, startPreview, stopPreview } = useImpersonation()
   const navItems = getNavItems(effectiveRole)
 
@@ -27,6 +27,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           <p className="text-muted-foreground text-sm">{roleLabels[effectiveRole]}</p>
         </div>
       </div>
+
+      {greetingName && <p className="text-sm font-medium">שלום, {greetingName}</p>}
 
       <nav className="flex flex-1 flex-col gap-1">
         {navItems.map((item) =>
@@ -127,12 +129,25 @@ function ImpersonationBanner() {
 
 export function AppShell({ appUser, session }: { appUser: AppUser; session: Session }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [employeeName, setEmployeeName] = useState<string | null>(null)
   const { effectiveRole } = useImpersonation()
+
+  useEffect(() => {
+    if (!appUser.employee_id) return
+    supabase
+      .from('employees')
+      .select('full_name')
+      .eq('id', appUser.employee_id)
+      .single()
+      .then(({ data }) => setEmployeeName(data?.full_name ?? null))
+  }, [appUser.employee_id])
+
+  const greetingName = employeeName ?? session.user.email ?? null
 
   return (
     <div className="flex min-h-svh">
       <aside className="hidden w-64 shrink-0 border-e p-4 md:flex print:hidden">
-        <SidebarContent />
+        <SidebarContent greetingName={greetingName} />
       </aside>
 
       {drawerOpen && (
@@ -150,7 +165,7 @@ export function AppShell({ appUser, session }: { appUser: AppUser; session: Sess
             >
               <X className="size-5" />
             </Button>
-            <SidebarContent onNavigate={() => setDrawerOpen(false)} />
+            <SidebarContent greetingName={greetingName} onNavigate={() => setDrawerOpen(false)} />
           </aside>
         </div>
       )}
