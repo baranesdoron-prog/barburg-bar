@@ -323,18 +323,35 @@ function ManagerSummary({ shifts }: { shifts: Shift[] }) {
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
             {upcomingShifts.length === 0 && <p className="text-muted-foreground text-sm">אין משמרות קרובות</p>}
-            {upcomingShifts.map((shift) => (
-              <Link
-                key={shift.id}
-                to={`/shifts/${shift.id}`}
-                className="hover:bg-accent flex flex-col rounded-md border p-2 text-sm transition-colors"
-              >
-                <span className="font-medium">{shiftTypeLabel(shift.shift_type)}</span>
-                <span className="text-muted-foreground">
-                  {formatDateTime(shift.start_time)} – {formatDateTime(shift.end_time)}
-                </span>
-              </Link>
-            ))}
+            {upcomingShifts.map((shift) => {
+              const isFull =
+                shift.required_staff_count !== null && shift.assigned_count >= shift.required_staff_count
+
+              return (
+                <Link
+                  key={shift.id}
+                  to={`/shifts/${shift.id}`}
+                  className="hover:bg-accent flex items-center justify-between gap-2 rounded-md border p-2 text-sm transition-colors"
+                >
+                  <div className="flex flex-col">
+                    <span className="font-medium">{shiftTypeLabel(shift.shift_type)}</span>
+                    <span className="text-muted-foreground">
+                      {formatDateTime(shift.start_time)} – {formatDateTime(shift.end_time)}
+                    </span>
+                  </div>
+                  {shift.required_staff_count !== null && (
+                    <span
+                      className={cn(
+                        'shrink-0 rounded-full px-2 py-1 text-xs font-medium',
+                        isFull ? 'bg-primary text-primary-foreground' : 'bg-destructive text-white',
+                      )}
+                    >
+                      {shift.assigned_count}/{shift.required_staff_count}
+                    </span>
+                  )}
+                </Link>
+              )
+            })}
           </CardContent>
         </Card>
       </div>

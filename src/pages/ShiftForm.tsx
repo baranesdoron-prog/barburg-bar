@@ -62,7 +62,7 @@ export function ShiftForm() {
   const [shiftType, setShiftType] = useState<ShiftType | ''>('')
   const [shiftManagerId, setShiftManagerId] = useState('')
   const [notes, setNotes] = useState('')
-  const [requiredStaffCount, setRequiredStaffCount] = useState('')
+  const [requiredStaffCount, setRequiredStaffCount] = useState('3')
   const [status, setStatus] = useState<ShiftStatus>('draft')
   const [loading, setLoading] = useState(isEdit)
   const [submitting, setSubmitting] = useState(false)
