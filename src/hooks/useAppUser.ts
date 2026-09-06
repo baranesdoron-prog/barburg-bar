@@ -50,7 +50,13 @@ export function useAppUser(): AppUserState {
 
     supabase.auth.getSession().then(({ data }) => loadAppUser(data.session))
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+      // USER_UPDATED fires for any self-service auth.updateUser() call
+      // (e.g. changing your own password from the profile page) -- it
+      // doesn't change role/approval/employee linkage, so there's no need
+      // to drop everything and remount the app while re-fetching app_users.
+      if (event === 'USER_UPDATED') return
+
       setState((prev) => ({ ...prev, loading: true }))
       loadAppUser(session)
     })

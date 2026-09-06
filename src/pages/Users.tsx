@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Eye, EyeOff } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import { roleLabels } from '@/lib/roleLabels'
 import { useRoleEmployeeAssignment, type Employee } from '@/hooks/useRoleEmployeeAssignment'
 import { RoleEmployeeFields } from '@/components/RoleEmployeeFields'
+import { PasswordField } from '@/components/PasswordField'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -136,43 +136,6 @@ export function Users() {
           onEmployeeCreated={handleEmployeeCreated}
         />
       ))}
-    </div>
-  )
-}
-
-function PasswordField({
-  id,
-  value,
-  onChange,
-  autoComplete,
-}: {
-  id: string
-  value: string
-  onChange: (value: string) => void
-  autoComplete: string
-}) {
-  const [visible, setVisible] = useState(false)
-
-  return (
-    <div className="relative">
-      <Input
-        id={id}
-        type={visible ? 'text' : 'password'}
-        autoComplete={autoComplete}
-        required
-        minLength={6}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="pe-9"
-      />
-      <button
-        type="button"
-        onClick={() => setVisible((v) => !v)}
-        className="text-muted-foreground hover:text-foreground absolute inset-y-0 end-0 flex w-9 items-center justify-center"
-        aria-label={visible ? 'הסתרת סיסמה' : 'הצגת סיסמה'}
-      >
-        {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-      </button>
     </div>
   )
 }
