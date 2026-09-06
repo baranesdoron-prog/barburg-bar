@@ -111,10 +111,11 @@ export function SignUp() {
               />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="phone">טלפון (לא חובה)</Label>
+              <Label htmlFor="phone">טלפון</Label>
               <Input
                 id="phone"
                 type="tel"
+                required
                 autoComplete="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}

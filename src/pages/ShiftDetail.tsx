@@ -20,6 +20,7 @@ const ATTENDANCE_ELIGIBLE_STATUSES: EffectiveShiftStatus[] = [
 interface Employee {
   id: string
   full_name: string
+  phone: string | null
 }
 
 const selectClass =
@@ -29,9 +30,10 @@ export function ShiftDetail() {
   const { id } = useParams()
   const { effectiveRole } = useAppUserContext()
   const [shift, setShift] = useState<Shift | null>(null)
-  const [managerName, setManagerName] = useState<string | null>(null)
+  const [manager, setManager] = useState<Employee | null>(null)
   const [assignments, setAssignments] = useState<ShiftAssignment[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
+  const [employeeRoles, setEmployeeRoles] = useState<Map<string, string | null>>(new Map())
   const [pendingRequests, setPendingRequests] = useState<ReplacementRequest[]>([])
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -57,16 +59,25 @@ export function ShiftDetail() {
     const loadedShift = data as Shift
     setShift(loadedShift)
 
-    const [managerRes, employeesRes, assignmentsRes] = await Promise.all([
+    const [managerRes, employeesRes, assignmentsRes, rolesRes] = await Promise.all([
       loadedShift.shift_manager_id
-        ? supabase.from('employees').select('full_name').eq('id', loadedShift.shift_manager_id).single()
+        ? supabase.from('employees').select('id, full_name, phone').eq('id', loadedShift.shift_manager_id).single()
         : Promise.resolve({ data: null }),
-      supabase.from('employees').select('id, full_name').eq('active', true).order('full_name'),
+      supabase.from('employees').select('id, full_name, phone').eq('active', true).order('full_name'),
       supabase.from('shift_assignments').select('*').eq('shift_id', id),
+      supabase.rpc('list_employee_roles'),
     ])
 
-    setManagerName((managerRes.data as { full_name: string } | null)?.full_name ?? null)
+    setManager((managerRes.data as Employee | null) ?? null)
     setEmployees((employeesRes.data as Employee[]) ?? [])
+    setEmployeeRoles(
+      new Map(
+        ((rolesRes.data as { employee_id: string; role: string | null }[]) ?? []).map((r) => [
+          r.employee_id,
+          r.role,
+        ]),
+      ),
+    )
     const loadedAssignments = (assignmentsRes.data as ShiftAssignment[]) ?? []
     setAssignments(loadedAssignments)
 
@@ -190,6 +201,10 @@ export function ShiftDetail() {
   )
   const understaffed =
     shift.required_staff_count !== null && shift.assigned_count < shift.required_staff_count
+  const areaManagerAssignment = assignments.find((a) => employeeRoles.get(a.employee_id) === 'area_manager')
+  const areaManager = areaManagerAssignment
+    ? (employees.find((e) => e.id === areaManagerAssignment.employee_id) ?? null)
+    : null
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
@@ -218,8 +233,14 @@ export function ShiftDetail() {
           </p>
           <p>
             <span className="text-muted-foreground">מנהל/ת בר: </span>
-            {managerName ?? '—'}
+            {manager ? <NameWithPhone employee={manager} /> : '—'}
           </p>
+          {areaManager && (
+            <p>
+              <span className="text-muted-foreground">אחראי/ת מתחם: </span>
+              <NameWithPhone employee={areaManager} />
+            </p>
+          )}
           {shift.required_staff_count !== null && (
             <p>
               <span className="text-muted-foreground">איוש: </span>
@@ -450,5 +471,18 @@ function ReplacementRequestRow({
         </Button>
       </div>
     </div>
+  )
+}
+
+function NameWithPhone({ employee }: { employee: Employee }) {
+  return (
+    <>
+      {employee.full_name}{' '}
+      {employee.phone ? (
+        `(${employee.phone})`
+      ) : (
+        <span className="text-destructive font-bold">(מספר טלפון חסר)</span>
+      )}
+    </>
   )
 }
