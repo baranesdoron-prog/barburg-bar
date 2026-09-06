@@ -62,11 +62,11 @@ function WeekRow({
 
   return (
     <div className="flex flex-col gap-1 rounded-md border p-2 text-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span>{weekLabelFormatter.format(parseDateStr(week))}</span>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="shrink-0">{weekLabelFormatter.format(parseDateStr(week))}</span>
+        <div className="flex min-w-0 items-center gap-2">
           <select
-            className={cn(selectClass, 'w-40', !assignedEmployeeId && 'border-amber-500')}
+            className={cn(selectClass, 'w-32 shrink-0', !assignedEmployeeId && 'border-amber-500')}
             value={selected}
             onChange={(e) => setSelected(e.target.value)}
           >
@@ -77,10 +77,13 @@ function WeekRow({
               </option>
             ))}
           </select>
-          <Button size="sm" disabled={!selected || selected === assignedEmployeeId || saving} onClick={handleApprove}>
+          <Button size="sm" className="shrink-0" disabled={!selected || selected === assignedEmployeeId || saving} onClick={handleApprove}>
             אישור
           </Button>
-          <Link to={`/weekly-checklist?week=${week}`} className="text-muted-foreground text-xs hover:underline">
+          <Link
+            to={`/weekly-checklist?week=${week}`}
+            className="text-muted-foreground shrink-0 text-xs hover:underline"
+          >
             לרשימת המשימות
           </Link>
         </div>
@@ -126,7 +129,7 @@ export function ShiftManagerSchedule() {
   }, [year])
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-4">
+    <div className="mx-auto flex max-w-xl flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">שיבוץ מנהל בר לפי שנה</h1>
         <select className={cn(selectClass, 'w-28')} value={year} onChange={(e) => setYear(Number(e.target.value))}>
