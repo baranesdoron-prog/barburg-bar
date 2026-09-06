@@ -140,13 +140,49 @@ export function Users() {
   )
 }
 
+function PasswordField({
+  id,
+  value,
+  onChange,
+  autoComplete,
+}: {
+  id: string
+  value: string
+  onChange: (value: string) => void
+  autoComplete: string
+}) {
+  const [visible, setVisible] = useState(false)
+
+  return (
+    <div className="relative">
+      <Input
+        id={id}
+        type={visible ? 'text' : 'password'}
+        autoComplete={autoComplete}
+        required
+        minLength={6}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="pe-9"
+      />
+      <button
+        type="button"
+        onClick={() => setVisible((v) => !v)}
+        className="text-muted-foreground hover:text-foreground absolute inset-y-0 end-0 flex w-9 items-center justify-center"
+        aria-label={visible ? 'הסתרת סיסמה' : 'הצגת סיסמה'}
+      >
+        {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+      </button>
+    </div>
+  )
+}
+
 function InviteForm({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [role, setRole] = useState<AppRole | ''>('')
-  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -194,6 +230,7 @@ function InviteForm({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
             <Input
               id="invite-email"
               type="email"
+              autoComplete="off"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -202,25 +239,7 @@ function InviteForm({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="invite-password">סיסמה</Label>
-            <div className="relative">
-              <Input
-                id="invite-password"
-                type={showPassword ? 'text' : 'password'}
-                required
-                minLength={6}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="pe-9"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                className="text-muted-foreground hover:text-foreground absolute inset-y-0 end-0 flex w-9 items-center justify-center"
-                aria-label={showPassword ? 'הסתרת סיסמה' : 'הצגת סיסמה'}
-              >
-                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-              </button>
-            </div>
+            <PasswordField id="invite-password" value={password} onChange={setPassword} autoComplete="new-password" />
             <p className="text-muted-foreground text-xs">
               מנהל/ת המערכת, אנא שלח/י את הסיסמה בהודעת ווטסאפ.
             </p>
@@ -285,6 +304,7 @@ function UserRow({
 }) {
   const [editing, setEditing] = useState(false)
   const [showDelegation, setShowDelegation] = useState(false)
+  const [showChangePassword, setShowChangePassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const assignment = useRoleEmployeeAssignment({ role: user.role, employeeId: user.employee_id })
@@ -428,6 +448,9 @@ function UserRow({
               <Button variant="outline" className="flex-1" onClick={() => setEditing(true)}>
                 עריכת תפקיד
               </Button>
+              <Button variant="outline" className="flex-1" onClick={() => setShowChangePassword((v) => !v)}>
+                שינוי סיסמה
+              </Button>
               {user.status === 'approved' && (
                 <Button variant="outline" className="flex-1" onClick={() => setShowDelegation((v) => !v)}>
                   הרשאה זמנית
@@ -447,6 +470,10 @@ function UserRow({
           )}
         </div>
 
+        {showChangePassword && (
+          <ChangePasswordPanel userId={user.id} onDone={() => setShowChangePassword(false)} />
+        )}
+
         {showDelegation && (
           <DelegationPanel
             idPrefix={user.id}
@@ -457,6 +484,58 @@ function UserRow({
         )}
       </CardContent>
     </Card>
+  )
+}
+
+function ChangePasswordPanel({ userId, onDone }: { userId: string; onDone: () => void }) {
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleSubmit() {
+    setError(null)
+    setSubmitting(true)
+
+    const { error: invokeError } = await supabase.functions.invoke('admin-set-password', {
+      body: { user_id: userId, password },
+    })
+
+    setSubmitting(false)
+
+    if (invokeError) {
+      const body = await invokeError.context?.json?.().catch(() => null)
+      setError(body?.error ?? invokeError.message)
+      return
+    }
+
+    setPassword('')
+    setSuccess(true)
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border p-3">
+      <Label htmlFor={`change-password-${userId}`}>סיסמה חדשה</Label>
+      <PasswordField
+        id={`change-password-${userId}`}
+        value={password}
+        onChange={setPassword}
+        autoComplete="new-password"
+      />
+      <p className="text-muted-foreground text-xs">
+        מנהל/ת המערכת, אנא שלח/י את הסיסמה החדשה בהודעת ווטסאפ.
+      </p>
+      {error && <p className="text-destructive text-sm">{error}</p>}
+      {success && <p className="text-sm text-green-600">הסיסמה עודכנה בהצלחה.</p>}
+      <div className="flex gap-2">
+        <Button className="flex-1" disabled={submitting || password.length < 6} onClick={handleSubmit}>
+          עדכון סיסמה
+        </Button>
+        <Button variant="ghost" className="flex-1" onClick={onDone}>
+          סגירה
+        </Button>
+      </div>
+    </div>
   )
 }
 
