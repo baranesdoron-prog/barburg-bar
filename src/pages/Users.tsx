@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Eye, EyeOff } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import { roleLabels } from '@/lib/roleLabels'
@@ -145,6 +146,7 @@ function InviteForm({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [role, setRole] = useState<AppRole | ''>('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -200,14 +202,25 @@ function InviteForm({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="invite-password">סיסמה</Label>
-            <Input
-              id="invite-password"
-              type="password"
-              required
-              minLength={6}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <div className="relative">
+              <Input
+                id="invite-password"
+                type={showPassword ? 'text' : 'password'}
+                required
+                minLength={6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="pe-9"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="text-muted-foreground hover:text-foreground absolute inset-y-0 end-0 flex w-9 items-center justify-center"
+                aria-label={showPassword ? 'הסתרת סיסמה' : 'הצגת סיסמה'}
+              >
+                {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </div>
             <p className="text-muted-foreground text-xs">
               מנהל/ת המערכת, אנא שלח/י את הסיסמה בהודעת ווטסאפ.
             </p>
