@@ -43,13 +43,14 @@ export function getNavItems(role: AppRole): NavItem[] {
           { to: '/shifts', label: 'רשימת משמרות', icon: CalendarClock },
           { to: '/admin/shift-manager-schedule', label: 'שיבוצים', icon: CalendarRange },
           { to: '/reports', label: 'דוח סגירת משמרות', icon: FileText },
+          { to: '/weekly-checklist', label: 'רשימת משימות שבועית', icon: CheckSquare },
         ],
       })
     } else {
       items.push({ to: '/shifts', label: 'משמרות', icon: CalendarClock })
       items.push({ to: '/reports', label: 'דוח סגירת משמרות', icon: FileText })
+      items.push({ to: '/weekly-checklist', label: 'רשימת משימות שבועית', icon: CheckSquare })
     }
-    items.push({ to: '/weekly-checklist', label: 'רשימת משימות שבועית', icon: CheckSquare })
   }
 
   if (ROLES_REQUIRING_EMPLOYEE.includes(role)) {

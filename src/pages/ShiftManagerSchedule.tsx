@@ -9,8 +9,10 @@ import {
   EARLIEST_WEEK_START,
   weekLabelFormatter,
   YEAR_OPTIONS,
+  currentMonthWeekRange,
 } from '@/lib/weeklyChecklist'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { ShiftManagerAssignment } from '@/lib/types'
@@ -197,14 +199,17 @@ function WeekRow({
 
 export function ShiftManagerSchedule() {
   const [year, setYear] = useState(currentYear)
+  const [currentMonthOnly, setCurrentMonthOnly] = useState(true)
   const [shiftManagers, setShiftManagers] = useState<Employee[]>([])
   const [areaManagers, setAreaManagers] = useState<Employee[]>([])
   const [bartenderEligible, setBartenderEligible] = useState<Employee[]>([])
   const [assignments, setAssignments] = useState<Map<string, ShiftManagerAssignment>>(new Map())
 
+  const monthRange = currentMonthWeekRange()
   const weeks = sundaysInYear(year)
     .map(toDateStr)
     .filter((w) => w >= EARLIEST_WEEK_START)
+    .filter((w) => !currentMonthOnly || (w >= monthRange.start && w < monthRange.end))
 
   async function load() {
     if (weeks.length === 0) {
@@ -248,12 +253,12 @@ export function ShiftManagerSchedule() {
   useEffect(() => {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year])
+  }, [year, currentMonthOnly])
 
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">שיבוץ מנהל בר לפי שנה</h1>
+        <h1 className="text-xl font-semibold">שיבוצים</h1>
         <select className={cn(selectClass, 'w-28')} value={year} onChange={(e) => setYear(Number(e.target.value))}>
           {YEAR_OPTIONS.map((y) => (
             <option key={y} value={y}>
@@ -262,6 +267,15 @@ export function ShiftManagerSchedule() {
           ))}
         </select>
       </div>
+
+      <Button
+        variant={currentMonthOnly ? 'default' : 'outline'}
+        size="sm"
+        className="self-start"
+        onClick={() => setCurrentMonthOnly((v) => !v)}
+      >
+        החודש הנוכחי בלבד
+      </Button>
 
       <Card>
         <CardHeader>
