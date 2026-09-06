@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
 import {
@@ -11,14 +10,14 @@ import {
   YEAR_OPTIONS,
 } from '@/lib/weeklyChecklist'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { ShiftManagerAssignment } from '@/lib/types'
 
 const selectClass =
   'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
 
-interface ShiftManagerEmployee {
+interface Employee {
   id: string
   full_name: string
 }
@@ -27,67 +26,116 @@ const currentYear = new Date().getFullYear()
 
 function WeekRow({
   week,
-  assignedEmployeeId,
-  employees,
-  onAssigned,
+  assignment,
+  shiftManagers,
+  areaManagers,
+  bartenderEligible,
+  onSaved,
 }: {
   week: string
-  assignedEmployeeId: string
-  employees: ShiftManagerEmployee[]
-  onAssigned: () => void
+  assignment: ShiftManagerAssignment | undefined
+  shiftManagers: Employee[]
+  areaManagers: Employee[]
+  bartenderEligible: Employee[]
+  onSaved: () => void
 }) {
-  const [selected, setSelected] = useState(assignedEmployeeId)
-  const [saving, setSaving] = useState(false)
+  const [shiftManagerId, setShiftManagerId] = useState(assignment?.employee_id ?? '')
+  const [areaManagerId, setAreaManagerId] = useState(assignment?.area_manager_id ?? '')
+  const [bartenderIds, setBartenderIds] = useState<string[]>(assignment?.bartender_ids ?? [])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    setSelected(assignedEmployeeId)
-  }, [assignedEmployeeId])
+    setShiftManagerId(assignment?.employee_id ?? '')
+    setAreaManagerId(assignment?.area_manager_id ?? '')
+    setBartenderIds(assignment?.bartender_ids ?? [])
+  }, [assignment])
 
-  async function handleApprove() {
-    if (!selected) return
-    setSaving(true)
+  async function save(next: { shiftManagerId: string; areaManagerId: string; bartenderIds: string[] }) {
     setError(null)
-    const { error: assignError } = await supabase.rpc('set_weekly_shift_manager', {
+    const { error: saveError } = await supabase.rpc('set_weekly_team', {
       p_week_start: week,
-      p_employee_id: selected,
+      p_shift_manager_id: next.shiftManagerId || null,
+      p_area_manager_id: next.areaManagerId || null,
+      p_bartender_ids: next.bartenderIds.length > 0 ? next.bartenderIds : null,
     })
-    setSaving(false)
-    if (assignError) {
-      setError(assignError.message)
+
+    if (saveError) {
+      setError(saveError.message)
       return
     }
-    onAssigned()
+
+    onSaved()
+  }
+
+  function handleShiftManagerChange(value: string) {
+    setShiftManagerId(value)
+    save({ shiftManagerId: value, areaManagerId, bartenderIds })
+  }
+
+  function handleAreaManagerChange(value: string) {
+    setAreaManagerId(value)
+    save({ shiftManagerId, areaManagerId: value, bartenderIds })
+  }
+
+  function handleBartenderToggle(employeeId: string, checked: boolean) {
+    const next = checked ? [...bartenderIds, employeeId] : bartenderIds.filter((id) => id !== employeeId)
+    setBartenderIds(next)
+    save({ shiftManagerId, areaManagerId, bartenderIds: next })
   }
 
   return (
-    <div className="flex flex-col gap-1 rounded-md border p-2 text-sm">
-      <div className="flex items-center justify-between gap-2">
-        <span className="shrink-0">{weekLabelFormatter.format(parseDateStr(week))}</span>
-        <div className="flex min-w-0 items-center gap-2">
-          <select
-            className={cn(selectClass, 'w-32 shrink-0', !assignedEmployeeId && 'border-amber-500')}
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
-          >
-            <option value="">— לא שובץ —</option>
-            {employees.map((emp) => (
-              <option key={emp.id} value={emp.id}>
+    <div className="flex flex-col gap-3 rounded-md border p-3 text-sm">
+      <span className="font-medium">{weekLabelFormatter.format(parseDateStr(week))}</span>
+
+      <div className="flex flex-col gap-1">
+        <Label className="text-muted-foreground text-xs">מנהל/ת בר</Label>
+        <select
+          className={cn(selectClass, !shiftManagerId && 'border-amber-500')}
+          value={shiftManagerId}
+          onChange={(e) => handleShiftManagerChange(e.target.value)}
+        >
+          <option value="">— לא שובץ —</option>
+          {shiftManagers.map((emp) => (
+            <option key={emp.id} value={emp.id}>
+              {emp.full_name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <Label className="text-muted-foreground text-xs">אחראי/ת מתחם</Label>
+        <select className={selectClass} value={areaManagerId} onChange={(e) => handleAreaManagerChange(e.target.value)}>
+          <option value="">— לא שובץ —</option>
+          {areaManagers.map((emp) => (
+            <option key={emp.id} value={emp.id}>
+              {emp.full_name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <Label className="text-muted-foreground text-xs">ברמנים/יות (עד 3)</Label>
+        <div className="flex flex-col gap-1">
+          {bartenderEligible.map((emp) => {
+            const checked = bartenderIds.includes(emp.id)
+            const disabled = !checked && bartenderIds.length >= 3
+            return (
+              <label key={emp.id} className={cn('flex items-center gap-2', disabled && 'text-muted-foreground')}>
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={disabled}
+                  onChange={(e) => handleBartenderToggle(emp.id, e.target.checked)}
+                />
                 {emp.full_name}
-              </option>
-            ))}
-          </select>
-          <Button size="sm" className="shrink-0" disabled={!selected || selected === assignedEmployeeId || saving} onClick={handleApprove}>
-            אישור
-          </Button>
-          <Link
-            to={`/weekly-checklist?week=${week}`}
-            className="text-muted-foreground shrink-0 text-xs hover:underline"
-          >
-            לרשימת המשימות
-          </Link>
+              </label>
+            )
+          })}
         </div>
       </div>
+
       {error && <p className="text-destructive text-xs">{error}</p>}
     </div>
   )
@@ -95,8 +143,10 @@ function WeekRow({
 
 export function ShiftManagerSchedule() {
   const [year, setYear] = useState(currentYear)
-  const [employees, setEmployees] = useState<ShiftManagerEmployee[]>([])
-  const [assignments, setAssignments] = useState<Map<string, string>>(new Map())
+  const [shiftManagers, setShiftManagers] = useState<Employee[]>([])
+  const [areaManagers, setAreaManagers] = useState<Employee[]>([])
+  const [bartenderEligible, setBartenderEligible] = useState<Employee[]>([])
+  const [assignments, setAssignments] = useState<Map<string, ShiftManagerAssignment>>(new Map())
 
   const weeks = sundaysInYear(year)
     .map(toDateStr)
@@ -104,22 +154,40 @@ export function ShiftManagerSchedule() {
 
   async function load() {
     if (weeks.length === 0) {
-      setEmployees([])
+      setShiftManagers([])
+      setAreaManagers([])
+      setBartenderEligible([])
       setAssignments(new Map())
       return
     }
 
-    const [employeesRes, assignmentsRes] = await Promise.all([
+    const [shiftManagersRes, rolesRes, employeesRes, assignmentsRes] = await Promise.all([
       supabase.rpc('list_shift_manager_employees'),
+      supabase.rpc('list_employee_roles'),
+      supabase.from('employees').select('id, full_name').eq('active', true).order('full_name'),
       supabase
         .from('shift_manager_assignments')
         .select('*')
         .gte('week_start', weeks[0])
         .lte('week_start', weeks[weeks.length - 1]),
     ])
-    setEmployees((employeesRes.data as ShiftManagerEmployee[]) ?? [])
+
+    setShiftManagers((shiftManagersRes.data as Employee[]) ?? [])
+
+    const roleByEmployeeId = new Map(
+      ((rolesRes.data as { employee_id: string; role: string | null }[]) ?? []).map((r) => [r.employee_id, r.role]),
+    )
+    const activeEmployees = (employeesRes.data as Employee[]) ?? []
+    setAreaManagers(activeEmployees.filter((e) => roleByEmployeeId.get(e.id) === 'area_manager'))
+    setBartenderEligible(
+      activeEmployees.filter((e) => {
+        const role = roleByEmployeeId.get(e.id)
+        return role !== undefined && role !== 'area_manager'
+      }),
+    )
+
     setAssignments(
-      new Map(((assignmentsRes.data as ShiftManagerAssignment[]) ?? []).map((a) => [a.week_start, a.employee_id])),
+      new Map(((assignmentsRes.data as ShiftManagerAssignment[]) ?? []).map((a) => [a.week_start, a])),
     )
   }
 
@@ -151,9 +219,11 @@ export function ShiftManagerSchedule() {
             <WeekRow
               key={week}
               week={week}
-              assignedEmployeeId={assignments.get(week) ?? ''}
-              employees={employees}
-              onAssigned={load}
+              assignment={assignments.get(week)}
+              shiftManagers={shiftManagers}
+              areaManagers={areaManagers}
+              bartenderEligible={bartenderEligible}
+              onSaved={load}
             />
           ))}
         </CardContent>

@@ -41,7 +41,7 @@ export function getNavItems(role: AppRole): NavItem[] {
         icon: CalendarClock,
         children: [
           { to: '/shifts', label: 'רשימת משמרות', icon: CalendarClock },
-          { to: '/admin/shift-manager-schedule', label: 'שיבוץ מנהל בר', icon: CalendarRange },
+          { to: '/admin/shift-manager-schedule', label: 'שיבוצים', icon: CalendarRange },
           { to: '/reports', label: 'דוח סגירת משמרות', icon: FileText },
         ],
       })
