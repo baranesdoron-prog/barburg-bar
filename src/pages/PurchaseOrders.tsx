@@ -51,15 +51,13 @@ export function PurchaseOrders() {
 
     setError(null)
     setCreating(true)
-    const { data, error: insertError } = await supabase
-      .from('purchase_orders')
-      .insert({ supplier_id: newSupplierId })
-      .select('id')
-      .single()
+    const { data, error: rpcError } = await supabase.rpc('create_purchase_order_with_reorder_items', {
+      p_supplier_id: newSupplierId,
+    })
     setCreating(false)
 
-    if (insertError) {
-      setError(insertError.message)
+    if (rpcError) {
+      setError(rpcError.message)
       return
     }
 

@@ -23,6 +23,7 @@ export function PurchaseOrderDetail() {
   const [newQuantity, setNewQuantity] = useState('')
   const [newUnitPrice, setNewUnitPrice] = useState('')
   const [updateCatalogPrice, setUpdateCatalogPrice] = useState(false)
+  const [quantities, setQuantities] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -47,9 +48,11 @@ export function PurchaseOrderDetail() {
       supabase.from('inventory_items').select('*').eq('active', true).order('name'),
     ])
 
+    const loadedItems = (itemsRes.data as PurchaseOrderItem[]) ?? []
     setSupplier(supplierRes.data as Supplier)
-    setItems((itemsRes.data as PurchaseOrderItem[]) ?? [])
+    setItems(loadedItems)
     setCatalog((catalogRes.data as InventoryItem[]) ?? [])
+    setQuantities(Object.fromEntries(loadedItems.map((item) => [item.id, String(item.quantity)])))
   }
 
   useEffect(() => {
@@ -109,6 +112,28 @@ export function PurchaseOrderDetail() {
 
   async function handleRemoveItem(itemId: string) {
     await supabase.from('purchase_order_items').delete().eq('id', itemId)
+    load()
+  }
+
+  async function handleUpdateQuantity(item: PurchaseOrderItem) {
+    const raw = quantities[item.id]
+    const quantity = Number(raw)
+
+    if (!raw || Number.isNaN(quantity) || quantity <= 0 || quantity === item.quantity) {
+      setQuantities((prev) => ({ ...prev, [item.id]: String(item.quantity) }))
+      return
+    }
+
+    const { error: updateError } = await supabase
+      .from('purchase_order_items')
+      .update({ quantity })
+      .eq('id', item.id)
+
+    if (updateError) {
+      setError(updateError.message)
+      return
+    }
+
     load()
   }
 
@@ -220,16 +245,28 @@ export function PurchaseOrderDetail() {
           {items.map((item) => {
             const catalogItem = catalogNames.get(item.inventory_item_id)
             return (
-              <div key={item.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
-                <span>
-                  {catalogItem?.name ?? '—'} — {item.quantity}
-                  {catalogItem?.unit && ` ${catalogItem.unit}`}
-                  {item.unit_price !== null && ` × ₪${item.unit_price}`}
+              <div key={item.id} className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
+                <span className="flex-1">
+                  {catalogItem?.name ?? '—'}
+                  {catalogItem?.unit && ` (${catalogItem.unit})`}
+                  {item.unit_price !== null && ` — × ₪${item.unit_price}`}
                 </span>
-                {isDraft && (
-                  <Button variant="ghost" size="sm" onClick={() => handleRemoveItem(item.id)}>
-                    הסרה
-                  </Button>
+                {isDraft ? (
+                  <>
+                    <Input
+                      type="number"
+                      min={1}
+                      className="w-20"
+                      value={quantities[item.id] ?? ''}
+                      onChange={(e) => setQuantities((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                      onBlur={() => handleUpdateQuantity(item)}
+                    />
+                    <Button variant="ghost" size="sm" onClick={() => handleRemoveItem(item.id)}>
+                      הסרה
+                    </Button>
+                  </>
+                ) : (
+                  <span>{item.quantity}</span>
                 )}
               </div>
             )

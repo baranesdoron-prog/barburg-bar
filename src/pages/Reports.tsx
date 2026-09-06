@@ -35,7 +35,7 @@ export function Reports() {
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
-      <h1 className="text-xl font-semibold">דוחות</h1>
+      <h1 className="text-xl font-semibold">דוח סגירת משמרות</h1>
 
       <Card>
         <CardContent className="flex flex-col gap-3 pt-6">

@@ -42,12 +42,13 @@ export function getNavItems(role: AppRole): NavItem[] {
         children: [
           { to: '/shifts', label: 'רשימת משמרות', icon: CalendarClock },
           { to: '/admin/shift-manager-schedule', label: 'שיבוץ מנהל בר', icon: CalendarRange },
+          { to: '/reports', label: 'דוח סגירת משמרות', icon: FileText },
         ],
       })
     } else {
       items.push({ to: '/shifts', label: 'משמרות', icon: CalendarClock })
+      items.push({ to: '/reports', label: 'דוח סגירת משמרות', icon: FileText })
     }
-    items.push({ to: '/reports', label: 'דוחות', icon: FileText })
     items.push({ to: '/weekly-checklist', label: 'רשימת משימות שבועית', icon: CheckSquare })
   }
 
