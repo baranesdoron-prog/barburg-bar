@@ -21,6 +21,7 @@ interface Employee {
   id: string
   full_name: string
   phone: string | null
+  active: boolean
 }
 
 const selectClass =
@@ -61,9 +62,9 @@ export function ShiftDetail() {
 
     const [managerRes, employeesRes, assignmentsRes, rolesRes] = await Promise.all([
       loadedShift.shift_manager_id
-        ? supabase.from('employees').select('id, full_name, phone').eq('id', loadedShift.shift_manager_id).single()
+        ? supabase.from('employees').select('id, full_name, phone, active').eq('id', loadedShift.shift_manager_id).single()
         : Promise.resolve({ data: null }),
-      supabase.from('employees').select('id, full_name, phone').eq('active', true).order('full_name'),
+      supabase.from('employees').select('id, full_name, phone, active').order('full_name'),
       supabase.from('shift_assignments').select('*').eq('shift_id', id),
       supabase.rpc('list_employee_roles'),
     ])
@@ -197,7 +198,7 @@ export function ShiftDetail() {
   const canManageShift = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
   const canManageStaffing = ROLES_VIEWING_SHIFTS.includes(effectiveRole)
   const availableEmployees = employees.filter(
-    (e) => !assignments.some((a) => a.employee_id === e.id),
+    (e) => e.active && !assignments.some((a) => a.employee_id === e.id),
   )
   const understaffed =
     shift.required_staff_count !== null && shift.assigned_count < shift.required_staff_count
@@ -335,14 +336,17 @@ export function ShiftDetail() {
             {assignments.length === 0 && (
               <p className="text-muted-foreground text-sm">אין עדיין עובדים משובצים.</p>
             )}
-            {assignments.map((a) => (
-              <div key={a.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
-                <span>{employeeNames.get(a.employee_id) ?? '—'}</span>
-                <Button variant="ghost" size="sm" onClick={() => handleRemoveAssignment(a.id)}>
-                  הסרה
-                </Button>
-              </div>
-            ))}
+            {assignments.map((a) => {
+              const staffer = employees.find((e) => e.id === a.employee_id)
+              return (
+                <div key={a.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
+                  <span>{staffer ? <NameWithPhone employee={staffer} /> : '—'}</span>
+                  <Button variant="ghost" size="sm" onClick={() => handleRemoveAssignment(a.id)}>
+                    הסרה
+                  </Button>
+                </div>
+              )
+            })}
             {shift.status !== 'cancelled' && (
               <div className="flex gap-2 pt-2">
                 <select
