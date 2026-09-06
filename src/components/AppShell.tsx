@@ -42,6 +42,7 @@ function SidebarContent({ greetingName, onNavigate }: { greetingName: string | n
                 <NavLink
                   key={child.to}
                   to={child.to!}
+                  end
                   onClick={onNavigate}
                   className={({ isActive }) =>
                     cn(
