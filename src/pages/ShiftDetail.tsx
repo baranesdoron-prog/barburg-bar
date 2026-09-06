@@ -236,12 +236,10 @@ export function ShiftDetail() {
             <span className="text-muted-foreground">מנהל/ת בר: </span>
             {manager ? <NameWithPhone employee={manager} /> : '—'}
           </p>
-          {areaManager && (
-            <p>
-              <span className="text-muted-foreground">אחראי/ת מתחם: </span>
-              <NameWithPhone employee={areaManager} />
-            </p>
-          )}
+          <p>
+            <span className="text-muted-foreground">אחראי/ת מתחם: </span>
+            {areaManager ? <NameWithPhone employee={areaManager} /> : '—'}
+          </p>
           {shift.required_staff_count !== null && (
             <p>
               <span className="text-muted-foreground">איוש: </span>
