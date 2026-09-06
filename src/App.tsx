@@ -14,7 +14,7 @@ import { ForgotPassword } from '@/pages/ForgotPassword'
 import { ResetPassword } from '@/pages/ResetPassword'
 import { PendingApproval } from '@/pages/PendingApproval'
 import { Dashboard } from '@/pages/Dashboard'
-import { MyShifts } from '@/pages/MyShifts'
+import { MyShifts, MyAssignedShifts } from '@/pages/MyShifts'
 import { Profile } from '@/pages/Profile'
 import { AdminApprovals } from '@/pages/AdminApprovals'
 import { Shifts, ShiftsArchive } from '@/pages/Shifts'
@@ -82,6 +82,7 @@ export function App() {
         <Route path="/procedures" element={<Procedures />} />
         <Route element={<RequireRole roles={ROLES_REQUIRING_EMPLOYEE} />}>
           <Route path="/my-shifts" element={<MyShifts />} />
+          <Route path="/my-shifts/assigned" element={<MyAssignedShifts />} />
         </Route>
         <Route element={<RequireRole roles={ROLES_VIEWING_SHIFTS} />}>
           <Route path="/shifts" element={<Shifts />} />

@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
   Calendar,
+  CalendarCheck,
   CalendarClock,
   CheckSquare,
   Package,
@@ -53,7 +54,16 @@ export function getNavItems(role: AppRole): NavItem[] {
     }
   }
 
-  if (ROLES_REQUIRING_EMPLOYEE.includes(role)) {
+  if (role === 'bartender') {
+    items.push({
+      label: 'משמרות',
+      icon: CalendarClock,
+      children: [
+        { to: '/my-shifts', label: 'שיבוצי משמרת', icon: Calendar },
+        { to: '/my-shifts/assigned', label: 'המשמרות שלי', icon: CalendarCheck },
+      ],
+    })
+  } else if (ROLES_REQUIRING_EMPLOYEE.includes(role)) {
     items.push({ to: '/my-shifts', label: 'המשמרות שלי', icon: Calendar })
   }
 

@@ -38,6 +38,14 @@ interface WeekShifts {
 }
 
 export function MyShifts() {
+  return <MyShiftsView assignedOnly={false} />
+}
+
+export function MyAssignedShifts() {
+  return <MyShiftsView assignedOnly />
+}
+
+function MyShiftsView({ assignedOnly }: { assignedOnly: boolean }) {
   const { appUser } = useAppUserContext()
   const [shiftsByWeek, setShiftsByWeek] = useState<Map<string, WeekShifts> | null>(null)
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -128,12 +136,28 @@ export function MyShifts() {
 
   if (shiftsByWeek === null) return null
 
-  const weeks = [...shiftsByWeek.keys()].sort()
+  const pageTitle = assignedOnly ? 'המשמרות שלי' : 'שיבוצי משמרת'
+
+  const visibleShiftsByWeek = assignedOnly
+    ? new Map(
+        [...shiftsByWeek.entries()]
+          .map(([week, weekShifts]): [string, WeekShifts] => [
+            week,
+            {
+              opening: weekShifts.opening?.ownAssignment ? weekShifts.opening : undefined,
+              closing: weekShifts.closing?.ownAssignment ? weekShifts.closing : undefined,
+            },
+          ])
+          .filter(([, weekShifts]) => weekShifts.opening || weekShifts.closing),
+      )
+    : shiftsByWeek
+
+  const weeks = [...visibleShiftsByWeek.keys()].sort()
 
   if (!appUser.employee_id) {
     return (
       <div className="mx-auto flex max-w-md flex-col gap-4">
-        <h1 className="text-xl font-semibold">משמרות קרובות</h1>
+        <h1 className="text-xl font-semibold">{pageTitle}</h1>
         <p className="text-muted-foreground text-sm">
           תצוגה זו זמינה רק למשתמש/ת המשויכ/ת לעובד/ת. אם זו תצוגה מקדימה של תפקיד ברמן/ית, פעולות כמו הצטרפות למשמרת
           אינן זמינות בתצוגה מקדימה.
@@ -144,7 +168,7 @@ export function MyShifts() {
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
-      <h1 className="text-xl font-semibold">משמרות קרובות</h1>
+      <h1 className="text-xl font-semibold">{pageTitle}</h1>
 
       <Card>
         <CardHeader>
@@ -152,14 +176,16 @@ export function MyShifts() {
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {weeks.length === 0 && (
-            <p className="text-muted-foreground text-sm">אין משמרות פתוחות כרגע.</p>
+            <p className="text-muted-foreground text-sm">
+              {assignedOnly ? 'אינך משובצ/ת לאף משמרת קרובה.' : 'אין משמרות פתוחות כרגע.'}
+            </p>
           )}
 
           {weeks.map((week) => (
             <WeekRow
               key={week}
               week={week}
-              weekShifts={shiftsByWeek.get(week)!}
+              weekShifts={visibleShiftsByWeek.get(week)!}
               employees={employees}
               currentWeekStart={currentWeekStart}
               employeeId={appUser.employee_id!}
