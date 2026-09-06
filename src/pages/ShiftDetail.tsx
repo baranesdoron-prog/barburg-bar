@@ -198,10 +198,7 @@ export function ShiftDetail() {
   const canManageShift = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
   const canManageStaffing = ROLES_VIEWING_SHIFTS.includes(effectiveRole)
   const availableEmployees = employees.filter(
-    (e) =>
-      e.active &&
-      !assignments.some((a) => a.employee_id === e.id) &&
-      (employeeRoles.get(e.id) === 'bartender' || employeeRoles.get(e.id) === 'shift_manager'),
+    (e) => e.active && !assignments.some((a) => a.employee_id === e.id),
   )
   const understaffed =
     shift.required_staff_count !== null && shift.assigned_count < shift.required_staff_count
