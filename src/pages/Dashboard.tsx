@@ -8,11 +8,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { roleLabels, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
 import { purchaseOrderStatusBadgeClass, purchaseOrderStatusLabels } from '@/lib/purchaseOrderLabels'
 import { useAppUserContext } from '@/lib/outletContext'
-import { effectiveStatusLabels, shiftTypeLabel } from '@/lib/shiftLabels'
+import { shiftTypeLabel } from '@/lib/shiftLabels'
 import { cn, formatDate, formatDateTime, formatTime } from '@/lib/utils'
 import { activeWeekStart, addDays, parseDateStr, toDateStr } from '@/lib/weeklyChecklist'
 import type {
-  EffectiveShiftStatus,
   PurchaseOrder,
   PurchaseOrderItem,
   ReplacementRequest,
@@ -628,13 +627,6 @@ function ManagerDashboard() {
 
   if (!shifts) return null
 
-  const byStatus = (status: EffectiveShiftStatus) => shifts.filter((s) => s.effective_status === status)
-  const understaffed = shifts.filter(
-    (s) =>
-      (s.effective_status === 'published' || s.effective_status === 'active') &&
-      s.required_staff_count !== null &&
-      s.assigned_count < s.required_staff_count,
-  )
   const canManage = effectiveRole === 'administrator'
 
   return (
@@ -659,8 +651,6 @@ function ManagerDashboard() {
 
       {canManage && <ManagerSummary shifts={shifts} />}
 
-      <ShiftSection title={effectiveStatusLabels.active} shifts={byStatus('active')} />
-      <ShiftSection title="משמרות בתת-איוש" shifts={understaffed} />
       <ShiftSection title="בקשות החלפה ממתינות" shifts={pendingRequestShifts} />
     </div>
   )
