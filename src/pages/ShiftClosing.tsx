@@ -10,7 +10,7 @@ import { useAppUserContext } from '@/lib/outletContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import type { AttendanceRecord, InventoryItem, JournalCategory, JournalEntry, Shift } from '@/lib/types'
+import type { AttendanceRecord, InventoryItem, JournalCategory, JournalEntry, ProductCategory, Shift } from '@/lib/types'
 
 const selectClass =
   'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
@@ -207,6 +207,7 @@ function JournalSection({ shiftId, onSaved }: { shiftId: string; onSaved: () => 
 
 function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () => void }) {
   const [items, setItems] = useState<InventoryItem[]>([])
+  const [categories, setCategories] = useState<ProductCategory[]>([])
   const [quantities, setQuantities] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -214,12 +215,14 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
 
   useEffect(() => {
     async function load() {
-      const [itemsRes, countsRes] = await Promise.all([
+      const [itemsRes, countsRes, categoriesRes] = await Promise.all([
         supabase.from('inventory_items').select('*').eq('active', true).order('name'),
         supabase.from('inventory_counts').select('*').eq('shift_id', shiftId),
+        supabase.from('product_categories').select('*').order('sort_order'),
       ])
 
       setItems((itemsRes.data as InventoryItem[]) ?? [])
+      setCategories((categoriesRes.data as ProductCategory[]) ?? [])
 
       const initial: Record<string, string> = {}
       for (const count of countsRes.data ?? []) {
@@ -259,6 +262,16 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
     onSaved()
   }
 
+  const categorySortOrder = new Map(categories.map((c) => [c.id, c.sort_order]))
+  const sortedItems = items
+    .map((item) => ({ item, categoryName: categories.find((c) => c.id === item.category_id)?.name }))
+    .sort((a, b) => {
+      const orderA = a.item.category_id ? (categorySortOrder.get(a.item.category_id) ?? Infinity) : Infinity
+      const orderB = b.item.category_id ? (categorySortOrder.get(b.item.category_id) ?? Infinity) : Infinity
+      if (orderA !== orderB) return orderA - orderB
+      return a.item.name.localeCompare(b.item.name)
+    })
+
   return (
     <Card>
       <CardHeader>
@@ -270,18 +283,25 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
             אין פריטי מלאי מוגדרים. ניתן להוסיף בעמוד "פריטי מלאי".
           </p>
         )}
-        {items.map((item) => (
-          <div key={item.id} className="flex items-center gap-2">
-            <span className="flex-1 text-sm">
-              {item.name}
-              {item.unit && <span className="text-muted-foreground"> ({item.unit})</span>}
-            </span>
-            <Input
-              type="number"
-              className="w-24"
-              value={quantities[item.id] ?? ''}
-              onChange={(e) => setQuantities((prev) => ({ ...prev, [item.id]: e.target.value }))}
-            />
+        {sortedItems.map(({ item, categoryName }, index) => (
+          <div key={item.id}>
+            {categoryName !== sortedItems[index - 1]?.categoryName && (
+              <p className="text-muted-foreground mt-2 text-xs font-semibold first:mt-0">
+                {categoryName ?? 'ללא קטגוריה'}
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="flex-1 text-sm">
+                {item.name}
+                {item.unit && <span className="text-muted-foreground"> ({item.unit})</span>}
+              </span>
+              <Input
+                type="number"
+                className="w-24"
+                value={quantities[item.id] ?? ''}
+                onChange={(e) => setQuantities((prev) => ({ ...prev, [item.id]: e.target.value }))}
+              />
+            </div>
           </div>
         ))}
         {error && <p className="text-destructive text-sm">{error}</p>}

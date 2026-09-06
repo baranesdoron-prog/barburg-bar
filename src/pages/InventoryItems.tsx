@@ -177,6 +177,16 @@ export function InventoryItems() {
 
   if (items === null) return null
 
+  const categorySortOrder = new Map(categories.map((c) => [c.id, c.sort_order]))
+  const sortedItems = items
+    .map((item) => ({ item, categoryName: categories.find((c) => c.id === item.category_id)?.name }))
+    .sort((a, b) => {
+      const orderA = a.item.category_id ? (categorySortOrder.get(a.item.category_id) ?? Infinity) : Infinity
+      const orderB = b.item.category_id ? (categorySortOrder.get(b.item.category_id) ?? Infinity) : Infinity
+      if (orderA !== orderB) return orderA - orderB
+      return a.item.name.localeCompare(b.item.name)
+    })
+
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
       <h1 className="text-xl font-semibold">פריטי מלאי</h1>
@@ -221,41 +231,48 @@ export function InventoryItems() {
       <Card>
         <CardContent className="flex flex-col gap-2 pt-6">
           {items.length === 0 && <p className="text-muted-foreground text-sm">לא נמצאו פריטים.</p>}
-          {items.map((item) => {
+          {sortedItems.map(({ item, categoryName }, index) => {
             const supplierName = suppliers.find((s) => s.id === item.supplier_id)?.name
-            const categoryName = categories.find((c) => c.id === item.category_id)?.name
             const isLowStock = item.is_low_stock
+            const showCategoryHeader = categoryName !== sortedItems[index - 1]?.categoryName
 
             return (
-              <div key={item.id} className="flex items-start gap-3 rounded-md border p-2 text-sm">
-                {item.image_url && (
-                  <img src={item.image_url} alt={item.name} className="size-12 shrink-0 rounded-md object-cover" />
+              <div key={item.id}>
+                {showCategoryHeader && (
+                  <p className="text-muted-foreground mt-2 text-xs font-semibold first:mt-0">
+                    {categoryName ?? 'ללא קטגוריה'}
+                  </p>
                 )}
-                <div className="flex-1">
-                  <p className={item.active ? 'font-medium' : 'text-muted-foreground font-medium line-through'}>
-                    {item.name}
-                    {item.unit && <span className="text-muted-foreground"> ({item.unit})</span>}
-                  </p>
-                  <p className="text-muted-foreground text-xs">
-                    {[categoryName, item.vendor, supplierName, item.sku].filter(Boolean).join(' · ')}
-                  </p>
-                  <p className="text-muted-foreground text-xs">
-                    {item.unit_type === 'box' ? `קופסה (${item.units_per_box} יח')` : 'בודד'}
-                    {item.unit_price !== null && ` · ₪${item.unit_price}`}
-                  </p>
-                  <p className={isLowStock ? 'text-destructive text-xs font-medium' : 'text-muted-foreground text-xs'}>
-                    מלאי נוכחי: {item.current_stock}
-                    {item.minimum_quantity !== null && ` (מינימום ${item.minimum_quantity})`}
-                    {isLowStock && ' — מלאי נמוך'}
-                  </p>
-                </div>
-                <div className="flex flex-col gap-1">
-                  <Button asChild variant="ghost" size="sm">
-                    <Link to={`/inventory/items/${item.id}/edit`}>עריכה</Link>
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => handleToggleActive(item)}>
-                    {item.active ? 'השבתה' : 'הפעלה'}
-                  </Button>
+                <div className="flex items-start gap-3 rounded-md border p-2 text-sm">
+                  {item.image_url && (
+                    <img src={item.image_url} alt={item.name} className="size-12 shrink-0 rounded-md object-cover" />
+                  )}
+                  <div className="flex-1">
+                    <p className={item.active ? 'font-medium' : 'text-muted-foreground font-medium line-through'}>
+                      {item.name}
+                      {item.unit && <span className="text-muted-foreground"> ({item.unit})</span>}
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      {[categoryName, item.vendor, supplierName, item.sku].filter(Boolean).join(' · ')}
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      {item.unit_type === 'box' ? `קופסה (${item.units_per_box} יח')` : 'בודד'}
+                      {item.unit_price !== null && ` · ₪${item.unit_price}`}
+                    </p>
+                    <p className={isLowStock ? 'text-destructive text-xs font-medium' : 'text-muted-foreground text-xs'}>
+                      מלאי נוכחי: {item.current_stock}
+                      {item.minimum_quantity !== null && ` (מינימום ${item.minimum_quantity})`}
+                      {isLowStock && ' — מלאי נמוך'}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Button asChild variant="ghost" size="sm">
+                      <Link to={`/inventory/items/${item.id}/edit`}>עריכה</Link>
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleToggleActive(item)}>
+                      {item.active ? 'השבתה' : 'הפעלה'}
+                    </Button>
+                  </div>
                 </div>
               </div>
             )
