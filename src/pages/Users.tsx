@@ -8,9 +8,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { cn, formatDate, formatDateTime } from '@/lib/utils'
+import { cn, formatDate } from '@/lib/utils'
 import { toDateStr } from '@/lib/weeklyChecklist'
-import type { AppRole, AppUserStatus, EmployeeInvite, RoleDelegation } from '@/lib/types'
+import type { AppRole, AppUserStatus, RoleDelegation } from '@/lib/types'
 
 const todayStr = toDateStr(new Date())
 
@@ -48,26 +48,18 @@ const statusBadgeClass: Record<AppUserStatus, string> = {
   suspended: 'bg-destructive text-white',
 }
 
-const inviteStatusLabels = {
-  pending: 'ממתינה',
-  claimed: 'מומשה',
-  cancelled: 'בוטלה',
-}
-
 export function Users() {
   const [users, setUsers] = useState<AdminAppUserRow[] | null>(null)
   const [employees, setEmployees] = useState<Employee[]>([])
-  const [invites, setInvites] = useState<EmployeeInvite[]>([])
   const [delegations, setDelegations] = useState<RoleDelegation[]>([])
   const [showInviteForm, setShowInviteForm] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
 
   async function load() {
-    const [usersRes, employeesRes, invitesRes, delegationsRes] = await Promise.all([
+    const [usersRes, employeesRes, delegationsRes] = await Promise.all([
       supabase.rpc('list_app_users_for_admin'),
       supabase.from('employees').select('id, full_name, phone, photo_url').eq('active', true).order('full_name'),
-      supabase.from('employee_invites').select('*').order('created_at', { ascending: false }),
       supabase.from('role_delegations').select('*').order('starts_on', { ascending: false }),
     ])
 
@@ -78,7 +70,6 @@ export function Users() {
 
     setUsers(usersRes.data as AdminAppUserRow[])
     setEmployees((employeesRes.data as Employee[]) ?? [])
-    setInvites((invitesRes.data as EmployeeInvite[]) ?? [])
     setDelegations((delegationsRes.data as RoleDelegation[]) ?? [])
   }
 
@@ -90,12 +81,6 @@ export function Users() {
     setEmployees((prev) => [...prev, employee].sort((a, b) => a.full_name.localeCompare(b.full_name)))
   }
 
-  async function handleCancelInvite(inviteId: string) {
-    if (!confirm('לבטל את ההזמנה?')) return
-    await supabase.from('employee_invites').update({ status: 'cancelled' }).eq('id', inviteId)
-    load()
-  }
-
   if (loadError) return <p className="text-destructive text-center text-sm">{loadError}</p>
   if (users === null) return null
 
@@ -105,55 +90,22 @@ export function Users() {
     if (statusFilter === 'active') return u.status === 'approved'
     return u.status === 'suspended'
   })
-  const employeeNames = new Map(employees.map((e) => [e.id, e.full_name]))
-  const pendingInvites = invites.filter((i) => i.status === 'pending')
-  const resolvedInvites = invites.filter((i) => i.status !== 'pending')
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">משתמשים</h1>
-        {!showInviteForm && <Button onClick={() => setShowInviteForm(true)}>הזמנת עובד/ת</Button>}
+        {!showInviteForm && <Button onClick={() => setShowInviteForm(true)}>יצירת משתמש/ת חדש/ה</Button>}
       </div>
 
       {showInviteForm && (
         <InviteForm
-          onEmployeeCreated={handleEmployeeCreated}
           onDone={() => {
             setShowInviteForm(false)
             load()
           }}
           onCancel={() => setShowInviteForm(false)}
         />
-      )}
-
-      {pendingInvites.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">הזמנות ממתינות</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            {pendingInvites.map((invite) => (
-              <div
-                key={invite.id}
-                className="flex items-center justify-between rounded-md border p-2 text-sm"
-              >
-                <div>
-                  <p className="font-medium">{invite.email}</p>
-                  <p className="text-muted-foreground">
-                    {roleLabels[invite.role]}
-                    {invite.employee_id && employeeNames.get(invite.employee_id) && (
-                      <> · {employeeNames.get(invite.employee_id)}</>
-                    )}
-                  </p>
-                </div>
-                <Button variant="ghost" size="sm" onClick={() => handleCancelInvite(invite.id)}>
-                  ביטול
-                </Button>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
       )}
 
       <div className="flex gap-2">
@@ -183,96 +135,45 @@ export function Users() {
           onEmployeeCreated={handleEmployeeCreated}
         />
       ))}
-
-      {resolvedInvites.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">היסטוריית הזמנות</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            {resolvedInvites.map((invite) => (
-              <div key={invite.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
-                <div>
-                  <p className="font-medium">{invite.email}</p>
-                  <p className="text-muted-foreground">
-                    {roleLabels[invite.role]}
-                    {invite.claimed_at && <> · הצטרפ/ה ב-{formatDateTime(invite.claimed_at)}</>}
-                  </p>
-                </div>
-                <span className="text-muted-foreground text-xs">{inviteStatusLabels[invite.status]}</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
     </div>
   )
 }
 
-function InviteForm({
-  onEmployeeCreated,
-  onDone,
-  onCancel,
-}: {
-  onEmployeeCreated: (employee: Employee) => void
-  onDone: () => void
-  onCancel: () => void
-}) {
+function InviteForm({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [fullName, setFullName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [role, setRole] = useState<AppRole | ''>('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const assignment = useRoleEmployeeAssignment({ employeeMode: 'create' })
-
-  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    setUploading(true)
-    setError(null)
-
-    const path = `${crypto.randomUUID()}-${file.name}`
-    const { error: uploadError } = await supabase.storage.from('employee-photos').upload(path, file)
-
-    setUploading(false)
-
-    if (uploadError) {
-      setError(uploadError.message)
-      return
-    }
-
-    const { data } = supabase.storage.from('employee-photos').getPublicUrl(path)
-    assignment.setNewPhotoUrl(data.publicUrl)
-  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
 
-    if (!email.trim()) {
-      setError('יש להזין כתובת אימייל')
+    if (!role) {
+      setError('יש לבחור תפקיד')
       return
     }
 
     setSubmitting(true)
-    const result = await assignment.resolve(onEmployeeCreated)
 
-    if (result.error) {
-      setSubmitting(false)
-      setError(result.error)
-      return
-    }
-
-    const { error: insertError } = await supabase.from('employee_invites').insert({
-      email: email.trim().toLowerCase(),
-      role: assignment.role,
-      employee_id: result.employeeId,
+    const { error: invokeError } = await supabase.functions.invoke('admin-create-user', {
+      body: {
+        email: email.trim().toLowerCase(),
+        password,
+        full_name: fullName.trim(),
+        phone: phone.trim(),
+        role,
+      },
     })
 
     setSubmitting(false)
 
-    if (insertError) {
-      setError(insertError.message)
+    if (invokeError) {
+      const body = await invokeError.context?.json?.().catch(() => null)
+      setError(body?.error ?? invokeError.message)
       return
     }
 
@@ -282,7 +183,7 @@ function InviteForm({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">הזמנת עובד/ת חדש/ה</CardTitle>
+        <CardTitle className="text-base">יצירת משתמש/ת חדש/ה</CardTitle>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="flex flex-col gap-4">
@@ -298,12 +199,37 @@ function InviteForm({
           </div>
 
           <div className="flex flex-col gap-2">
+            <Label htmlFor="invite-password">סיסמה</Label>
+            <Input
+              id="invite-password"
+              type="password"
+              required
+              minLength={6}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <p className="text-muted-foreground text-xs">
+              מנהל/ת המערכת, אנא שלח/י את הסיסמה בהודעת ווטסאפ.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="invite-name">שם מלא</Label>
+            <Input id="invite-name" required value={fullName} onChange={(e) => setFullName(e.target.value)} />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="invite-phone">טלפון</Label>
+            <Input id="invite-phone" required value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </div>
+
+          <div className="flex flex-col gap-2">
             <Label htmlFor="invite-role">תפקיד</Label>
             <select
               id="invite-role"
               className={selectClass}
-              value={assignment.role}
-              onChange={(e) => assignment.setRole(e.target.value as AppRole)}
+              value={role}
+              onChange={(e) => setRole(e.target.value as AppRole)}
             >
               <option value="" disabled>
                 בחר תפקיד
@@ -316,43 +242,11 @@ function InviteForm({
             </select>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="invite-name">שם מלא</Label>
-            <Input
-              id="invite-name"
-              value={assignment.newName}
-              onChange={(e) => assignment.setNewName(e.target.value)}
-            />
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="invite-phone">טלפון (לא חובה)</Label>
-            <Input
-              id="invite-phone"
-              value={assignment.newPhone}
-              onChange={(e) => assignment.setNewPhone(e.target.value)}
-            />
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="invite-photo">תמונה (לא חובה)</Label>
-            <div className="flex items-center gap-3">
-              {assignment.newPhotoUrl && (
-                <img
-                  src={assignment.newPhotoUrl}
-                  alt=""
-                  className="size-12 shrink-0 rounded-full object-cover"
-                />
-              )}
-              <Input id="invite-photo" type="file" accept="image/*" disabled={uploading} onChange={handlePhotoChange} />
-            </div>
-          </div>
-
           {error && <p className="text-destructive text-sm">{error}</p>}
         </CardContent>
         <CardFooter className="flex gap-2">
           <Button type="submit" disabled={submitting} className="flex-1">
-            שליחת הזמנה
+            יצירת משתמש/ת
           </Button>
           <Button type="button" variant="outline" className="flex-1" onClick={onCancel}>
             ביטול
