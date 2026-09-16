@@ -37,7 +37,8 @@ export function ShiftDetail() {
   const [areaManagerId, setAreaManagerId] = useState<string | null>(null)
   const [pendingRequests, setPendingRequests] = useState<ReplacementRequest[]>([])
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState(false)
   const [showCancelForm, setShowCancelForm] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
@@ -53,7 +54,7 @@ export function ShiftDetail() {
       .single()
 
     if (fetchError || !data) {
-      setError(fetchError?.message ?? 'משמרת לא נמצאה')
+      setLoadError(fetchError?.message ?? 'משמרת לא נמצאה')
       return
     }
 
@@ -105,6 +106,7 @@ export function ShiftDetail() {
   async function handleCancel() {
     if (!cancelReason.trim()) return
 
+    setActionError(null)
     setCancelling(true)
     const { error: cancelError } = await supabase
       .from('shifts')
@@ -113,7 +115,7 @@ export function ShiftDetail() {
     setCancelling(false)
 
     if (cancelError) {
-      setError(cancelError.message)
+      setActionError(cancelError.message)
       return
     }
 
@@ -125,12 +127,13 @@ export function ShiftDetail() {
   async function handleAddAssignment() {
     if (!addingEmployeeId) return
 
+    setActionError(null)
     const { error: insertError } = await supabase
       .from('shift_assignments')
       .insert({ shift_id: id, employee_id: addingEmployeeId })
 
     if (insertError) {
-      setError(insertError.message)
+      setActionError(insertError.message)
       return
     }
 
@@ -139,10 +142,11 @@ export function ShiftDetail() {
   }
 
   async function handleRemoveAssignment(assignmentId: string) {
+    setActionError(null)
     const { error: deleteError } = await supabase.from('shift_assignments').delete().eq('id', assignmentId)
 
     if (deleteError) {
-      setError(deleteError.message)
+      setActionError(deleteError.message)
       return
     }
 
@@ -150,13 +154,14 @@ export function ShiftDetail() {
   }
 
   async function handleApproveRequest(requestId: string, substituteEmployeeId: string) {
+    setActionError(null)
     const { error: approveError } = await supabase.rpc('approve_replacement_request', {
       p_request_id: requestId,
       p_substitute_employee_id: substituteEmployeeId,
     })
 
     if (approveError) {
-      setError(approveError.message)
+      setActionError(approveError.message)
       return
     }
 
@@ -164,12 +169,13 @@ export function ShiftDetail() {
   }
 
   async function handleRejectRequest(requestId: string) {
+    setActionError(null)
     const { error: rejectError } = await supabase.rpc('reject_replacement_request', {
       p_request_id: requestId,
     })
 
     if (rejectError) {
-      setError(rejectError.message)
+      setActionError(rejectError.message)
       return
     }
 
@@ -179,17 +185,18 @@ export function ShiftDetail() {
   async function handleReopen() {
     if (!confirm('לפתוח מחדש את המשמרת?')) return
 
+    setActionError(null)
     const { error: reopenError } = await supabase.rpc('reopen_shift', { p_shift_id: id })
 
     if (reopenError) {
-      setError(reopenError.message)
+      setActionError(reopenError.message)
       return
     }
 
     load()
   }
 
-  if (error) return <p className="text-destructive text-center text-sm">{error}</p>
+  if (loadError) return <p className="text-destructive text-center text-sm">{loadError}</p>
   if (!shift) return null
 
   const canManageShift = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
@@ -411,6 +418,8 @@ export function ShiftDetail() {
           </CardContent>
         </Card>
       )}
+
+      {actionError && <p className="text-destructive text-center text-sm">{actionError}</p>}
 
       <div className="flex justify-center">
         <Button asChild variant="ghost">
