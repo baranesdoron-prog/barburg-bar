@@ -392,51 +392,87 @@ function WeekCard({
           <ColumnHeader shift={shifts.closing} type="closing" />
         </div>
 
-        <RoleSection
-          label="אחראי/ת מתחם"
-          role="area_manager"
-          max={2}
-          openingShift={shifts.opening}
-          closingShift={shifts.closing}
-          openingAssignments={openingAll.filter((a) => a.assignment_role === 'area_manager')}
-          closingAssignments={closingAll.filter((a) => a.assignment_role === 'area_manager')}
-          openingTaken={new Set(openingAll.map((a) => a.employee_id))}
-          closingTaken={new Set(closingAll.map((a) => a.employee_id))}
-          eligible={dutyEligible}
-          employeeNames={employeeNames}
-          shiftCounts={shiftCounts}
-          myEmployeeId={myEmployeeId}
-          selfOnly={!viewerCanManage}
-          canSelfRemove={canSelfRemove}
-          pendingRequestAssignmentIds={pendingRequestAssignmentIds}
-          onAssign={handleAssign}
-          onSwap={handleSwap}
-          onRemove={handleRemove}
-          onRequestReplacement={handleRequestReplacement}
-        />
+        {viewerCanManage ? (
+          <>
+            <RoleSection
+              label="אחראי/ת מתחם"
+              role="area_manager"
+              max={1}
+              openingShift={shifts.opening}
+              closingShift={shifts.closing}
+              openingAssignments={openingAll.filter((a) => a.assignment_role === 'area_manager')}
+              closingAssignments={closingAll.filter((a) => a.assignment_role === 'area_manager')}
+              openingTaken={new Set(openingAll.map((a) => a.employee_id))}
+              closingTaken={new Set(closingAll.map((a) => a.employee_id))}
+              eligible={dutyEligible}
+              employeeNames={employeeNames}
+              shiftCounts={shiftCounts}
+              myEmployeeId={myEmployeeId}
+              onAssign={handleAssign}
+              onSwap={handleSwap}
+              onRemove={handleRemove}
+            />
 
-        <RoleSection
-          label="ברמנים/יות (עד 3)"
-          role="bartender"
-          max={3}
-          openingShift={shifts.opening}
-          closingShift={shifts.closing}
-          openingAssignments={openingAll.filter((a) => a.assignment_role === 'bartender')}
-          closingAssignments={closingAll.filter((a) => a.assignment_role === 'bartender')}
-          openingTaken={new Set(openingAll.map((a) => a.employee_id))}
-          closingTaken={new Set(closingAll.map((a) => a.employee_id))}
-          eligible={dutyEligible}
-          employeeNames={employeeNames}
-          shiftCounts={shiftCounts}
-          myEmployeeId={myEmployeeId}
-          selfOnly={!viewerCanManage}
-          canSelfRemove={canSelfRemove}
-          pendingRequestAssignmentIds={pendingRequestAssignmentIds}
-          onAssign={handleAssign}
-          onSwap={handleSwap}
-          onRemove={handleRemove}
-          onRequestReplacement={handleRequestReplacement}
-        />
+            <RoleSection
+              label="ברמנים/יות (עד 3)"
+              role="bartender"
+              max={3}
+              openingShift={shifts.opening}
+              closingShift={shifts.closing}
+              openingAssignments={openingAll.filter((a) => a.assignment_role === 'bartender')}
+              closingAssignments={closingAll.filter((a) => a.assignment_role === 'bartender')}
+              openingTaken={new Set(openingAll.map((a) => a.employee_id))}
+              closingTaken={new Set(closingAll.map((a) => a.employee_id))}
+              eligible={dutyEligible}
+              employeeNames={employeeNames}
+              shiftCounts={shiftCounts}
+              myEmployeeId={myEmployeeId}
+              onAssign={handleAssign}
+              onSwap={handleSwap}
+              onRemove={handleRemove}
+            />
+          </>
+        ) : (
+          <>
+            <SelfServiceRoleSection
+              label="אחראי/ת מתחם"
+              role="area_manager"
+              max={1}
+              openingShift={shifts.opening}
+              closingShift={shifts.closing}
+              openingAssignments={openingAll.filter((a) => a.assignment_role === 'area_manager')}
+              closingAssignments={closingAll.filter((a) => a.assignment_role === 'area_manager')}
+              eligible={dutyEligible}
+              employeeNames={employeeNames}
+              shiftCounts={shiftCounts}
+              myEmployeeId={myEmployeeId}
+              canSelfRemove={canSelfRemove}
+              pendingRequestAssignmentIds={pendingRequestAssignmentIds}
+              onAssign={handleAssign}
+              onRemove={handleRemove}
+              onRequestReplacement={handleRequestReplacement}
+            />
+
+            <SelfServiceRoleSection
+              label="ברמנים/יות (עד 3)"
+              role="bartender"
+              max={3}
+              openingShift={shifts.opening}
+              closingShift={shifts.closing}
+              openingAssignments={openingAll.filter((a) => a.assignment_role === 'bartender')}
+              closingAssignments={closingAll.filter((a) => a.assignment_role === 'bartender')}
+              eligible={dutyEligible}
+              employeeNames={employeeNames}
+              shiftCounts={shiftCounts}
+              myEmployeeId={myEmployeeId}
+              canSelfRemove={canSelfRemove}
+              pendingRequestAssignmentIds={pendingRequestAssignmentIds}
+              onAssign={handleAssign}
+              onRemove={handleRemove}
+              onRequestReplacement={handleRequestReplacement}
+            />
+          </>
+        )}
 
         {error && <p className="text-destructive text-xs">{error}</p>}
       </CardContent>
@@ -598,6 +634,8 @@ function BarManagerRow({
   )
 }
 
+// Manager mode: full edit rights over every slot (fill, swap to anyone,
+// remove anyone), plus a self-associate convenience per slot/row.
 function RoleSection({
   label,
   role,
@@ -612,13 +650,9 @@ function RoleSection({
   employeeNames,
   shiftCounts,
   myEmployeeId,
-  selfOnly,
-  canSelfRemove,
-  pendingRequestAssignmentIds,
   onAssign,
   onSwap,
   onRemove,
-  onRequestReplacement,
 }: {
   label: string
   role: ShiftAssignmentRole
@@ -633,13 +667,9 @@ function RoleSection({
   employeeNames: Record<string, string>
   shiftCounts: Record<string, number>
   myEmployeeId: string | null
-  selfOnly: boolean
-  canSelfRemove: boolean
-  pendingRequestAssignmentIds: Set<string>
   onAssign: (shiftId: string, employeeId: string, role: ShiftAssignmentRole) => void
   onSwap: (oldAssignmentId: string, shiftId: string, role: ShiftAssignmentRole, newEmployeeId: string) => void
   onRemove: (assignmentId: string) => void
-  onRequestReplacement: (assignmentId: string, reason: string | null, substituteId: string | null) => Promise<string | null>
 }) {
   const iAmEligible = !!myEmployeeId && eligible.some((e) => e.id === myEmployeeId)
   const rows = Array.from({ length: max }, (_, i) => i)
@@ -670,20 +700,10 @@ function RoleSection({
               shiftCounts={shiftCounts}
               eligible={eligible}
               takenIds={openingTaken}
-              myEmployeeId={myEmployeeId}
-              selfOnly={selfOnly}
-              canSelfRemove={canSelfRemove}
-              canRequestReplacement={openingShift?.effective_status === 'published'}
-              hasPendingRequest={!!openingPerson && pendingRequestAssignmentIds.has(openingPerson.id)}
               onAssociateMe={() => openingShiftId && myEmployeeId && onAssign(openingShiftId, myEmployeeId, role)}
               onPick={(id) => openingShiftId && onAssign(openingShiftId, id, role)}
               onSwap={(newId) => openingShiftId && openingPerson && onSwap(openingPerson.id, openingShiftId, role, newId)}
               onRemove={() => openingPerson && onRemove(openingPerson.id)}
-              onRequestReplacement={(reason, substituteId) =>
-                openingPerson
-                  ? onRequestReplacement(openingPerson.id, reason, substituteId)
-                  : Promise.resolve('אין שיבוץ')
-              }
             />
             <SlotCell
               person={closingPerson}
@@ -693,20 +713,10 @@ function RoleSection({
               shiftCounts={shiftCounts}
               eligible={eligible}
               takenIds={closingTaken}
-              myEmployeeId={myEmployeeId}
-              selfOnly={selfOnly}
-              canSelfRemove={canSelfRemove}
-              canRequestReplacement={closingShift?.effective_status === 'published'}
-              hasPendingRequest={!!closingPerson && pendingRequestAssignmentIds.has(closingPerson.id)}
               onAssociateMe={() => closingShiftId && myEmployeeId && onAssign(closingShiftId, myEmployeeId, role)}
               onPick={(id) => closingShiftId && onAssign(closingShiftId, id, role)}
               onSwap={(newId) => closingShiftId && closingPerson && onSwap(closingPerson.id, closingShiftId, role, newId)}
               onRemove={() => closingPerson && onRemove(closingPerson.id)}
-              onRequestReplacement={(reason, substituteId) =>
-                closingPerson
-                  ? onRequestReplacement(closingPerson.id, reason, substituteId)
-                  : Promise.resolve('אין שיבוץ')
-              }
             />
             {(openingIAmFree || closingIAmFree) && (
               <Button
@@ -729,6 +739,180 @@ function RoleSection({
   )
 }
 
+// Self-service mode (bartender/area-manager viewers): one column per
+// shift-type, a plain read-only list of who else is on it, and a single
+// control reflecting the viewer's own status -- "שבץ אותי" if they're not
+// on it (and there's room), or their own remove/replacement-request action
+// if they are. No per-slot picking, no swapping other people.
+function SelfServiceRoleSection({
+  label,
+  role,
+  max,
+  openingShift,
+  closingShift,
+  openingAssignments,
+  closingAssignments,
+  eligible,
+  employeeNames,
+  shiftCounts,
+  myEmployeeId,
+  canSelfRemove,
+  pendingRequestAssignmentIds,
+  onAssign,
+  onRemove,
+  onRequestReplacement,
+}: {
+  label: string
+  role: ShiftAssignmentRole
+  max: number
+  openingShift?: Shift
+  closingShift?: Shift
+  openingAssignments: ShiftAssignment[]
+  closingAssignments: ShiftAssignment[]
+  eligible: Employee[]
+  employeeNames: Record<string, string>
+  shiftCounts: Record<string, number>
+  myEmployeeId: string | null
+  canSelfRemove: boolean
+  pendingRequestAssignmentIds: Set<string>
+  onAssign: (shiftId: string, employeeId: string, role: ShiftAssignmentRole) => void
+  onRemove: (assignmentId: string) => void
+  onRequestReplacement: (assignmentId: string, reason: string | null, substituteId: string | null) => Promise<string | null>
+}) {
+  const iAmEligible = !!myEmployeeId && eligible.some((e) => e.id === myEmployeeId)
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-muted-foreground text-xs">{label}</span>
+      <div className="grid grid-cols-2 gap-2">
+        <SelfServiceColumn
+          shift={openingShift}
+          assignments={openingAssignments}
+          max={max}
+          role={role}
+          eligible={eligible}
+          iAmEligible={iAmEligible}
+          employeeNames={employeeNames}
+          shiftCounts={shiftCounts}
+          myEmployeeId={myEmployeeId}
+          canSelfRemove={canSelfRemove}
+          pendingRequestAssignmentIds={pendingRequestAssignmentIds}
+          onAssign={onAssign}
+          onRemove={onRemove}
+          onRequestReplacement={onRequestReplacement}
+        />
+        <SelfServiceColumn
+          shift={closingShift}
+          assignments={closingAssignments}
+          max={max}
+          role={role}
+          eligible={eligible}
+          iAmEligible={iAmEligible}
+          employeeNames={employeeNames}
+          shiftCounts={shiftCounts}
+          myEmployeeId={myEmployeeId}
+          canSelfRemove={canSelfRemove}
+          pendingRequestAssignmentIds={pendingRequestAssignmentIds}
+          onAssign={onAssign}
+          onRemove={onRemove}
+          onRequestReplacement={onRequestReplacement}
+        />
+      </div>
+    </div>
+  )
+}
+
+function SelfServiceColumn({
+  shift,
+  assignments,
+  max,
+  role,
+  eligible,
+  iAmEligible,
+  employeeNames,
+  shiftCounts,
+  myEmployeeId,
+  canSelfRemove,
+  pendingRequestAssignmentIds,
+  onAssign,
+  onRemove,
+  onRequestReplacement,
+}: {
+  shift?: Shift
+  assignments: ShiftAssignment[]
+  max: number
+  role: ShiftAssignmentRole
+  eligible: Employee[]
+  iAmEligible: boolean
+  employeeNames: Record<string, string>
+  shiftCounts: Record<string, number>
+  myEmployeeId: string | null
+  canSelfRemove: boolean
+  pendingRequestAssignmentIds: Set<string>
+  onAssign: (shiftId: string, employeeId: string, role: ShiftAssignmentRole) => void
+  onRemove: (assignmentId: string) => void
+  onRequestReplacement: (assignmentId: string, reason: string | null, substituteId: string | null) => Promise<string | null>
+}) {
+  if (!shift) return <span className="text-muted-foreground text-xs">—</span>
+
+  const mine = assignments.find((a) => a.employee_id === myEmployeeId)
+  const others = assignments.filter((a) => a.employee_id !== myEmployeeId)
+
+  return (
+    <div className="flex flex-col gap-1">
+      {others.length > 0 && (
+        <span className="text-xs">
+          {others.map((a) => nameWithCount(employeeNames[a.employee_id] ?? '—', shiftCounts, a.employee_id)).join(', ')}
+        </span>
+      )}
+      {others.length === 0 && !mine && <span className="text-muted-foreground text-xs">אין עדיין</span>}
+
+      {mine && canSelfRemove && (
+        <div className="flex items-center gap-1">
+          <span className="truncate text-xs">
+            {nameWithCount(employeeNames[mine.employee_id] ?? '—', shiftCounts, mine.employee_id)}
+          </span>
+          <button
+            type="button"
+            onClick={() => onRemove(mine.id)}
+            className="text-destructive text-[10px] underline-offset-2 hover:underline"
+          >
+            ביטול
+          </button>
+        </div>
+      )}
+
+      {mine && !canSelfRemove && shift.effective_status === 'published' && (
+        <ReplacementRequestControl
+          name={nameWithCount(employeeNames[mine.employee_id] ?? '—', shiftCounts, mine.employee_id)}
+          hasPendingRequest={pendingRequestAssignmentIds.has(mine.id)}
+          eligible={eligible}
+          onSubmit={(reason, substituteId) => onRequestReplacement(mine.id, reason, substituteId)}
+        />
+      )}
+
+      {mine && !canSelfRemove && shift.effective_status !== 'published' && (
+        <span className="truncate text-xs">
+          {nameWithCount(employeeNames[mine.employee_id] ?? '—', shiftCounts, mine.employee_id)}
+        </span>
+      )}
+
+      {!mine && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="h-6 w-fit px-2 text-[11px]"
+          disabled={!iAmEligible || !myEmployeeId || assignments.length >= max}
+          onClick={() => myEmployeeId && onAssign(shift.id, myEmployeeId, role)}
+        >
+          שבץ אותי
+        </Button>
+      )}
+    </div>
+  )
+}
+
 function SlotCell({
   person,
   isNext,
@@ -737,16 +921,10 @@ function SlotCell({
   shiftCounts,
   eligible,
   takenIds,
-  myEmployeeId,
-  selfOnly,
-  canSelfRemove,
-  canRequestReplacement,
-  hasPendingRequest,
   onAssociateMe,
   onPick,
   onSwap,
   onRemove,
-  onRequestReplacement,
 }: {
   person?: ShiftAssignment
   isNext: boolean
@@ -755,44 +933,12 @@ function SlotCell({
   shiftCounts: Record<string, number>
   eligible: Employee[]
   takenIds: Set<string>
-  myEmployeeId: string | null
-  selfOnly: boolean
-  canSelfRemove: boolean
-  canRequestReplacement: boolean
-  hasPendingRequest: boolean
   onAssociateMe: () => void
   onPick: (employeeId: string) => void
   onSwap: (newEmployeeId: string) => void
   onRemove: () => void
-  onRequestReplacement: (reason: string | null, substituteId: string | null) => Promise<string | null>
 }) {
   const [editing, setEditing] = useState(false)
-
-  if (person && selfOnly) {
-    const isMine = person.employee_id === myEmployeeId
-    const name = nameWithCount(employeeNames[person.employee_id] ?? '—', shiftCounts, person.employee_id)
-
-    if (isMine && canSelfRemove) {
-      return (
-        <div className="flex items-center gap-1">
-          <span className="truncate text-xs">{name}</span>
-          <button type="button" onClick={onRemove} className="text-destructive text-[10px] underline-offset-2 hover:underline">
-            ביטול
-          </button>
-        </div>
-      )
-    }
-
-    if (isMine && !canSelfRemove && canRequestReplacement) {
-      return (
-        <ReplacementRequestControl name={name} hasPendingRequest={hasPendingRequest} eligible={eligible} onSubmit={onRequestReplacement} />
-      )
-    }
-
-    return (
-      <span className="truncate text-xs">{name}</span>
-    )
-  }
 
   if (person) {
     if (editing) {
@@ -836,21 +982,6 @@ function SlotCell({
   }
 
   if (!isNext) return <span />
-
-  if (selfOnly) {
-    return (
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        className="h-6 w-fit px-2 text-[11px]"
-        disabled={!iAmFree}
-        onClick={onAssociateMe}
-      >
-        שבץ אותי
-      </Button>
-    )
-  }
 
   if (editing) {
     return (
