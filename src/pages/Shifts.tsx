@@ -38,6 +38,11 @@ interface Employee {
   full_name: string
 }
 
+interface ShiftCountInfo {
+  count: number
+  senior: boolean
+}
+
 interface WeekShifts {
   opening?: Shift
   closing?: Shift
@@ -48,26 +53,24 @@ function friendlyAssignmentError(error: { code?: string; message: string }) {
   return error.message
 }
 
-// "Senior" isn't a stored attribute -- it's fully derived from the same
-// lifetime shift count already shown next to every name, so there's
-// nothing to persist or keep in sync: 2+ shifts worked (any role,
-// completed/reopened only, same as the count itself) makes someone senior.
+// "Senior" is 2+ lifetime shifts worked (same count already shown next to
+// every name) OR employees.is_senior -- a manual override for staff whose
+// seniority predates this app's shift history, which is the only history
+// the computed count can ever see. Both are folded into one senior flag
+// per employee at load time (see AllocationsList.load()), not re-derived
+// at every render site.
 const SENIOR_SHIFT_THRESHOLD = 2
-
-function isSenior(shiftCounts: Record<string, number>, employeeId: string) {
-  return (shiftCounts[employeeId] ?? 0) >= SENIOR_SHIFT_THRESHOLD
-}
 
 // Shown next to a name everywhere it's assigned: how many shifts this
 // person has actually worked, combined across every role, with a star
 // once they're senior.
-function nameWithCount(name: string, shiftCounts: Record<string, number>, employeeId: string) {
-  const count = shiftCounts[employeeId] ?? 0
-  return `${name} (${count})${count >= SENIOR_SHIFT_THRESHOLD ? ' ⭐' : ''}`
+function nameWithCount(name: string, shiftCounts: Record<string, ShiftCountInfo>, employeeId: string) {
+  const info = shiftCounts[employeeId]
+  return `${name} (${info?.count ?? 0})${info?.senior ? ' ⭐' : ''}`
 }
 
-function hasSenior(assignments: ShiftAssignment[], shiftCounts: Record<string, number>) {
-  return assignments.some((a) => isSenior(shiftCounts, a.employee_id))
+function hasSenior(assignments: ShiftAssignment[], shiftCounts: Record<string, ShiftCountInfo>) {
+  return assignments.some((a) => shiftCounts[a.employee_id]?.senior)
 }
 
 export function Shifts() {
@@ -92,7 +95,7 @@ function AllocationsList() {
   const [shiftManagers, setShiftManagers] = useState<Employee[]>([])
   const [dutyEligible, setDutyEligible] = useState<Employee[]>([])
   const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({})
-  const [shiftCounts, setShiftCounts] = useState<Record<string, number>>({})
+  const [shiftCounts, setShiftCounts] = useState<Record<string, ShiftCountInfo>>({})
   const [pendingRequestAssignmentIds, setPendingRequestAssignmentIds] = useState<Set<string>>(new Set())
 
   const canManage = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
@@ -132,7 +135,7 @@ function AllocationsList() {
         .lte('week_start', weeks[weeks.length - 1]),
       canManage ? supabase.rpc('list_shift_manager_employees') : Promise.resolve({ data: [] }),
       supabase.rpc('list_employee_roles'),
-      supabase.from('employees').select('id, full_name').order('full_name'),
+      supabase.from('employees').select('id, full_name, is_senior').order('full_name'),
       supabase.rpc('list_employee_shift_counts'),
       // Only a bartender/self-service viewer needs this, to know whether
       // their own current-week slot already has a pending replacement
@@ -144,15 +147,6 @@ function AllocationsList() {
 
     setPendingRequestAssignmentIds(
       new Set(((myRequestsRes.data as { shift_assignment_id: string }[]) ?? []).map((r) => r.shift_assignment_id)),
-    )
-
-    setShiftCounts(
-      Object.fromEntries(
-        ((countsRes.data as { employee_id: string; shift_count: number }[]) ?? []).map((r) => [
-          r.employee_id,
-          r.shift_count,
-        ]),
-      ),
     )
 
     const shifts = (shiftsRes.data as Shift[]) ?? []
@@ -181,12 +175,27 @@ function AllocationsList() {
     const roleByEmployeeId = new Map(
       ((rolesRes.data as { employee_id: string; role: string | null }[]) ?? []).map((r) => [r.employee_id, r.role]),
     )
-    const allEmployees = (employeesRes.data as Employee[]) ?? []
+    const allEmployees = (employeesRes.data as (Employee & { is_senior: boolean })[]) ?? []
     setDutyEligible(allEmployees.filter((e) => roleByEmployeeId.get(e.id) !== undefined))
 
     const names: Record<string, string> = {}
     for (const emp of allEmployees) names[emp.id] = emp.full_name
     setEmployeeNames(names)
+
+    const countByEmployeeId = new Map(
+      ((countsRes.data as { employee_id: string; shift_count: number }[]) ?? []).map((r) => [
+        r.employee_id,
+        r.shift_count,
+      ]),
+    )
+    setShiftCounts(
+      Object.fromEntries(
+        allEmployees.map((emp) => {
+          const count = countByEmployeeId.get(emp.id) ?? 0
+          return [emp.id, { count, senior: emp.is_senior || count >= SENIOR_SHIFT_THRESHOLD }]
+        }),
+      ),
+    )
 
     const shiftIds = shifts.map((s) => s.id)
     if (shiftIds.length > 0) {
@@ -288,7 +297,7 @@ function WeekCard({
   shiftManagers: Employee[]
   dutyEligible: Employee[]
   employeeNames: Record<string, string>
-  shiftCounts: Record<string, number>
+  shiftCounts: Record<string, ShiftCountInfo>
   myEmployeeId: string | null
   viewerCanManage: boolean
   isAdmin: boolean
@@ -544,7 +553,7 @@ function CombinedStatus({
   closingBartenders: ShiftAssignment[]
   openingAreaManagers: ShiftAssignment[]
   closingAreaManagers: ShiftAssignment[]
-  shiftCounts: Record<string, number>
+  shiftCounts: Record<string, ShiftCountInfo>
 }) {
   const primary = closing ?? opening
 
@@ -611,7 +620,7 @@ function BarManagerRow({
   employeeId: string | null
   employeeNames: Record<string, string>
   shiftManagers: Employee[]
-  shiftCounts: Record<string, number>
+  shiftCounts: Record<string, ShiftCountInfo>
   myEmployeeId: string | null
   readOnly: boolean
   canPickAnyone: boolean
@@ -749,7 +758,7 @@ function RoleSection({
   closingTaken: Set<string>
   eligible: Employee[]
   employeeNames: Record<string, string>
-  shiftCounts: Record<string, number>
+  shiftCounts: Record<string, ShiftCountInfo>
   myEmployeeId: string | null
   onAssign: (shiftId: string, employeeId: string, role: ShiftAssignmentRole) => void
   onSwap: (oldAssignmentId: string, shiftId: string, role: ShiftAssignmentRole, newEmployeeId: string) => void
@@ -844,7 +853,7 @@ function SelfServiceRoleSection({
   closingAssignments: ShiftAssignment[]
   eligible: Employee[]
   employeeNames: Record<string, string>
-  shiftCounts: Record<string, number>
+  shiftCounts: Record<string, ShiftCountInfo>
   myEmployeeId: string | null
   canSelfRemove: boolean
   pendingRequestAssignmentIds: Set<string>
@@ -921,7 +930,7 @@ function SelfServiceColumn({
   eligible: Employee[]
   iAmEligible: boolean
   employeeNames: Record<string, string>
-  shiftCounts: Record<string, number>
+  shiftCounts: Record<string, ShiftCountInfo>
   myEmployeeId: string | null
   canSelfRemove: boolean
   pendingRequestAssignmentIds: Set<string>
@@ -1006,7 +1015,7 @@ function SlotCell({
   isNext: boolean
   iAmFree: boolean
   employeeNames: Record<string, string>
-  shiftCounts: Record<string, number>
+  shiftCounts: Record<string, ShiftCountInfo>
   eligible: Employee[]
   takenIds: Set<string>
   onAssociateMe: () => void
