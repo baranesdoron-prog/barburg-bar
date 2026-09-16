@@ -422,7 +422,7 @@ function ShiftManagerAssignmentCard() {
     <Card className={missingCount > 0 ? 'border-amber-500/60 bg-amber-50 dark:bg-amber-950/20' : undefined}>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-base">שיבוץ מנהל בר</CardTitle>
-        <Link to="/admin/shift-manager-schedule" className="text-muted-foreground text-xs hover:underline">
+        <Link to="/shifts" className="text-muted-foreground text-xs hover:underline">
           שיבוץ לפי שנה
         </Link>
       </CardHeader>

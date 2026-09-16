@@ -12,7 +12,6 @@ import {
   BookOpen,
   User,
   Users,
-  CalendarRange,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -41,8 +40,7 @@ export function getNavItems(role: AppRole): NavItem[] {
         label: 'משמרות',
         icon: CalendarClock,
         children: [
-          { to: '/shifts', label: 'רשימת משמרות', icon: CalendarClock },
-          { to: '/admin/shift-manager-schedule', label: 'שיבוצים', icon: CalendarRange },
+          { to: '/shifts', label: 'משמרות', icon: CalendarClock },
           { to: '/reports', label: 'דוח סגירת משמרות', icon: FileText },
           { to: '/weekly-checklist', label: 'רשימת משימות שבועית', icon: CheckSquare },
         ],

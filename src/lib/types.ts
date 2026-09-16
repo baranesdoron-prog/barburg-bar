@@ -74,15 +74,17 @@ export interface Shift {
 export interface ShiftManagerAssignment {
   week_start: string
   employee_id: string
-  area_manager_id: string | null
   assigned_by: string | null
   assigned_at: string
 }
+
+export type ShiftAssignmentRole = 'bartender' | 'area_manager'
 
 export interface ShiftAssignment {
   id: string
   shift_id: string
   employee_id: string
+  assignment_role: ShiftAssignmentRole
   created_at: string
 }
 

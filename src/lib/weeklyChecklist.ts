@@ -44,16 +44,6 @@ export function archiveCutoff() {
   return toDateStr(sundayOf(new Date(now.getFullYear(), now.getMonth(), 1)))
 }
 
-// Same "a week counts as the month it contains the 1st of" rule as
-// archiveCutoff(), but bounding the current month on both ends instead
-// of just its start.
-export function currentMonthWeekRange() {
-  const now = new Date()
-  const start = toDateStr(sundayOf(new Date(now.getFullYear(), now.getMonth(), 1)))
-  const end = toDateStr(sundayOf(new Date(now.getFullYear(), now.getMonth() + 1, 1)))
-  return { start, end }
-}
-
 // Shifts always run Thursday evening (see ensure_upcoming_shifts()) --
 // for screens that show one row per week without the real shift rows
 // loaded, this is the date to display instead of the week's Sunday.

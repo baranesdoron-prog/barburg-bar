@@ -34,7 +34,7 @@ export function ShiftDetail() {
   const [manager, setManager] = useState<Employee | null>(null)
   const [assignments, setAssignments] = useState<ShiftAssignment[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
-  const [areaManagerId, setAreaManagerId] = useState<string | null>(null)
+  const [areaManagerIds, setAreaManagerIds] = useState<string[]>([])
   const [pendingRequests, setPendingRequests] = useState<ReplacementRequest[]>([])
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -42,7 +42,6 @@ export function ShiftDetail() {
   const [cancelling, setCancelling] = useState(false)
   const [showCancelForm, setShowCancelForm] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
-  const [addingEmployeeId, setAddingEmployeeId] = useState('')
 
   const employeeNames = new Map(employees.map((e) => [e.id, e.full_name]))
 
@@ -61,24 +60,21 @@ export function ShiftDetail() {
     const loadedShift = data as Shift
     setShift(loadedShift)
 
-    const [managerRes, employeesRes, assignmentsRes, weekTeamRes] = await Promise.all([
+    const [managerRes, employeesRes, assignmentsRes] = await Promise.all([
       loadedShift.shift_manager_id
         ? supabase.from('employees').select('id, full_name, phone, active').eq('id', loadedShift.shift_manager_id).single()
         : Promise.resolve({ data: null }),
       supabase.from('employees').select('id, full_name, phone, active').order('full_name'),
       supabase.from('shift_assignments').select('*').eq('shift_id', id),
-      supabase
-        .from('shift_manager_assignments')
-        .select('area_manager_id')
-        .eq('week_start', loadedShift.week_start)
-        .maybeSingle(),
     ])
 
     setManager((managerRes.data as Employee | null) ?? null)
     setEmployees((employeesRes.data as Employee[]) ?? [])
-    setAreaManagerId((weekTeamRes.data as { area_manager_id: string | null } | null)?.area_manager_id ?? null)
     const loadedAssignments = (assignmentsRes.data as ShiftAssignment[]) ?? []
     setAssignments(loadedAssignments)
+    setAreaManagerIds(
+      loadedAssignments.filter((a) => a.assignment_role === 'area_manager').map((a) => a.employee_id),
+    )
 
     if (loadedAssignments.length > 0) {
       const assignmentIds = loadedAssignments.map((a) => a.id)
@@ -121,35 +117,6 @@ export function ShiftDetail() {
 
     setShowCancelForm(false)
     setCancelReason('')
-    load()
-  }
-
-  async function handleAddAssignment() {
-    if (!addingEmployeeId) return
-
-    setActionError(null)
-    const { error: insertError } = await supabase
-      .from('shift_assignments')
-      .insert({ shift_id: id, employee_id: addingEmployeeId })
-
-    if (insertError) {
-      setActionError(insertError.message)
-      return
-    }
-
-    setAddingEmployeeId('')
-    load()
-  }
-
-  async function handleRemoveAssignment(assignmentId: string) {
-    setActionError(null)
-    const { error: deleteError } = await supabase.from('shift_assignments').delete().eq('id', assignmentId)
-
-    if (deleteError) {
-      setActionError(deleteError.message)
-      return
-    }
-
     load()
   }
 
@@ -201,12 +168,11 @@ export function ShiftDetail() {
 
   const canManageShift = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
   const canManageStaffing = ROLES_VIEWING_SHIFTS.includes(effectiveRole)
-  const availableEmployees = employees.filter(
-    (e) => e.active && !assignments.some((a) => a.employee_id === e.id),
-  )
   const understaffed =
     shift.required_staff_count !== null && shift.assigned_count < shift.required_staff_count
-  const areaManager = areaManagerId ? (employees.find((e) => e.id === areaManagerId) ?? null) : null
+  const areaManagers = areaManagerIds
+    .map((id) => employees.find((e) => e.id === id))
+    .filter((e): e is Employee => !!e)
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
@@ -239,7 +205,16 @@ export function ShiftDetail() {
           </p>
           <p>
             <span className="text-muted-foreground">אחראי/ת מתחם: </span>
-            {areaManager ? <NameWithPhone employee={areaManager} /> : '—'}
+            {areaManagers.length > 0 ? (
+              areaManagers.map((am, i) => (
+                <span key={am.id}>
+                  {i > 0 && ', '}
+                  <NameWithPhone employee={am} />
+                </span>
+              ))
+            ) : (
+              '—'
+            )}
           </p>
           {shift.required_staff_count !== null && (
             <p>
@@ -324,49 +299,6 @@ export function ShiftDetail() {
             </Button>
           )}
         </div>
-      )}
-
-      {canManageStaffing && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">עובדים משובצים</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            {assignments.length === 0 && (
-              <p className="text-muted-foreground text-sm">אין עדיין עובדים משובצים.</p>
-            )}
-            {assignments.map((a) => {
-              const staffer = employees.find((e) => e.id === a.employee_id)
-              return (
-                <div key={a.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
-                  <span>{staffer ? <NameWithPhone employee={staffer} /> : '—'}</span>
-                  <Button variant="ghost" size="sm" onClick={() => handleRemoveAssignment(a.id)}>
-                    הסרה
-                  </Button>
-                </div>
-              )
-            })}
-            {shift.status !== 'cancelled' && (
-              <div className="flex gap-2 pt-2">
-                <select
-                  className={selectClass}
-                  value={addingEmployeeId}
-                  onChange={(e) => setAddingEmployeeId(e.target.value)}
-                >
-                  <option value="">בחר/י עובד/ת לשיבוץ</option>
-                  {availableEmployees.map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.full_name}
-                    </option>
-                  ))}
-                </select>
-                <Button onClick={handleAddAssignment} disabled={!addingEmployeeId}>
-                  שיבוץ
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
       )}
 
       {canManageStaffing && ATTENDANCE_ELIGIBLE_STATUSES.includes(shift.effective_status) && (
