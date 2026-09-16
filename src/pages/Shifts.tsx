@@ -48,10 +48,26 @@ function friendlyAssignmentError(error: { code?: string; message: string }) {
   return error.message
 }
 
+// "Senior" isn't a stored attribute -- it's fully derived from the same
+// lifetime shift count already shown next to every name, so there's
+// nothing to persist or keep in sync: 2+ shifts worked (any role,
+// completed/reopened only, same as the count itself) makes someone senior.
+const SENIOR_SHIFT_THRESHOLD = 2
+
+function isSenior(shiftCounts: Record<string, number>, employeeId: string) {
+  return (shiftCounts[employeeId] ?? 0) >= SENIOR_SHIFT_THRESHOLD
+}
+
 // Shown next to a name everywhere it's assigned: how many shifts this
-// person has actually worked, combined across every role.
+// person has actually worked, combined across every role, with a star
+// once they're senior.
 function nameWithCount(name: string, shiftCounts: Record<string, number>, employeeId: string) {
-  return `${name} (${shiftCounts[employeeId] ?? 0})`
+  const count = shiftCounts[employeeId] ?? 0
+  return `${name} (${count})${count >= SENIOR_SHIFT_THRESHOLD ? ' ⭐' : ''}`
+}
+
+function hasSenior(assignments: ShiftAssignment[], shiftCounts: Record<string, number>) {
+  return assignments.some((a) => isSenior(shiftCounts, a.employee_id))
 }
 
 export function Shifts() {
@@ -285,6 +301,10 @@ function WeekCard({
   const closingId = shifts.closing?.id
   const openingAll = openingId ? (assignmentsByShift.get(openingId) ?? []) : []
   const closingAll = closingId ? (assignmentsByShift.get(closingId) ?? []) : []
+  const openingBartenders = openingAll.filter((a) => a.assignment_role === 'bartender')
+  const closingBartenders = closingAll.filter((a) => a.assignment_role === 'bartender')
+  const openingAreaManagers = openingAll.filter((a) => a.assignment_role === 'area_manager')
+  const closingAreaManagers = closingAll.filter((a) => a.assignment_role === 'area_manager')
 
   const dateLabel = shifts.opening?.start_time
     ? weekLabelFormatter.format(new Date(shifts.opening.start_time))
@@ -375,8 +395,11 @@ function WeekCard({
             <CombinedStatus
               opening={shifts.opening}
               closing={shifts.closing}
-              openingAreaManagerCount={openingAll.filter((a) => a.assignment_role === 'area_manager').length}
-              closingAreaManagerCount={closingAll.filter((a) => a.assignment_role === 'area_manager').length}
+              openingBartenders={openingBartenders}
+              closingBartenders={closingBartenders}
+              openingAreaManagers={openingAreaManagers}
+              closingAreaManagers={closingAreaManagers}
+              shiftCounts={shiftCounts}
             />
           </div>
         )}
@@ -406,8 +429,8 @@ function WeekCard({
               max={3}
               openingShift={shifts.opening}
               closingShift={shifts.closing}
-              openingAssignments={openingAll.filter((a) => a.assignment_role === 'bartender')}
-              closingAssignments={closingAll.filter((a) => a.assignment_role === 'bartender')}
+              openingAssignments={openingBartenders}
+              closingAssignments={closingBartenders}
               openingTaken={new Set(openingAll.map((a) => a.employee_id))}
               closingTaken={new Set(closingAll.map((a) => a.employee_id))}
               eligible={dutyEligible}
@@ -425,8 +448,8 @@ function WeekCard({
               max={3}
               openingShift={shifts.opening}
               closingShift={shifts.closing}
-              openingAssignments={openingAll.filter((a) => a.assignment_role === 'bartender')}
-              closingAssignments={closingAll.filter((a) => a.assignment_role === 'bartender')}
+              openingAssignments={openingBartenders}
+              closingAssignments={closingBartenders}
               eligible={dutyEligible}
               employeeNames={employeeNames}
               shiftCounts={shiftCounts}
@@ -448,8 +471,8 @@ function WeekCard({
               max={2}
               openingShift={shifts.opening}
               closingShift={shifts.closing}
-              openingAssignments={openingAll.filter((a) => a.assignment_role === 'area_manager')}
-              closingAssignments={closingAll.filter((a) => a.assignment_role === 'area_manager')}
+              openingAssignments={openingAreaManagers}
+              closingAssignments={closingAreaManagers}
               openingTaken={new Set(openingAll.map((a) => a.employee_id))}
               closingTaken={new Set(closingAll.map((a) => a.employee_id))}
               eligible={dutyEligible}
@@ -467,8 +490,8 @@ function WeekCard({
               max={2}
               openingShift={shifts.opening}
               closingShift={shifts.closing}
-              openingAssignments={openingAll.filter((a) => a.assignment_role === 'area_manager')}
-              closingAssignments={closingAll.filter((a) => a.assignment_role === 'area_manager')}
+              openingAssignments={openingAreaManagers}
+              closingAssignments={closingAreaManagers}
               eligible={dutyEligible}
               employeeNames={employeeNames}
               shiftCounts={shiftCounts}
@@ -509,20 +532,26 @@ function ColumnHeader({ shift, type }: { shift?: Shift; type: ShiftType }) {
 function CombinedStatus({
   opening,
   closing,
-  openingAreaManagerCount,
-  closingAreaManagerCount,
+  openingBartenders,
+  closingBartenders,
+  openingAreaManagers,
+  closingAreaManagers,
+  shiftCounts,
 }: {
   opening?: Shift
   closing?: Shift
-  openingAreaManagerCount: number
-  closingAreaManagerCount: number
+  openingBartenders: ShiftAssignment[]
+  closingBartenders: ShiftAssignment[]
+  openingAreaManagers: ShiftAssignment[]
+  closingAreaManagers: ShiftAssignment[]
+  shiftCounts: Record<string, number>
 }) {
   const primary = closing ?? opening
 
   const gaps: string[] = []
-  for (const [shift, areaManagerCount, label] of [
-    [opening, openingAreaManagerCount, 'פתיחה'],
-    [closing, closingAreaManagerCount, 'סגירה'],
+  for (const [shift, bartenders, areaManagers, label] of [
+    [opening, openingBartenders, openingAreaManagers, 'פתיחה'],
+    [closing, closingBartenders, closingAreaManagers, 'סגירה'],
   ] as const) {
     if (!shift || shift.status === 'cancelled') continue
     const openForStaffing = shift.effective_status === 'published' || shift.effective_status === 'active'
@@ -530,8 +559,17 @@ function CombinedStatus({
     if (shift.required_staff_count !== null && shift.assigned_count < shift.required_staff_count) {
       gaps.push(`תת-איוש ברמנים/יות (${label})`)
     }
-    if (areaManagerCount === 0) {
+    if (areaManagers.length === 0) {
       gaps.push(`אין אחראי/ת מתחם (${label})`)
+    }
+    // At least one senior (2+ shifts worked) is expected per duty group on
+    // a shift, not enforced -- same informational-only treatment as every
+    // other gap here.
+    if (bartenders.length > 0 && !hasSenior(bartenders, shiftCounts)) {
+      gaps.push(`אין ברמן/ית בכיר/ה (${label})`)
+    }
+    if (areaManagers.length > 0 && !hasSenior(areaManagers, shiftCounts)) {
+      gaps.push(`אין אחראי/ת מתחם בכיר/ה (${label})`)
     }
   }
 
