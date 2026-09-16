@@ -145,9 +145,18 @@ export function AppShell({ appUser, session }: { appUser: AppUser; session: Sess
 
   const greetingName = employeeName ?? session.user.email ?? null
 
+  useEffect(() => {
+    if (!drawerOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [drawerOpen])
+
   return (
     <div className="flex min-h-svh">
-      <aside className="hidden w-64 shrink-0 border-e p-4 md:flex print:hidden">
+      <aside className="hidden w-64 shrink-0 overflow-y-auto border-e p-4 md:flex print:hidden">
         <SidebarContent greetingName={greetingName} />
       </aside>
 
@@ -157,7 +166,7 @@ export function AppShell({ appUser, session }: { appUser: AppUser; session: Sess
             className="absolute inset-0 bg-black/50"
             onClick={() => setDrawerOpen(false)}
           />
-          <aside className="relative ms-auto flex h-full w-72 flex-col bg-background p-4 shadow-xl">
+          <aside className="relative ms-auto flex h-full w-72 flex-col overflow-y-auto overscroll-contain bg-background p-4 shadow-xl">
             <Button
               variant="ghost"
               size="icon"
