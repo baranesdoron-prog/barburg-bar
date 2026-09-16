@@ -44,6 +44,12 @@ function friendlyAssignmentError(error: { code?: string; message: string }) {
   return error.message
 }
 
+// Shown next to a name everywhere it's assigned: how many shifts this
+// person has actually worked, combined across every role.
+function nameWithCount(name: string, shiftCounts: Record<string, number>, employeeId: string) {
+  return `${name} (${shiftCounts[employeeId] ?? 0})`
+}
+
 export function Shifts() {
   return <AllocationsList />
 }
@@ -66,6 +72,7 @@ function AllocationsList() {
   const [shiftManagers, setShiftManagers] = useState<Employee[]>([])
   const [dutyEligible, setDutyEligible] = useState<Employee[]>([])
   const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({})
+  const [shiftCounts, setShiftCounts] = useState<Record<string, number>>({})
 
   const canManage = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
 
@@ -81,12 +88,13 @@ function AllocationsList() {
       setShiftManagers([])
       setDutyEligible([])
       setEmployeeNames({})
+      setShiftCounts({})
       return
     }
 
     await supabase.rpc('ensure_upcoming_shifts')
 
-    const [shiftsRes, teamRes, shiftManagersRes, rolesRes, employeesRes] = await Promise.all([
+    const [shiftsRes, teamRes, shiftManagersRes, rolesRes, employeesRes, countsRes] = await Promise.all([
       supabase
         .from('shifts_with_effective_status')
         .select('*')
@@ -100,7 +108,17 @@ function AllocationsList() {
       supabase.rpc('list_shift_manager_employees'),
       supabase.rpc('list_employee_roles'),
       supabase.from('employees').select('id, full_name').order('full_name'),
+      supabase.rpc('list_employee_shift_counts'),
     ])
+
+    setShiftCounts(
+      Object.fromEntries(
+        ((countsRes.data as { employee_id: string; shift_count: number }[]) ?? []).map((r) => [
+          r.employee_id,
+          r.shift_count,
+        ]),
+      ),
+    )
 
     const shifts = (shiftsRes.data as Shift[]) ?? []
     const grouped = new Map<string, WeekShifts>()
@@ -201,6 +219,7 @@ function AllocationsList() {
           shiftManagers={shiftManagers}
           dutyEligible={dutyEligible}
           employeeNames={employeeNames}
+          shiftCounts={shiftCounts}
           myEmployeeId={myEmployeeId}
           onSaved={load}
         />
@@ -217,6 +236,7 @@ function WeekCard({
   shiftManagers,
   dutyEligible,
   employeeNames,
+  shiftCounts,
   myEmployeeId,
   onSaved,
 }: {
@@ -227,6 +247,7 @@ function WeekCard({
   shiftManagers: Employee[]
   dutyEligible: Employee[]
   employeeNames: Record<string, string>
+  shiftCounts: Record<string, number>
   myEmployeeId: string | null
   onSaved: () => void
 }) {
@@ -305,16 +326,20 @@ function WeekCard({
           <span />
           <ColumnHeader shift={shifts.opening} type="opening" />
           <ColumnHeader shift={shifts.closing} type="closing" />
-
-          <span className="text-muted-foreground">סטטוס</span>
-          <StatusCell shift={shifts.opening} />
-          <StatusCell shift={shifts.closing} />
         </div>
+
+        <CombinedStatus
+          opening={shifts.opening}
+          closing={shifts.closing}
+          openingAreaManagerCount={openingAll.filter((a) => a.assignment_role === 'area_manager').length}
+          closingAreaManagerCount={closingAll.filter((a) => a.assignment_role === 'area_manager').length}
+        />
 
         <BarManagerRow
           employeeId={shiftManagerId}
           employeeNames={employeeNames}
           shiftManagers={shiftManagers}
+          shiftCounts={shiftCounts}
           myEmployeeId={myEmployeeId}
           onSet={handleSetShiftManager}
         />
@@ -331,6 +356,7 @@ function WeekCard({
           closingTaken={new Set(closingAll.map((a) => a.employee_id))}
           eligible={dutyEligible}
           employeeNames={employeeNames}
+          shiftCounts={shiftCounts}
           myEmployeeId={myEmployeeId}
           onAssign={handleAssign}
           onSwap={handleSwap}
@@ -349,6 +375,7 @@ function WeekCard({
           closingTaken={new Set(closingAll.map((a) => a.employee_id))}
           eligible={dutyEligible}
           employeeNames={employeeNames}
+          shiftCounts={shiftCounts}
           myEmployeeId={myEmployeeId}
           onAssign={handleAssign}
           onSwap={handleSwap}
@@ -372,18 +399,64 @@ function ColumnHeader({ shift, type }: { shift?: Shift; type: ShiftType }) {
   )
 }
 
-function StatusCell({ shift }: { shift?: Shift }) {
-  if (!shift) return <span className="text-muted-foreground">—</span>
+// One combined status line for the whole week's shift pair, instead of a
+// separate badge per shift-type. Prefers the closing shift's status (that's
+// the one that determines whether the night is actually done), falling back
+// to the opening shift if closing doesn't exist yet. Also surfaces
+// understaffing that isn't captured by that status alone: too few bartenders
+// (below required_staff_count) or no area manager at all for a shift-type
+// that's still open.
+function CombinedStatus({
+  opening,
+  closing,
+  openingAreaManagerCount,
+  closingAreaManagerCount,
+}: {
+  opening?: Shift
+  closing?: Shift
+  openingAreaManagerCount: number
+  closingAreaManagerCount: number
+}) {
+  const primary = closing ?? opening
+
+  const gaps: string[] = []
+  for (const [shift, areaManagerCount, label] of [
+    [opening, openingAreaManagerCount, 'פתיחה'],
+    [closing, closingAreaManagerCount, 'סגירה'],
+  ] as const) {
+    if (!shift || shift.status === 'cancelled') continue
+    const openForStaffing = shift.effective_status === 'published' || shift.effective_status === 'active'
+    if (!openForStaffing) continue
+    if (shift.required_staff_count !== null && shift.assigned_count < shift.required_staff_count) {
+      gaps.push(`תת-איוש ברמנים/יות (${label})`)
+    }
+    if (areaManagerCount === 0) {
+      gaps.push(`אין אחראי/ת מתחם (${label})`)
+    }
+  }
+
   return (
-    <Link
-      to={`/shifts/${shift.id}`}
-      className={cn(
-        'w-fit rounded-full px-2 py-0.5 font-medium hover:underline',
-        effectiveStatusBadgeClass[shift.effective_status],
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <span className="text-muted-foreground">סטטוס</span>
+      {primary ? (
+        <Link
+          to={`/shifts/${primary.id}`}
+          className={cn(
+            'w-fit rounded-full px-2 py-0.5 font-medium hover:underline',
+            effectiveStatusBadgeClass[primary.effective_status],
+          )}
+        >
+          {effectiveStatusLabels[primary.effective_status]}
+        </Link>
+      ) : (
+        <span className="text-muted-foreground">—</span>
       )}
-    >
-      {effectiveStatusLabels[shift.effective_status]}
-    </Link>
+      {gaps.map((g) => (
+        <span key={g} className="text-amber-600 dark:text-amber-400">
+          {g}
+        </span>
+      ))}
+    </div>
   )
 }
 
@@ -391,12 +464,14 @@ function BarManagerRow({
   employeeId,
   employeeNames,
   shiftManagers,
+  shiftCounts,
   myEmployeeId,
   onSet,
 }: {
   employeeId: string | null
   employeeNames: Record<string, string>
   shiftManagers: Employee[]
+  shiftCounts: Record<string, number>
   myEmployeeId: string | null
   onSet: (employeeId: string | null) => void
 }) {
@@ -427,13 +502,13 @@ function BarManagerRow({
             .filter((e) => e.id !== employeeId)
             .map((e) => (
               <option key={e.id} value={e.id}>
-                {e.full_name}
+                {nameWithCount(e.full_name, shiftCounts, e.id)}
               </option>
             ))}
         </select>
       ) : employeeId ? (
         <button type="button" onClick={() => setEditing(true)} className="underline-offset-2 hover:underline">
-          {employeeNames[employeeId] ?? '—'}
+          {nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId)}
         </button>
       ) : (
         <span className="text-muted-foreground">— לא שובץ —</span>
@@ -466,6 +541,7 @@ function RoleSection({
   closingTaken,
   eligible,
   employeeNames,
+  shiftCounts,
   myEmployeeId,
   onAssign,
   onSwap,
@@ -482,6 +558,7 @@ function RoleSection({
   closingTaken: Set<string>
   eligible: Employee[]
   employeeNames: Record<string, string>
+  shiftCounts: Record<string, number>
   myEmployeeId: string | null
   onAssign: (shiftId: string, employeeId: string, role: ShiftAssignmentRole) => void
   onSwap: (oldAssignmentId: string, shiftId: string, role: ShiftAssignmentRole, newEmployeeId: string) => void
@@ -511,6 +588,7 @@ function RoleSection({
               isNext={openingIsNext}
               iAmFree={openingIAmFree}
               employeeNames={employeeNames}
+              shiftCounts={shiftCounts}
               eligible={eligible}
               takenIds={openingTaken}
               onAssociateMe={() => openingShiftId && myEmployeeId && onAssign(openingShiftId, myEmployeeId, role)}
@@ -523,6 +601,7 @@ function RoleSection({
               isNext={closingIsNext}
               iAmFree={closingIAmFree}
               employeeNames={employeeNames}
+              shiftCounts={shiftCounts}
               eligible={eligible}
               takenIds={closingTaken}
               onAssociateMe={() => closingShiftId && myEmployeeId && onAssign(closingShiftId, myEmployeeId, role)}
@@ -556,6 +635,7 @@ function SlotCell({
   isNext,
   iAmFree,
   employeeNames,
+  shiftCounts,
   eligible,
   takenIds,
   onAssociateMe,
@@ -567,6 +647,7 @@ function SlotCell({
   isNext: boolean
   iAmFree: boolean
   employeeNames: Record<string, string>
+  shiftCounts: Record<string, number>
   eligible: Employee[]
   takenIds: Set<string>
   onAssociateMe: () => void
@@ -592,7 +673,7 @@ function SlotCell({
           }}
         >
           <option value="" disabled>
-            {employeeNames[person.employee_id] ?? '—'}
+            {nameWithCount(employeeNames[person.employee_id] ?? '—', shiftCounts, person.employee_id)}
           </option>
           <option value="__remove__">— הסרה —</option>
           {eligible
@@ -600,7 +681,7 @@ function SlotCell({
             .filter((e) => e.id !== person.employee_id)
             .map((e) => (
               <option key={e.id} value={e.id}>
-                {e.full_name}
+                {nameWithCount(e.full_name, shiftCounts, e.id)}
               </option>
             ))}
         </select>
@@ -612,7 +693,7 @@ function SlotCell({
         onClick={() => setEditing(true)}
         className="truncate text-start text-xs underline-offset-2 hover:underline"
       >
-        {employeeNames[person.employee_id] ?? '—'}
+        {nameWithCount(employeeNames[person.employee_id] ?? '—', shiftCounts, person.employee_id)}
       </button>
     )
   }
@@ -637,7 +718,7 @@ function SlotCell({
           .filter((e) => !takenIds.has(e.id))
           .map((e) => (
             <option key={e.id} value={e.id}>
-              {e.full_name}
+              {nameWithCount(e.full_name, shiftCounts, e.id)}
             </option>
           ))}
       </select>
