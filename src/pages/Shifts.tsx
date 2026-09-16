@@ -77,6 +77,7 @@ function AllocationsList() {
   const [dutyEligible, setDutyEligible] = useState<Employee[]>([])
   const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({})
   const [shiftCounts, setShiftCounts] = useState<Record<string, number>>({})
+  const [pendingRequestAssignmentIds, setPendingRequestAssignmentIds] = useState<Set<string>>(new Set())
 
   const canManage = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
 
@@ -93,6 +94,7 @@ function AllocationsList() {
       setDutyEligible([])
       setEmployeeNames({})
       setShiftCounts({})
+      setPendingRequestAssignmentIds(new Set())
       return
     }
 
@@ -101,7 +103,7 @@ function AllocationsList() {
     // firing requests RLS will just reject.
     if (canManage) await supabase.rpc('ensure_upcoming_shifts')
 
-    const [shiftsRes, teamRes, shiftManagersRes, rolesRes, employeesRes, countsRes] = await Promise.all([
+    const [shiftsRes, teamRes, shiftManagersRes, rolesRes, employeesRes, countsRes, myRequestsRes] = await Promise.all([
       supabase
         .from('shifts_with_effective_status')
         .select('*')
@@ -116,7 +118,17 @@ function AllocationsList() {
       supabase.rpc('list_employee_roles'),
       supabase.from('employees').select('id, full_name').order('full_name'),
       supabase.rpc('list_employee_shift_counts'),
+      // Only a bartender/self-service viewer needs this, to know whether
+      // their own current-week slot already has a pending replacement
+      // request instead of offering the button again.
+      canManage
+        ? Promise.resolve({ data: [] })
+        : supabase.from('replacement_requests').select('shift_assignment_id').eq('requested_by', appUser.id).eq('status', 'pending'),
     ])
+
+    setPendingRequestAssignmentIds(
+      new Set(((myRequestsRes.data as { shift_assignment_id: string }[]) ?? []).map((r) => r.shift_assignment_id)),
+    )
 
     setShiftCounts(
       Object.fromEntries(
@@ -229,6 +241,7 @@ function AllocationsList() {
           shiftCounts={shiftCounts}
           myEmployeeId={myEmployeeId}
           viewerCanManage={canManage}
+          pendingRequestAssignmentIds={pendingRequestAssignmentIds}
           onSaved={load}
         />
       ))}
@@ -247,6 +260,7 @@ function WeekCard({
   shiftCounts,
   myEmployeeId,
   viewerCanManage,
+  pendingRequestAssignmentIds,
   onSaved,
 }: {
   week: string
@@ -259,6 +273,7 @@ function WeekCard({
   shiftCounts: Record<string, number>
   myEmployeeId: string | null
   viewerCanManage: boolean
+  pendingRequestAssignmentIds: Set<string>
   onSaved: () => void
 }) {
   const [error, setError] = useState<string | null>(null)
@@ -307,6 +322,21 @@ function WeekCard({
       return
     }
     onSaved()
+  }
+
+  async function handleRequestReplacement(
+    assignmentId: string,
+    reason: string | null,
+    substituteId: string | null,
+  ): Promise<string | null> {
+    const { error: requestError } = await supabase.rpc('request_replacement', {
+      p_shift_assignment_id: assignmentId,
+      p_reason: reason,
+      p_substitute_employee_id: substituteId,
+    })
+    if (requestError) return requestError.message
+    onSaved()
+    return null
   }
 
   async function handleSwap(oldAssignmentId: string, shiftId: string, role: ShiftAssignmentRole, newEmployeeId: string) {
@@ -366,8 +396,8 @@ function WeekCard({
           label="אחראי/ת מתחם"
           role="area_manager"
           max={2}
-          openingShiftId={openingId}
-          closingShiftId={closingId}
+          openingShift={shifts.opening}
+          closingShift={shifts.closing}
           openingAssignments={openingAll.filter((a) => a.assignment_role === 'area_manager')}
           closingAssignments={closingAll.filter((a) => a.assignment_role === 'area_manager')}
           openingTaken={new Set(openingAll.map((a) => a.employee_id))}
@@ -378,17 +408,19 @@ function WeekCard({
           myEmployeeId={myEmployeeId}
           selfOnly={!viewerCanManage}
           canSelfRemove={canSelfRemove}
+          pendingRequestAssignmentIds={pendingRequestAssignmentIds}
           onAssign={handleAssign}
           onSwap={handleSwap}
           onRemove={handleRemove}
+          onRequestReplacement={handleRequestReplacement}
         />
 
         <RoleSection
           label="ברמנים/יות (עד 3)"
           role="bartender"
           max={3}
-          openingShiftId={openingId}
-          closingShiftId={closingId}
+          openingShift={shifts.opening}
+          closingShift={shifts.closing}
           openingAssignments={openingAll.filter((a) => a.assignment_role === 'bartender')}
           closingAssignments={closingAll.filter((a) => a.assignment_role === 'bartender')}
           openingTaken={new Set(openingAll.map((a) => a.employee_id))}
@@ -399,9 +431,11 @@ function WeekCard({
           myEmployeeId={myEmployeeId}
           selfOnly={!viewerCanManage}
           canSelfRemove={canSelfRemove}
+          pendingRequestAssignmentIds={pendingRequestAssignmentIds}
           onAssign={handleAssign}
           onSwap={handleSwap}
           onRemove={handleRemove}
+          onRequestReplacement={handleRequestReplacement}
         />
 
         {error && <p className="text-destructive text-xs">{error}</p>}
@@ -568,8 +602,8 @@ function RoleSection({
   label,
   role,
   max,
-  openingShiftId,
-  closingShiftId,
+  openingShift,
+  closingShift,
   openingAssignments,
   closingAssignments,
   openingTaken,
@@ -580,15 +614,17 @@ function RoleSection({
   myEmployeeId,
   selfOnly,
   canSelfRemove,
+  pendingRequestAssignmentIds,
   onAssign,
   onSwap,
   onRemove,
+  onRequestReplacement,
 }: {
   label: string
   role: ShiftAssignmentRole
   max: number
-  openingShiftId?: string
-  closingShiftId?: string
+  openingShift?: Shift
+  closingShift?: Shift
   openingAssignments: ShiftAssignment[]
   closingAssignments: ShiftAssignment[]
   openingTaken: Set<string>
@@ -599,12 +635,16 @@ function RoleSection({
   myEmployeeId: string | null
   selfOnly: boolean
   canSelfRemove: boolean
+  pendingRequestAssignmentIds: Set<string>
   onAssign: (shiftId: string, employeeId: string, role: ShiftAssignmentRole) => void
   onSwap: (oldAssignmentId: string, shiftId: string, role: ShiftAssignmentRole, newEmployeeId: string) => void
   onRemove: (assignmentId: string) => void
+  onRequestReplacement: (assignmentId: string, reason: string | null, substituteId: string | null) => Promise<string | null>
 }) {
   const iAmEligible = !!myEmployeeId && eligible.some((e) => e.id === myEmployeeId)
   const rows = Array.from({ length: max }, (_, i) => i)
+  const openingShiftId = openingShift?.id
+  const closingShiftId = closingShift?.id
 
   return (
     <div className="flex flex-col gap-1">
@@ -633,10 +673,17 @@ function RoleSection({
               myEmployeeId={myEmployeeId}
               selfOnly={selfOnly}
               canSelfRemove={canSelfRemove}
+              canRequestReplacement={openingShift?.effective_status === 'published'}
+              hasPendingRequest={!!openingPerson && pendingRequestAssignmentIds.has(openingPerson.id)}
               onAssociateMe={() => openingShiftId && myEmployeeId && onAssign(openingShiftId, myEmployeeId, role)}
               onPick={(id) => openingShiftId && onAssign(openingShiftId, id, role)}
               onSwap={(newId) => openingShiftId && openingPerson && onSwap(openingPerson.id, openingShiftId, role, newId)}
               onRemove={() => openingPerson && onRemove(openingPerson.id)}
+              onRequestReplacement={(reason, substituteId) =>
+                openingPerson
+                  ? onRequestReplacement(openingPerson.id, reason, substituteId)
+                  : Promise.resolve('אין שיבוץ')
+              }
             />
             <SlotCell
               person={closingPerson}
@@ -649,10 +696,17 @@ function RoleSection({
               myEmployeeId={myEmployeeId}
               selfOnly={selfOnly}
               canSelfRemove={canSelfRemove}
+              canRequestReplacement={closingShift?.effective_status === 'published'}
+              hasPendingRequest={!!closingPerson && pendingRequestAssignmentIds.has(closingPerson.id)}
               onAssociateMe={() => closingShiftId && myEmployeeId && onAssign(closingShiftId, myEmployeeId, role)}
               onPick={(id) => closingShiftId && onAssign(closingShiftId, id, role)}
               onSwap={(newId) => closingShiftId && closingPerson && onSwap(closingPerson.id, closingShiftId, role, newId)}
               onRemove={() => closingPerson && onRemove(closingPerson.id)}
+              onRequestReplacement={(reason, substituteId) =>
+                closingPerson
+                  ? onRequestReplacement(closingPerson.id, reason, substituteId)
+                  : Promise.resolve('אין שיבוץ')
+              }
             />
             {(openingIAmFree || closingIAmFree) && (
               <Button
@@ -686,10 +740,13 @@ function SlotCell({
   myEmployeeId,
   selfOnly,
   canSelfRemove,
+  canRequestReplacement,
+  hasPendingRequest,
   onAssociateMe,
   onPick,
   onSwap,
   onRemove,
+  onRequestReplacement,
 }: {
   person?: ShiftAssignment
   isNext: boolean
@@ -701,26 +758,39 @@ function SlotCell({
   myEmployeeId: string | null
   selfOnly: boolean
   canSelfRemove: boolean
+  canRequestReplacement: boolean
+  hasPendingRequest: boolean
   onAssociateMe: () => void
   onPick: (employeeId: string) => void
   onSwap: (newEmployeeId: string) => void
   onRemove: () => void
+  onRequestReplacement: (reason: string | null, substituteId: string | null) => Promise<string | null>
 }) {
   const [editing, setEditing] = useState(false)
 
   if (person && selfOnly) {
     const isMine = person.employee_id === myEmployeeId
-    return (
-      <div className="flex items-center gap-1">
-        <span className="truncate text-xs">
-          {nameWithCount(employeeNames[person.employee_id] ?? '—', shiftCounts, person.employee_id)}
-        </span>
-        {isMine && canSelfRemove && (
+    const name = nameWithCount(employeeNames[person.employee_id] ?? '—', shiftCounts, person.employee_id)
+
+    if (isMine && canSelfRemove) {
+      return (
+        <div className="flex items-center gap-1">
+          <span className="truncate text-xs">{name}</span>
           <button type="button" onClick={onRemove} className="text-destructive text-[10px] underline-offset-2 hover:underline">
             ביטול
           </button>
-        )}
-      </div>
+        </div>
+      )
+    }
+
+    if (isMine && !canSelfRemove && canRequestReplacement) {
+      return (
+        <ReplacementRequestControl name={name} hasPendingRequest={hasPendingRequest} eligible={eligible} onSubmit={onRequestReplacement} />
+      )
+    }
+
+    return (
+      <span className="truncate text-xs">{name}</span>
     )
   }
 
@@ -826,6 +896,101 @@ function SlotCell({
       >
         בחר/י…
       </button>
+    </div>
+  )
+}
+
+// Own slot, current week: can't just drop it (that's what canSelfRemove
+// future-week self-remove is for), so offer a replacement request instead
+// -- same request_replacement() RPC and reason/substitute fields MyShifts'
+// self-service request form already uses, just inline here.
+function ReplacementRequestControl({
+  name,
+  hasPendingRequest,
+  eligible,
+  onSubmit,
+}: {
+  name: string
+  hasPendingRequest: boolean
+  eligible: Employee[]
+  onSubmit: (reason: string | null, substituteId: string | null) => Promise<string | null>
+}) {
+  const [showForm, setShowForm] = useState(false)
+  const [reason, setReason] = useState('')
+  const [substituteId, setSubstituteId] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  if (hasPendingRequest) {
+    return (
+      <div className="flex flex-col text-xs">
+        <span className="truncate">{name}</span>
+        <span className="text-muted-foreground text-[10px]">בקשת החלפה נשלחה, ממתינה לאישור</span>
+      </div>
+    )
+  }
+
+  if (!showForm) {
+    return (
+      <div className="flex items-center gap-1">
+        <span className="truncate text-xs">{name}</span>
+        <button
+          type="button"
+          onClick={() => setShowForm(true)}
+          className="text-[10px] underline-offset-2 hover:underline"
+        >
+          בקשת החלפה
+        </button>
+      </div>
+    )
+  }
+
+  async function handleSubmit() {
+    setSubmitting(true)
+    setError(null)
+    const submitError = await onSubmit(reason.trim() || null, substituteId || null)
+    setSubmitting(false)
+    if (submitError) {
+      setError(submitError)
+      return
+    }
+    setShowForm(false)
+    setReason('')
+    setSubstituteId('')
+  }
+
+  return (
+    <div className="flex flex-col gap-1 rounded-md border p-1.5">
+      <span className="truncate text-xs font-medium">{name}</span>
+      <textarea
+        className={cn(selectClass, 'h-auto min-h-10 py-1 text-[11px]')}
+        placeholder="סיבה (לא חובה)"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+      />
+      <select className={cn(selectClass, 'text-[11px]')} value={substituteId} onChange={(e) => setSubstituteId(e.target.value)}>
+        <option value="">הצעת מחליף/ה</option>
+        {eligible.map((e) => (
+          <option key={e.id} value={e.id}>
+            {e.full_name}
+          </option>
+        ))}
+      </select>
+      <div className="flex gap-1">
+        <Button type="button" size="sm" className="h-6 flex-1 px-1 text-[10px]" disabled={submitting} onClick={handleSubmit}>
+          שליחה
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-6 flex-1 px-1 text-[10px]"
+          onClick={() => setShowForm(false)}
+        >
+          ביטול
+        </Button>
+      </div>
+      {error && <p className="text-destructive text-[10px]">{error}</p>}
     </div>
   )
 }
