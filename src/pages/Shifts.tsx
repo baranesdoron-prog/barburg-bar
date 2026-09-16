@@ -599,10 +599,64 @@ function BarManagerRow({
   // (their own or anyone else's) once it's set.
   if (!canPickAnyone) {
     return (
-      <div className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
+      <div className="flex items-center gap-2 rounded-md border p-2 text-sm">
         <span className="text-muted-foreground text-xs">מנהל/ת בר</span>
-        {employeeId ? (
-          <span>{nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId)}</span>
+        <div className="flex flex-1 items-center justify-center gap-2">
+          {employeeId ? (
+            <span>{nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId)}</span>
+          ) : (
+            <>
+              <span className="text-muted-foreground">— לא שובץ —</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+                disabled={!iAmEligible}
+                onClick={() => myEmployeeId && onSet(myEmployeeId)}
+              >
+                שבץ אותי
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Administrator: full picker -- fill an empty slot with anyone from the
+  // admins/bar-managers list (not just self), or swap/remove once filled.
+  return (
+    <div className="flex items-center gap-2 rounded-md border p-2 text-sm">
+      <span className="text-muted-foreground text-xs">מנהל/ת בר</span>
+      <div className="flex flex-1 items-center justify-center gap-2">
+        {editing ? (
+          <select
+            autoFocus
+            className={cn(selectClass, 'h-8 max-w-48 text-sm')}
+            defaultValue=""
+            onBlur={() => setEditing(false)}
+            onChange={(e) => {
+              const v = e.target.value
+              setEditing(false)
+              if (v === '__remove__') onSet(null)
+              else if (v) onSet(v)
+            }}
+          >
+            <option value="">בחר/י…</option>
+            {employeeId && <option value="__remove__">— הסרה —</option>}
+            {shiftManagers
+              .filter((e) => e.id !== employeeId)
+              .map((e) => (
+                <option key={e.id} value={e.id}>
+                  {nameWithCount(e.full_name, shiftCounts, e.id)}
+                </option>
+              ))}
+          </select>
+        ) : employeeId ? (
+          <button type="button" onClick={() => setEditing(true)} className="underline-offset-2 hover:underline">
+            {nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId)}
+          </button>
         ) : (
           <>
             <span className="text-muted-foreground">— לא שובץ —</span>
@@ -616,66 +670,16 @@ function BarManagerRow({
             >
               שבץ אותי
             </Button>
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="text-muted-foreground text-xs underline-offset-2 hover:underline"
+            >
+              בחר/י…
+            </button>
           </>
         )}
       </div>
-    )
-  }
-
-  // Administrator: full picker -- fill an empty slot with anyone from the
-  // admins/bar-managers list (not just self), or swap/remove once filled.
-  return (
-    <div className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
-      <span className="text-muted-foreground text-xs">מנהל/ת בר</span>
-      {editing ? (
-        <select
-          autoFocus
-          className={cn(selectClass, 'h-8 flex-1 text-sm')}
-          defaultValue=""
-          onBlur={() => setEditing(false)}
-          onChange={(e) => {
-            const v = e.target.value
-            setEditing(false)
-            if (v === '__remove__') onSet(null)
-            else if (v) onSet(v)
-          }}
-        >
-          <option value="">בחר/י…</option>
-          {employeeId && <option value="__remove__">— הסרה —</option>}
-          {shiftManagers
-            .filter((e) => e.id !== employeeId)
-            .map((e) => (
-              <option key={e.id} value={e.id}>
-                {nameWithCount(e.full_name, shiftCounts, e.id)}
-              </option>
-            ))}
-        </select>
-      ) : employeeId ? (
-        <button type="button" onClick={() => setEditing(true)} className="underline-offset-2 hover:underline">
-          {nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId)}
-        </button>
-      ) : (
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">— לא שובץ —</span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 px-2 text-xs"
-            disabled={!iAmEligible}
-            onClick={() => myEmployeeId && onSet(myEmployeeId)}
-          >
-            שבץ אותי
-          </Button>
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="text-muted-foreground text-xs underline-offset-2 hover:underline"
-          >
-            בחר/י…
-          </button>
-        </div>
-      )}
     </div>
   )
 }
