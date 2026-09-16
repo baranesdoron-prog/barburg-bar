@@ -6,7 +6,12 @@ import { useAppUser } from '@/hooks/useAppUser'
 import { useAppUserContext, type AppOutletContext } from '@/lib/outletContext'
 import { ImpersonationProvider, useImpersonation } from '@/lib/impersonation'
 import type { AppRole } from '@/lib/types'
-import { ROLES_MANAGING_SHIFTS, ROLES_REQUIRING_EMPLOYEE, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
+import {
+  ROLES_MANAGING_SHIFTS,
+  ROLES_REQUIRING_EMPLOYEE,
+  ROLES_VIEWING_ALLOCATIONS,
+  ROLES_VIEWING_SHIFTS,
+} from '@/lib/roleLabels'
 import { AppShell } from '@/components/AppShell'
 import { SignUp } from '@/pages/SignUp'
 import { Login } from '@/pages/Login'
@@ -83,8 +88,10 @@ export function App() {
           <Route path="/my-shifts" element={<MyShifts />} />
           <Route path="/my-shifts/assigned" element={<MyAssignedShifts />} />
         </Route>
-        <Route element={<RequireRole roles={ROLES_VIEWING_SHIFTS} />}>
+        <Route element={<RequireRole roles={ROLES_VIEWING_ALLOCATIONS} />}>
           <Route path="/shifts" element={<Shifts />} />
+        </Route>
+        <Route element={<RequireRole roles={ROLES_VIEWING_SHIFTS} />}>
           <Route path="/shifts/archive" element={<ShiftsArchive />} />
           <Route path="/shifts/:id" element={<ShiftDetail />} />
           <Route path="/shifts/:id/attendance" element={<AttendanceForm />} />

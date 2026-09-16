@@ -57,7 +57,7 @@ export function getNavItems(role: AppRole): NavItem[] {
       label: 'משמרות',
       icon: CalendarClock,
       children: [
-        { to: '/my-shifts', label: 'שיבוצי משמרת', icon: Calendar },
+        { to: '/shifts', label: 'שיבוצי משמרת', icon: Calendar },
         { to: '/my-shifts/assigned', label: 'המשמרות שלי', icon: CalendarCheck },
       ],
     })

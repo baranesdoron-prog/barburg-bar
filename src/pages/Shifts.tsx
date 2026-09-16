@@ -96,7 +96,10 @@ function AllocationsList() {
       return
     }
 
-    await supabase.rpc('ensure_upcoming_shifts')
+    // Both manager-only server-side: bartenders can't provision shifts or
+    // pick a bar manager, so skip these calls entirely for them instead of
+    // firing requests RLS will just reject.
+    if (canManage) await supabase.rpc('ensure_upcoming_shifts')
 
     const [shiftsRes, teamRes, shiftManagersRes, rolesRes, employeesRes, countsRes] = await Promise.all([
       supabase
@@ -109,7 +112,7 @@ function AllocationsList() {
         .select('week_start, employee_id')
         .gte('week_start', weeks[0])
         .lte('week_start', weeks[weeks.length - 1]),
-      supabase.rpc('list_shift_manager_employees'),
+      canManage ? supabase.rpc('list_shift_manager_employees') : Promise.resolve({ data: [] }),
       supabase.rpc('list_employee_roles'),
       supabase.from('employees').select('id, full_name').order('full_name'),
       supabase.rpc('list_employee_shift_counts'),
@@ -184,16 +187,16 @@ function AllocationsList() {
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">משמרות</h1>
-        <div className="flex gap-2">
-          <Button asChild variant="outline">
-            <Link to="/shifts/archive">ארכיון</Link>
-          </Button>
-          {canManage && (
+        {canManage && (
+          <div className="flex gap-2">
+            <Button asChild variant="outline">
+              <Link to="/shifts/archive">ארכיון</Link>
+            </Button>
             <Button asChild>
               <Link to="/shifts/new">משמרת חדשה</Link>
             </Button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between">
@@ -225,6 +228,7 @@ function AllocationsList() {
           employeeNames={employeeNames}
           shiftCounts={shiftCounts}
           myEmployeeId={myEmployeeId}
+          viewerCanManage={canManage}
           onSaved={load}
         />
       ))}
@@ -242,6 +246,7 @@ function WeekCard({
   employeeNames,
   shiftCounts,
   myEmployeeId,
+  viewerCanManage,
   onSaved,
 }: {
   week: string
@@ -253,6 +258,7 @@ function WeekCard({
   employeeNames: Record<string, string>
   shiftCounts: Record<string, number>
   myEmployeeId: string | null
+  viewerCanManage: boolean
   onSaved: () => void
 }) {
   const [error, setError] = useState<string | null>(null)
@@ -320,18 +326,25 @@ function WeekCard({
     onSaved()
   }
 
+  // Matches shift_assignments_delete_self_future_week's RLS: a bartender
+  // can only remove their own assignment for a strictly-future week, not
+  // the current one.
+  const canSelfRemove = week > toDateStr(activeWeekStart())
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">{dateLabel}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <CombinedStatus
-          opening={shifts.opening}
-          closing={shifts.closing}
-          openingAreaManagerCount={openingAll.filter((a) => a.assignment_role === 'area_manager').length}
-          closingAreaManagerCount={closingAll.filter((a) => a.assignment_role === 'area_manager').length}
-        />
+        {viewerCanManage && (
+          <CombinedStatus
+            opening={shifts.opening}
+            closing={shifts.closing}
+            openingAreaManagerCount={openingAll.filter((a) => a.assignment_role === 'area_manager').length}
+            closingAreaManagerCount={closingAll.filter((a) => a.assignment_role === 'area_manager').length}
+          />
+        )}
 
         <BarManagerRow
           employeeId={shiftManagerId}
@@ -339,6 +352,7 @@ function WeekCard({
           shiftManagers={shiftManagers}
           shiftCounts={shiftCounts}
           myEmployeeId={myEmployeeId}
+          readOnly={!viewerCanManage}
           onSet={handleSetShiftManager}
         />
 
@@ -362,6 +376,8 @@ function WeekCard({
           employeeNames={employeeNames}
           shiftCounts={shiftCounts}
           myEmployeeId={myEmployeeId}
+          selfOnly={!viewerCanManage}
+          canSelfRemove={canSelfRemove}
           onAssign={handleAssign}
           onSwap={handleSwap}
           onRemove={handleRemove}
@@ -381,6 +397,8 @@ function WeekCard({
           employeeNames={employeeNames}
           shiftCounts={shiftCounts}
           myEmployeeId={myEmployeeId}
+          selfOnly={!viewerCanManage}
+          canSelfRemove={canSelfRemove}
           onAssign={handleAssign}
           onSwap={handleSwap}
           onRemove={handleRemove}
@@ -470,6 +488,7 @@ function BarManagerRow({
   shiftManagers,
   shiftCounts,
   myEmployeeId,
+  readOnly,
   onSet,
 }: {
   employeeId: string | null
@@ -477,10 +496,22 @@ function BarManagerRow({
   shiftManagers: Employee[]
   shiftCounts: Record<string, number>
   myEmployeeId: string | null
+  readOnly: boolean
   onSet: (employeeId: string | null) => void
 }) {
   const [editing, setEditing] = useState(false)
   const iAmEligible = !!myEmployeeId && shiftManagers.some((e) => e.id === myEmployeeId)
+
+  if (readOnly) {
+    return (
+      <div className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
+        <span className="text-muted-foreground text-xs">מנהל/ת בר</span>
+        <span>
+          {employeeId ? nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId) : '— לא שובץ —'}
+        </span>
+      </div>
+    )
+  }
 
   return (
     <div className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
@@ -547,6 +578,8 @@ function RoleSection({
   employeeNames,
   shiftCounts,
   myEmployeeId,
+  selfOnly,
+  canSelfRemove,
   onAssign,
   onSwap,
   onRemove,
@@ -564,6 +597,8 @@ function RoleSection({
   employeeNames: Record<string, string>
   shiftCounts: Record<string, number>
   myEmployeeId: string | null
+  selfOnly: boolean
+  canSelfRemove: boolean
   onAssign: (shiftId: string, employeeId: string, role: ShiftAssignmentRole) => void
   onSwap: (oldAssignmentId: string, shiftId: string, role: ShiftAssignmentRole, newEmployeeId: string) => void
   onRemove: (assignmentId: string) => void
@@ -595,6 +630,9 @@ function RoleSection({
               shiftCounts={shiftCounts}
               eligible={eligible}
               takenIds={openingTaken}
+              myEmployeeId={myEmployeeId}
+              selfOnly={selfOnly}
+              canSelfRemove={canSelfRemove}
               onAssociateMe={() => openingShiftId && myEmployeeId && onAssign(openingShiftId, myEmployeeId, role)}
               onPick={(id) => openingShiftId && onAssign(openingShiftId, id, role)}
               onSwap={(newId) => openingShiftId && openingPerson && onSwap(openingPerson.id, openingShiftId, role, newId)}
@@ -608,6 +646,9 @@ function RoleSection({
               shiftCounts={shiftCounts}
               eligible={eligible}
               takenIds={closingTaken}
+              myEmployeeId={myEmployeeId}
+              selfOnly={selfOnly}
+              canSelfRemove={canSelfRemove}
               onAssociateMe={() => closingShiftId && myEmployeeId && onAssign(closingShiftId, myEmployeeId, role)}
               onPick={(id) => closingShiftId && onAssign(closingShiftId, id, role)}
               onSwap={(newId) => closingShiftId && closingPerson && onSwap(closingPerson.id, closingShiftId, role, newId)}
@@ -642,6 +683,9 @@ function SlotCell({
   shiftCounts,
   eligible,
   takenIds,
+  myEmployeeId,
+  selfOnly,
+  canSelfRemove,
   onAssociateMe,
   onPick,
   onSwap,
@@ -654,12 +698,31 @@ function SlotCell({
   shiftCounts: Record<string, number>
   eligible: Employee[]
   takenIds: Set<string>
+  myEmployeeId: string | null
+  selfOnly: boolean
+  canSelfRemove: boolean
   onAssociateMe: () => void
   onPick: (employeeId: string) => void
   onSwap: (newEmployeeId: string) => void
   onRemove: () => void
 }) {
   const [editing, setEditing] = useState(false)
+
+  if (person && selfOnly) {
+    const isMine = person.employee_id === myEmployeeId
+    return (
+      <div className="flex items-center gap-1">
+        <span className="truncate text-xs">
+          {nameWithCount(employeeNames[person.employee_id] ?? '—', shiftCounts, person.employee_id)}
+        </span>
+        {isMine && canSelfRemove && (
+          <button type="button" onClick={onRemove} className="text-destructive text-[10px] underline-offset-2 hover:underline">
+            ביטול
+          </button>
+        )}
+      </div>
+    )
+  }
 
   if (person) {
     if (editing) {
@@ -703,6 +766,21 @@ function SlotCell({
   }
 
   if (!isNext) return <span />
+
+  if (selfOnly) {
+    return (
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className="h-6 w-fit px-2 text-[11px]"
+        disabled={!iAmFree}
+        onClick={onAssociateMe}
+      >
+        שבץ אותי
+      </Button>
+    )
+  }
 
   if (editing) {
     return (
