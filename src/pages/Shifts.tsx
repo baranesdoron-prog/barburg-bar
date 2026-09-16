@@ -445,7 +445,7 @@ function WeekCard({
             <RoleSection
               label="אחראי/ת מתחם"
               role="area_manager"
-              max={1}
+              max={2}
               openingShift={shifts.opening}
               closingShift={shifts.closing}
               openingAssignments={openingAll.filter((a) => a.assignment_role === 'area_manager')}
@@ -464,7 +464,7 @@ function WeekCard({
             <SelfServiceRoleSection
               label="אחראי/ת מתחם"
               role="area_manager"
-              max={1}
+              max={2}
               openingShift={shifts.opening}
               closingShift={shifts.closing}
               openingAssignments={openingAll.filter((a) => a.assignment_role === 'area_manager')}
@@ -737,7 +737,7 @@ function RoleSection({
         const closingIAmFree = closingIsNext && iAmEligible && !!myEmployeeId && !closingTaken.has(myEmployeeId)
 
         return (
-          <div key={i} className="grid grid-cols-[1fr_1fr_auto] items-center gap-1">
+          <div key={i} className="grid grid-cols-[1fr_1fr] items-center gap-1">
             <SlotCell
               person={openingPerson}
               isNext={openingIsNext}
@@ -764,20 +764,6 @@ function RoleSection({
               onSwap={(newId) => closingShiftId && closingPerson && onSwap(closingPerson.id, closingShiftId, role, newId)}
               onRemove={() => closingPerson && onRemove(closingPerson.id)}
             />
-            {(openingIAmFree || closingIAmFree) && (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-6 px-2 text-[11px]"
-                onClick={() => {
-                  if (openingIAmFree && openingShiftId && myEmployeeId) onAssign(openingShiftId, myEmployeeId, role)
-                  if (closingIAmFree && closingShiftId && myEmployeeId) onAssign(closingShiftId, myEmployeeId, role)
-                }}
-              >
-                שבץ אותי
-              </Button>
-            )}
           </div>
         )
       })}
