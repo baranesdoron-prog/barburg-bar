@@ -322,12 +322,6 @@ function WeekCard({
         <CardTitle className="text-base">{dateLabel}</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        <div className="grid grid-cols-[auto_1fr_1fr] items-center gap-x-2 gap-y-1 text-xs">
-          <span />
-          <ColumnHeader shift={shifts.opening} type="opening" />
-          <ColumnHeader shift={shifts.closing} type="closing" />
-        </div>
-
         <CombinedStatus
           opening={shifts.opening}
           closing={shifts.closing}
@@ -343,6 +337,12 @@ function WeekCard({
           myEmployeeId={myEmployeeId}
           onSet={handleSetShiftManager}
         />
+
+        <div className="grid grid-cols-[auto_1fr_1fr] items-center gap-x-2 gap-y-1 text-xs">
+          <span />
+          <ColumnHeader shift={shifts.opening} type="opening" />
+          <ColumnHeader shift={shifts.closing} type="closing" />
+        </div>
 
         <RoleSection
           label="אחראי/ת מתחם"
