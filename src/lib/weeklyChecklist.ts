@@ -54,6 +54,13 @@ export function currentMonthWeekRange() {
   return { start, end }
 }
 
+// Shifts always run Thursday evening (see ensure_upcoming_shifts()) --
+// for screens that show one row per week without the real shift rows
+// loaded, this is the date to display instead of the week's Sunday.
+export function shiftDateOfWeek(week: string) {
+  return addDays(parseDateStr(week), 4)
+}
+
 export const weekLabelFormatter = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'long' })
 
 const currentYear = new Date().getFullYear()

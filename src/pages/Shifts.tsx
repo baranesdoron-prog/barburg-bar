@@ -11,8 +11,8 @@ import {
   weekLabelFormatter,
   YEAR_OPTIONS,
   toDateStr,
-  parseDateStr,
   archiveCutoff,
+  shiftDateOfWeek,
 } from '@/lib/weeklyChecklist'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -150,11 +150,13 @@ function WeekRow({
 }) {
   const managerId = shifts.opening?.shift_manager_id ?? shifts.closing?.shift_manager_id
   const managerName = managerId ? (employeeNames[managerId] ?? '—') : '—'
+  const shiftDate = shifts.opening?.start_time ?? shifts.closing?.start_time
+  const dateLabel = shiftDate ? weekLabelFormatter.format(new Date(shiftDate)) : weekLabelFormatter.format(shiftDateOfWeek(week))
 
   return (
     <div className="flex flex-col gap-1 rounded-md border p-2 text-sm">
       <div className="flex items-center justify-between gap-2">
-        <span>{weekLabelFormatter.format(parseDateStr(week))}</span>
+        <span>{dateLabel}</span>
         <span className="text-muted-foreground text-xs">מנהל/ת בר: {managerName}</span>
       </div>
       <div className="flex gap-2">

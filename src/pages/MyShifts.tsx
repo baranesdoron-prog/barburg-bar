@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
 import { effectiveStatusLabels, effectiveStatusBadgeClass, shiftTypeLabel } from '@/lib/shiftLabels'
-import { activeWeekStart, toDateStr, weekLabelFormatter, parseDateStr, addDays } from '@/lib/weeklyChecklist'
+import { activeWeekStart, toDateStr, weekLabelFormatter, shiftDateOfWeek, addDays } from '@/lib/weeklyChecklist'
 import { cn, formatDateTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -206,11 +206,13 @@ function WeekRow({
 }) {
   const managerId = weekShifts.opening?.shift.shift_manager_id ?? weekShifts.closing?.shift.shift_manager_id
   const managerName = managerId ? (employees.find((e) => e.id === managerId)?.full_name ?? '—') : '—'
+  const shiftDate = weekShifts.opening?.shift.start_time ?? weekShifts.closing?.shift.start_time
+  const dateLabel = shiftDate ? weekLabelFormatter.format(new Date(shiftDate)) : weekLabelFormatter.format(shiftDateOfWeek(week))
 
   return (
     <div className="flex flex-col gap-2 rounded-md border p-2 text-sm">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-medium">שבוע {weekLabelFormatter.format(parseDateStr(week))}</span>
+        <span className="font-medium">שבוע {dateLabel}</span>
         <span className="text-muted-foreground text-xs">מנהל/ת בר: {managerName}</span>
       </div>
       {weekShifts.opening && (

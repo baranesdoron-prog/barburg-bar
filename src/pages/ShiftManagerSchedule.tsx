@@ -4,12 +4,12 @@ import { ChevronDown } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import {
   toDateStr,
-  parseDateStr,
   sundaysInYear,
   EARLIEST_WEEK_START,
   weekLabelFormatter,
   YEAR_OPTIONS,
   currentMonthWeekRange,
+  shiftDateOfWeek,
 } from '@/lib/weeklyChecklist'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -181,7 +181,7 @@ function WeekRow({
 
   return (
     <div className="flex flex-col gap-3 rounded-md border p-3 text-sm">
-      <span className="font-medium">{weekLabelFormatter.format(parseDateStr(week))}</span>
+      <span className="font-medium">{weekLabelFormatter.format(shiftDateOfWeek(week))}</span>
 
       <div className="flex flex-col gap-1">
         <Label className="text-muted-foreground text-xs">מנהל/ת בר</Label>
