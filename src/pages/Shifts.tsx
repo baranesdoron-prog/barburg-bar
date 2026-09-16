@@ -241,6 +241,7 @@ function AllocationsList() {
           shiftCounts={shiftCounts}
           myEmployeeId={myEmployeeId}
           viewerCanManage={canManage}
+          isAdmin={effectiveRole === 'administrator'}
           pendingRequestAssignmentIds={pendingRequestAssignmentIds}
           onSaved={load}
         />
@@ -260,6 +261,7 @@ function WeekCard({
   shiftCounts,
   myEmployeeId,
   viewerCanManage,
+  isAdmin,
   pendingRequestAssignmentIds,
   onSaved,
 }: {
@@ -273,6 +275,7 @@ function WeekCard({
   shiftCounts: Record<string, number>
   myEmployeeId: string | null
   viewerCanManage: boolean
+  isAdmin: boolean
   pendingRequestAssignmentIds: Set<string>
   onSaved: () => void
 }) {
@@ -386,6 +389,7 @@ function WeekCard({
             shiftCounts={shiftCounts}
             myEmployeeId={myEmployeeId}
             readOnly={!viewerCanManage}
+            canPickAnyone={isAdmin}
             onSet={handleSetShiftManager}
           />
 
@@ -563,6 +567,7 @@ function BarManagerRow({
   shiftCounts,
   myEmployeeId,
   readOnly,
+  canPickAnyone,
   onSet,
 }: {
   employeeId: string | null
@@ -571,11 +576,13 @@ function BarManagerRow({
   shiftCounts: Record<string, number>
   myEmployeeId: string | null
   readOnly: boolean
+  canPickAnyone: boolean
   onSet: (employeeId: string | null) => void
 }) {
   const [editing, setEditing] = useState(false)
   const iAmEligible = !!myEmployeeId && shiftManagers.some((e) => e.id === myEmployeeId)
 
+  // Bartenders/area-manager-duty viewers never touch this row -- read only.
   if (readOnly) {
     return (
       <div className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
@@ -587,6 +594,36 @@ function BarManagerRow({
     )
   }
 
+  // A bar manager (shift_manager) can only assign themselves -- no picking
+  // or swapping someone else in, and no touching an existing assignment
+  // (their own or anyone else's) once it's set.
+  if (!canPickAnyone) {
+    return (
+      <div className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
+        <span className="text-muted-foreground text-xs">מנהל/ת בר</span>
+        {employeeId ? (
+          <span>{nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId)}</span>
+        ) : (
+          <>
+            <span className="text-muted-foreground">— לא שובץ —</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-xs"
+              disabled={!iAmEligible}
+              onClick={() => myEmployeeId && onSet(myEmployeeId)}
+            >
+              שבץ אותי
+            </Button>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  // Administrator: full picker -- fill an empty slot with anyone from the
+  // admins/bar-managers list (not just self), or swap/remove once filled.
   return (
     <div className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
       <span className="text-muted-foreground text-xs">מנהל/ת בר</span>
@@ -603,9 +640,7 @@ function BarManagerRow({
             else if (v) onSet(v)
           }}
         >
-          <option value="" disabled>
-            {employeeId ? (employeeNames[employeeId] ?? '—') : '— לא שובץ —'}
-          </option>
+          <option value="">בחר/י…</option>
           {employeeId && <option value="__remove__">— הסרה —</option>}
           {shiftManagers
             .filter((e) => e.id !== employeeId)
@@ -620,19 +655,26 @@ function BarManagerRow({
           {nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId)}
         </button>
       ) : (
-        <span className="text-muted-foreground">— לא שובץ —</span>
-      )}
-      {!employeeId && (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="h-7 px-2 text-xs"
-          disabled={!iAmEligible}
-          onClick={() => myEmployeeId && onSet(myEmployeeId)}
-        >
-          שבץ אותי
-        </Button>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">— לא שובץ —</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-xs"
+            disabled={!iAmEligible}
+            onClick={() => myEmployeeId && onSet(myEmployeeId)}
+          >
+            שבץ אותי
+          </Button>
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-muted-foreground text-xs underline-offset-2 hover:underline"
+          >
+            בחר/י…
+          </button>
+        </div>
       )}
     </div>
   )
