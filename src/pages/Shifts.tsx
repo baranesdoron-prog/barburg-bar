@@ -38,9 +38,17 @@ interface Employee {
   full_name: string
 }
 
+// "Senior" is per position, not one blanket status -- someone can be a
+// senior area manager without being a senior bartender. Each duty has its
+// own count and its own senior flag (2+ lifetime shifts in that specific
+// duty, OR the matching employees.is_senior_* manual override for staff
+// whose history predates this app's shift history).
+type Duty = 'bartender' | 'area_manager' | 'bar_manager'
+
 interface ShiftCountInfo {
-  count: number
-  senior: boolean
+  bartender: { count: number; senior: boolean }
+  area_manager: { count: number; senior: boolean }
+  bar_manager: { count: number; senior: boolean }
 }
 
 interface WeekShifts {
@@ -53,24 +61,18 @@ function friendlyAssignmentError(error: { code?: string; message: string }) {
   return error.message
 }
 
-// "Senior" is 2+ lifetime shifts worked (same count already shown next to
-// every name) OR employees.is_senior -- a manual override for staff whose
-// seniority predates this app's shift history, which is the only history
-// the computed count can ever see. Both are folded into one senior flag
-// per employee at load time (see AllocationsList.load()), not re-derived
-// at every render site.
 const SENIOR_SHIFT_THRESHOLD = 2
 
 // Shown next to a name everywhere it's assigned: how many shifts this
-// person has actually worked, combined across every role, with a star
-// once they're senior.
-function nameWithCount(name: string, shiftCounts: Record<string, ShiftCountInfo>, employeeId: string) {
-  const info = shiftCounts[employeeId]
+// person has actually worked in this specific duty, with a star once
+// they're senior for it.
+function nameWithCount(name: string, shiftCounts: Record<string, ShiftCountInfo>, employeeId: string, duty: Duty) {
+  const info = shiftCounts[employeeId]?.[duty]
   return `${name} (${info?.count ?? 0})${info?.senior ? ' ⭐' : ''}`
 }
 
-function hasSenior(assignments: ShiftAssignment[], shiftCounts: Record<string, ShiftCountInfo>) {
-  return assignments.some((a) => shiftCounts[a.employee_id]?.senior)
+function hasSenior(assignments: ShiftAssignment[], shiftCounts: Record<string, ShiftCountInfo>, duty: Duty) {
+  return assignments.some((a) => shiftCounts[a.employee_id]?.[duty]?.senior)
 }
 
 export function Shifts() {
@@ -135,7 +137,7 @@ function AllocationsList() {
         .lte('week_start', weeks[weeks.length - 1]),
       canManage ? supabase.rpc('list_shift_manager_employees') : Promise.resolve({ data: [] }),
       supabase.rpc('list_employee_roles'),
-      supabase.from('employees').select('id, full_name, is_senior').order('full_name'),
+      supabase.from('employees').select('id, full_name, is_senior_bartender, is_senior_area_manager').order('full_name'),
       supabase.rpc('list_employee_shift_counts'),
       // Only a bartender/self-service viewer needs this, to know whether
       // their own current-week slot already has a pending replacement
@@ -175,7 +177,8 @@ function AllocationsList() {
     const roleByEmployeeId = new Map(
       ((rolesRes.data as { employee_id: string; role: string | null }[]) ?? []).map((r) => [r.employee_id, r.role]),
     )
-    const allEmployees = (employeesRes.data as (Employee & { is_senior: boolean })[]) ?? []
+    const allEmployees =
+      (employeesRes.data as (Employee & { is_senior_bartender: boolean; is_senior_area_manager: boolean })[]) ?? []
     setDutyEligible(allEmployees.filter((e) => roleByEmployeeId.get(e.id) !== undefined))
 
     const names: Record<string, string> = {}
@@ -183,16 +186,37 @@ function AllocationsList() {
     setEmployeeNames(names)
 
     const countByEmployeeId = new Map(
-      ((countsRes.data as { employee_id: string; shift_count: number }[]) ?? []).map((r) => [
-        r.employee_id,
-        r.shift_count,
-      ]),
+      (
+        (countsRes.data as {
+          employee_id: string
+          bartender_count: number
+          area_manager_count: number
+          bar_manager_count: number
+        }[]) ?? []
+      ).map((r) => [r.employee_id, r]),
     )
     setShiftCounts(
       Object.fromEntries(
         allEmployees.map((emp) => {
-          const count = countByEmployeeId.get(emp.id) ?? 0
-          return [emp.id, { count, senior: emp.is_senior || count >= SENIOR_SHIFT_THRESHOLD }]
+          const counts = countByEmployeeId.get(emp.id)
+          const bartenderCount = counts?.bartender_count ?? 0
+          const areaManagerCount = counts?.area_manager_count ?? 0
+          const barManagerCount = counts?.bar_manager_count ?? 0
+          const info: ShiftCountInfo = {
+            bartender: {
+              count: bartenderCount,
+              senior: emp.is_senior_bartender || bartenderCount >= SENIOR_SHIFT_THRESHOLD,
+            },
+            area_manager: {
+              count: areaManagerCount,
+              senior: emp.is_senior_area_manager || areaManagerCount >= SENIOR_SHIFT_THRESHOLD,
+            },
+            bar_manager: {
+              count: barManagerCount,
+              senior: barManagerCount >= SENIOR_SHIFT_THRESHOLD,
+            },
+          }
+          return [emp.id, info]
         }),
       ),
     )
@@ -574,10 +598,10 @@ function CombinedStatus({
     // At least one senior (2+ shifts worked) is expected per duty group on
     // a shift, not enforced -- same informational-only treatment as every
     // other gap here.
-    if (bartenders.length > 0 && !hasSenior(bartenders, shiftCounts)) {
+    if (bartenders.length > 0 && !hasSenior(bartenders, shiftCounts, 'bartender')) {
       gaps.push(`אין ברמן/ית בכיר/ה (${label})`)
     }
-    if (areaManagers.length > 0 && !hasSenior(areaManagers, shiftCounts)) {
+    if (areaManagers.length > 0 && !hasSenior(areaManagers, shiftCounts, 'area_manager')) {
       gaps.push(`אין אחראי/ת מתחם בכיר/ה (${label})`)
     }
   }
@@ -635,7 +659,7 @@ function BarManagerRow({
       <div className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
         <span className="text-muted-foreground text-xs">מנהל/ת בר</span>
         <span>
-          {employeeId ? nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId) : '— לא שובץ —'}
+          {employeeId ? nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId, 'bar_manager') : '— לא שובץ —'}
         </span>
       </div>
     )
@@ -650,7 +674,7 @@ function BarManagerRow({
         <span className="text-muted-foreground text-xs">מנהל/ת בר</span>
         <div className="flex flex-1 items-center justify-center gap-2">
           {employeeId ? (
-            <span>{nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId)}</span>
+            <span>{nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId, 'bar_manager')}</span>
           ) : (
             <Button
               type="button"
@@ -693,13 +717,13 @@ function BarManagerRow({
               .filter((e) => e.id !== employeeId)
               .map((e) => (
                 <option key={e.id} value={e.id}>
-                  {nameWithCount(e.full_name, shiftCounts, e.id)}
+                  {nameWithCount(e.full_name, shiftCounts, e.id, 'bar_manager')}
                 </option>
               ))}
           </select>
         ) : employeeId ? (
           <button type="button" onClick={() => setEditing(true)} className="underline-offset-2 hover:underline">
-            {nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId)}
+            {nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId, 'bar_manager')}
           </button>
         ) : (
           <>
@@ -794,6 +818,7 @@ function RoleSection({
               iAmFree={openingIAmFree}
               employeeNames={employeeNames}
               shiftCounts={shiftCounts}
+              duty={role}
               eligible={eligible}
               takenIds={openingTaken}
               onAssociateMe={() => openingShiftId && myEmployeeId && onAssign(openingShiftId, myEmployeeId, role)}
@@ -807,6 +832,7 @@ function RoleSection({
               iAmFree={closingIAmFree}
               employeeNames={employeeNames}
               shiftCounts={shiftCounts}
+              duty={role}
               eligible={eligible}
               takenIds={closingTaken}
               onAssociateMe={() => closingShiftId && myEmployeeId && onAssign(closingShiftId, myEmployeeId, role)}
@@ -947,7 +973,7 @@ function SelfServiceColumn({
     <div className="flex flex-col gap-1">
       {others.length > 0 && (
         <span className="text-xs">
-          {others.map((a) => nameWithCount(employeeNames[a.employee_id] ?? '—', shiftCounts, a.employee_id)).join(', ')}
+          {others.map((a) => nameWithCount(employeeNames[a.employee_id] ?? '—', shiftCounts, a.employee_id, role)).join(', ')}
         </span>
       )}
       {others.length === 0 && !mine && <span className="text-muted-foreground text-xs">אין עדיין</span>}
@@ -955,7 +981,7 @@ function SelfServiceColumn({
       {mine && canSelfRemove && (
         <div className="flex items-center gap-1">
           <span className="truncate text-xs">
-            {nameWithCount(employeeNames[mine.employee_id] ?? '—', shiftCounts, mine.employee_id)}
+            {nameWithCount(employeeNames[mine.employee_id] ?? '—', shiftCounts, mine.employee_id, role)}
           </span>
           <button
             type="button"
@@ -969,7 +995,7 @@ function SelfServiceColumn({
 
       {mine && !canSelfRemove && shift.effective_status === 'published' && (
         <ReplacementRequestControl
-          name={nameWithCount(employeeNames[mine.employee_id] ?? '—', shiftCounts, mine.employee_id)}
+          name={nameWithCount(employeeNames[mine.employee_id] ?? '—', shiftCounts, mine.employee_id, role)}
           hasPendingRequest={pendingRequestAssignmentIds.has(mine.id)}
           eligible={eligible}
           onSubmit={(reason, substituteId) => onRequestReplacement(mine.id, reason, substituteId)}
@@ -978,7 +1004,7 @@ function SelfServiceColumn({
 
       {mine && !canSelfRemove && shift.effective_status !== 'published' && (
         <span className="truncate text-xs">
-          {nameWithCount(employeeNames[mine.employee_id] ?? '—', shiftCounts, mine.employee_id)}
+          {nameWithCount(employeeNames[mine.employee_id] ?? '—', shiftCounts, mine.employee_id, role)}
         </span>
       )}
 
@@ -1004,6 +1030,7 @@ function SlotCell({
   iAmFree,
   employeeNames,
   shiftCounts,
+  duty,
   eligible,
   takenIds,
   onAssociateMe,
@@ -1016,6 +1043,7 @@ function SlotCell({
   iAmFree: boolean
   employeeNames: Record<string, string>
   shiftCounts: Record<string, ShiftCountInfo>
+  duty: Duty
   eligible: Employee[]
   takenIds: Set<string>
   onAssociateMe: () => void
@@ -1041,7 +1069,7 @@ function SlotCell({
           }}
         >
           <option value="" disabled>
-            {nameWithCount(employeeNames[person.employee_id] ?? '—', shiftCounts, person.employee_id)}
+            {nameWithCount(employeeNames[person.employee_id] ?? '—', shiftCounts, person.employee_id, duty)}
           </option>
           <option value="__remove__">— הסרה —</option>
           {eligible
@@ -1049,7 +1077,7 @@ function SlotCell({
             .filter((e) => e.id !== person.employee_id)
             .map((e) => (
               <option key={e.id} value={e.id}>
-                {nameWithCount(e.full_name, shiftCounts, e.id)}
+                {nameWithCount(e.full_name, shiftCounts, e.id, duty)}
               </option>
             ))}
         </select>
@@ -1061,7 +1089,7 @@ function SlotCell({
         onClick={() => setEditing(true)}
         className="truncate text-start text-xs underline-offset-2 hover:underline"
       >
-        {nameWithCount(employeeNames[person.employee_id] ?? '—', shiftCounts, person.employee_id)}
+        {nameWithCount(employeeNames[person.employee_id] ?? '—', shiftCounts, person.employee_id, duty)}
       </button>
     )
   }
@@ -1086,7 +1114,7 @@ function SlotCell({
           .filter((e) => !takenIds.has(e.id))
           .map((e) => (
             <option key={e.id} value={e.id}>
-              {nameWithCount(e.full_name, shiftCounts, e.id)}
+              {nameWithCount(e.full_name, shiftCounts, e.id, duty)}
             </option>
           ))}
       </select>
