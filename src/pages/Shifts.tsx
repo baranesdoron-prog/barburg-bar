@@ -368,12 +368,14 @@ function WeekCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {viewerCanManage && (
-          <CombinedStatus
-            opening={shifts.opening}
-            closing={shifts.closing}
-            openingAreaManagerCount={openingAll.filter((a) => a.assignment_role === 'area_manager').length}
-            closingAreaManagerCount={closingAll.filter((a) => a.assignment_role === 'area_manager').length}
-          />
+          <div className="bg-muted rounded-md p-2">
+            <CombinedStatus
+              opening={shifts.opening}
+              closing={shifts.closing}
+              openingAreaManagerCount={openingAll.filter((a) => a.assignment_role === 'area_manager').length}
+              closingAreaManagerCount={closingAll.filter((a) => a.assignment_role === 'area_manager').length}
+            />
+          </div>
         )}
 
         <div className="bg-muted flex flex-col gap-3 rounded-md p-2">
