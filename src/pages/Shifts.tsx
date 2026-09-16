@@ -376,24 +376,66 @@ function WeekCard({
           />
         )}
 
-        <BarManagerRow
-          employeeId={shiftManagerId}
-          employeeNames={employeeNames}
-          shiftManagers={shiftManagers}
-          shiftCounts={shiftCounts}
-          myEmployeeId={myEmployeeId}
-          readOnly={!viewerCanManage}
-          onSet={handleSetShiftManager}
-        />
+        <div className="bg-muted flex flex-col gap-3 rounded-md p-2">
+          <BarManagerRow
+            employeeId={shiftManagerId}
+            employeeNames={employeeNames}
+            shiftManagers={shiftManagers}
+            shiftCounts={shiftCounts}
+            myEmployeeId={myEmployeeId}
+            readOnly={!viewerCanManage}
+            onSet={handleSetShiftManager}
+          />
 
-        <div className="grid grid-cols-[auto_1fr_1fr] items-center gap-x-2 gap-y-1 text-xs">
-          <span />
-          <ColumnHeader shift={shifts.opening} type="opening" />
-          <ColumnHeader shift={shifts.closing} type="closing" />
+          <div className="grid grid-cols-[auto_1fr_1fr] items-center gap-x-2 gap-y-1 text-xs">
+            <span />
+            <ColumnHeader shift={shifts.opening} type="opening" />
+            <ColumnHeader shift={shifts.closing} type="closing" />
+          </div>
+
+          {viewerCanManage ? (
+            <RoleSection
+              label="ברמנים/יות (עד 3)"
+              role="bartender"
+              max={3}
+              openingShift={shifts.opening}
+              closingShift={shifts.closing}
+              openingAssignments={openingAll.filter((a) => a.assignment_role === 'bartender')}
+              closingAssignments={closingAll.filter((a) => a.assignment_role === 'bartender')}
+              openingTaken={new Set(openingAll.map((a) => a.employee_id))}
+              closingTaken={new Set(closingAll.map((a) => a.employee_id))}
+              eligible={dutyEligible}
+              employeeNames={employeeNames}
+              shiftCounts={shiftCounts}
+              myEmployeeId={myEmployeeId}
+              onAssign={handleAssign}
+              onSwap={handleSwap}
+              onRemove={handleRemove}
+            />
+          ) : (
+            <SelfServiceRoleSection
+              label="ברמנים/יות (עד 3)"
+              role="bartender"
+              max={3}
+              openingShift={shifts.opening}
+              closingShift={shifts.closing}
+              openingAssignments={openingAll.filter((a) => a.assignment_role === 'bartender')}
+              closingAssignments={closingAll.filter((a) => a.assignment_role === 'bartender')}
+              eligible={dutyEligible}
+              employeeNames={employeeNames}
+              shiftCounts={shiftCounts}
+              myEmployeeId={myEmployeeId}
+              canSelfRemove={canSelfRemove}
+              pendingRequestAssignmentIds={pendingRequestAssignmentIds}
+              onAssign={handleAssign}
+              onRemove={handleRemove}
+              onRequestReplacement={handleRequestReplacement}
+            />
+          )}
         </div>
 
-        {viewerCanManage ? (
-          <>
+        <div className="bg-muted rounded-md p-2">
+          {viewerCanManage ? (
             <RoleSection
               label="אחראי/ת מתחם"
               role="area_manager"
@@ -412,28 +454,7 @@ function WeekCard({
               onSwap={handleSwap}
               onRemove={handleRemove}
             />
-
-            <RoleSection
-              label="ברמנים/יות (עד 3)"
-              role="bartender"
-              max={3}
-              openingShift={shifts.opening}
-              closingShift={shifts.closing}
-              openingAssignments={openingAll.filter((a) => a.assignment_role === 'bartender')}
-              closingAssignments={closingAll.filter((a) => a.assignment_role === 'bartender')}
-              openingTaken={new Set(openingAll.map((a) => a.employee_id))}
-              closingTaken={new Set(closingAll.map((a) => a.employee_id))}
-              eligible={dutyEligible}
-              employeeNames={employeeNames}
-              shiftCounts={shiftCounts}
-              myEmployeeId={myEmployeeId}
-              onAssign={handleAssign}
-              onSwap={handleSwap}
-              onRemove={handleRemove}
-            />
-          </>
-        ) : (
-          <>
+          ) : (
             <SelfServiceRoleSection
               label="אחראי/ת מתחם"
               role="area_manager"
@@ -452,27 +473,8 @@ function WeekCard({
               onRemove={handleRemove}
               onRequestReplacement={handleRequestReplacement}
             />
-
-            <SelfServiceRoleSection
-              label="ברמנים/יות (עד 3)"
-              role="bartender"
-              max={3}
-              openingShift={shifts.opening}
-              closingShift={shifts.closing}
-              openingAssignments={openingAll.filter((a) => a.assignment_role === 'bartender')}
-              closingAssignments={closingAll.filter((a) => a.assignment_role === 'bartender')}
-              eligible={dutyEligible}
-              employeeNames={employeeNames}
-              shiftCounts={shiftCounts}
-              myEmployeeId={myEmployeeId}
-              canSelfRemove={canSelfRemove}
-              pendingRequestAssignmentIds={pendingRequestAssignmentIds}
-              onAssign={handleAssign}
-              onRemove={handleRemove}
-              onRequestReplacement={handleRequestReplacement}
-            />
-          </>
-        )}
+          )}
+        </div>
 
         {error && <p className="text-destructive text-xs">{error}</p>}
       </CardContent>
