@@ -29,7 +29,7 @@ export interface NavItem {
 export function getNavItems(role: AppRole): NavItem[] {
   const items: NavItem[] = []
 
-  if (role !== 'bartender' && role !== 'area_manager') {
+  if (role !== 'bartender') {
     items.push({ to: '/', label: 'לוח בקרה', icon: LayoutDashboard })
   }
 

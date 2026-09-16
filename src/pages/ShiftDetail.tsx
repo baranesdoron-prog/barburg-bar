@@ -34,7 +34,7 @@ export function ShiftDetail() {
   const [manager, setManager] = useState<Employee | null>(null)
   const [assignments, setAssignments] = useState<ShiftAssignment[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
-  const [employeeRoles, setEmployeeRoles] = useState<Map<string, string | null>>(new Map())
+  const [areaManagerId, setAreaManagerId] = useState<string | null>(null)
   const [pendingRequests, setPendingRequests] = useState<ReplacementRequest[]>([])
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
   const [error, setError] = useState<string | null>(null)
@@ -60,25 +60,22 @@ export function ShiftDetail() {
     const loadedShift = data as Shift
     setShift(loadedShift)
 
-    const [managerRes, employeesRes, assignmentsRes, rolesRes] = await Promise.all([
+    const [managerRes, employeesRes, assignmentsRes, weekTeamRes] = await Promise.all([
       loadedShift.shift_manager_id
         ? supabase.from('employees').select('id, full_name, phone, active').eq('id', loadedShift.shift_manager_id).single()
         : Promise.resolve({ data: null }),
       supabase.from('employees').select('id, full_name, phone, active').order('full_name'),
       supabase.from('shift_assignments').select('*').eq('shift_id', id),
-      supabase.rpc('list_employee_roles'),
+      supabase
+        .from('shift_manager_assignments')
+        .select('area_manager_id')
+        .eq('week_start', loadedShift.week_start)
+        .maybeSingle(),
     ])
 
     setManager((managerRes.data as Employee | null) ?? null)
     setEmployees((employeesRes.data as Employee[]) ?? [])
-    setEmployeeRoles(
-      new Map(
-        ((rolesRes.data as { employee_id: string; role: string | null }[]) ?? []).map((r) => [
-          r.employee_id,
-          r.role,
-        ]),
-      ),
-    )
+    setAreaManagerId((weekTeamRes.data as { area_manager_id: string | null } | null)?.area_manager_id ?? null)
     const loadedAssignments = (assignmentsRes.data as ShiftAssignment[]) ?? []
     setAssignments(loadedAssignments)
 
@@ -202,10 +199,7 @@ export function ShiftDetail() {
   )
   const understaffed =
     shift.required_staff_count !== null && shift.assigned_count < shift.required_staff_count
-  const areaManagerAssignment = assignments.find((a) => employeeRoles.get(a.employee_id) === 'area_manager')
-  const areaManager = areaManagerAssignment
-    ? (employees.find((e) => e.id === areaManagerAssignment.employee_id) ?? null)
-    : null
+  const areaManager = areaManagerId ? (employees.find((e) => e.id === areaManagerId) ?? null) : null
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">

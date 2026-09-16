@@ -12,7 +12,7 @@ function jsonResponse(body: unknown, status: number) {
   })
 }
 
-const ALLOWED_ROLES = ['administrator', 'shift_manager', 'bartender', 'area_manager']
+const ALLOWED_ROLES = ['administrator', 'shift_manager', 'bartender']
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {

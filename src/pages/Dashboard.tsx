@@ -607,7 +607,7 @@ export function Dashboard() {
     return <ManagerDashboard />
   }
 
-  if (effectiveRole === 'bartender' || effectiveRole === 'area_manager') {
+  if (effectiveRole === 'bartender') {
     return <Navigate to="/my-shifts" replace />
   }
 

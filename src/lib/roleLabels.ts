@@ -4,10 +4,9 @@ export const roleLabels: Record<AppRole, string> = {
   administrator: 'מנהל/ת מערכת',
   shift_manager: 'מנהל/ת בר',
   bartender: 'ברמן/ית',
-  area_manager: 'אחראי/ת מתחם',
 }
 
-export const ROLES_REQUIRING_EMPLOYEE: AppRole[] = ['bartender', 'shift_manager', 'area_manager']
+export const ROLES_REQUIRING_EMPLOYEE: AppRole[] = ['bartender', 'shift_manager']
 
 export const ROLES_VIEWING_SHIFTS: AppRole[] = ['shift_manager', 'administrator']
 

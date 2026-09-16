@@ -284,17 +284,16 @@ export function ShiftManagerSchedule() {
 
     setShiftManagers((shiftManagersRes.data as Employee[]) ?? [])
 
+    // Every real account role (administrator, shift_manager, bartender) can
+    // cover either bartender or area-manager duty on a shift -- area_manager
+    // isn't a holdable account role at all anymore, just a duty like this one.
     const roleByEmployeeId = new Map(
       ((rolesRes.data as { employee_id: string; role: string | null }[]) ?? []).map((r) => [r.employee_id, r.role]),
     )
     const activeEmployees = (employeesRes.data as Employee[]) ?? []
-    setAreaManagers(activeEmployees.filter((e) => roleByEmployeeId.get(e.id) === 'area_manager'))
-    setBartenderEligible(
-      activeEmployees.filter((e) => {
-        const role = roleByEmployeeId.get(e.id)
-        return role !== undefined && role !== 'area_manager'
-      }),
-    )
+    const dutyEligible = activeEmployees.filter((e) => roleByEmployeeId.get(e.id) !== undefined)
+    setAreaManagers(dutyEligible)
+    setBartenderEligible(dutyEligible)
 
     setAssignments(
       new Map(((assignmentsRes.data as ShiftManagerAssignment[]) ?? []).map((a) => [a.week_start, a])),
