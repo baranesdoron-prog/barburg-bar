@@ -443,7 +443,7 @@ function WeekCard({
         <div className="bg-muted rounded-md p-2">
           {viewerCanManage ? (
             <RoleSection
-              label="אחראי/ת מתחם"
+              label="אחראי/ת מתחם (עד 2)"
               role="area_manager"
               max={2}
               openingShift={shifts.opening}
@@ -462,7 +462,7 @@ function WeekCard({
             />
           ) : (
             <SelfServiceRoleSection
-              label="אחראי/ת מתחם"
+              label="אחראי/ת מתחם (עד 2)"
               role="area_manager"
               max={2}
               openingShift={shifts.opening}
@@ -724,7 +724,10 @@ function RoleSection({
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-muted-foreground text-xs">{label}</span>
+      <div className="grid grid-cols-[1fr_1fr] gap-1">
+        <span className="text-muted-foreground text-xs">{label}</span>
+        <span className="text-muted-foreground text-xs">{label}</span>
+      </div>
       {rows.map((i) => {
         const openingPerson = openingAssignments[i]
         const closingPerson = closingAssignments[i]
@@ -815,7 +818,10 @@ function SelfServiceRoleSection({
 
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-muted-foreground text-xs">{label}</span>
+      <div className="grid grid-cols-2 gap-2">
+        <span className="text-muted-foreground text-xs">{label}</span>
+        <span className="text-muted-foreground text-xs">{label}</span>
+      </div>
       <div className="grid grid-cols-2 gap-2">
         <SelfServiceColumn
           shift={openingShift}
