@@ -11,7 +11,7 @@ import {
   weekLabelFormatter,
   YEAR_OPTIONS,
   toDateStr,
-  archiveCutoff,
+  activeWeekStart,
   shiftDateOfWeek,
 } from '@/lib/weeklyChecklist'
 import { formatTime } from '@/lib/utils'
@@ -26,8 +26,12 @@ const selectClass =
 const currentYear = new Date().getFullYear()
 
 // Weeks starting before this are "old" and live in the archive instead of
-// the main list.
-const ARCHIVE_CUTOFF = archiveCutoff()
+// the main list. Unlike the dashboard's closing-shifts widget or a
+// bartender's own MyShifts view (which use archiveCutoff() -- the whole
+// current calendar month), the allocations view is a planning screen: once
+// a week's shift is no longer the current/next one, it moves to the
+// archive right away.
+const ARCHIVE_CUTOFF = toDateStr(activeWeekStart())
 
 interface Employee {
   id: string
