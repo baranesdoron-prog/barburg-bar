@@ -605,19 +605,16 @@ function BarManagerRow({
           {employeeId ? (
             <span>{nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId)}</span>
           ) : (
-            <>
-              <span className="text-muted-foreground">— לא שובץ —</span>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 px-2 text-xs"
-                disabled={!iAmEligible}
-                onClick={() => myEmployeeId && onSet(myEmployeeId)}
-              >
-                שבץ אותי
-              </Button>
-            </>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-xs"
+              disabled={!iAmEligible}
+              onClick={() => myEmployeeId && onSet(myEmployeeId)}
+            >
+              שבץ אותי
+            </Button>
           )}
         </div>
       </div>
@@ -643,7 +640,7 @@ function BarManagerRow({
               else if (v) onSet(v)
             }}
           >
-            <option value="">בחר/י…</option>
+            <option value="">בחר מרשימה</option>
             {employeeId && <option value="__remove__">— הסרה —</option>}
             {shiftManagers
               .filter((e) => e.id !== employeeId)
@@ -659,7 +656,6 @@ function BarManagerRow({
           </button>
         ) : (
           <>
-            <span className="text-muted-foreground">— לא שובץ —</span>
             <Button
               type="button"
               size="sm"
@@ -675,7 +671,7 @@ function BarManagerRow({
               onClick={() => setEditing(true)}
               className="text-muted-foreground text-xs underline-offset-2 hover:underline"
             >
-              בחר/י…
+              בחר מרשימה
             </button>
           </>
         )}
