@@ -608,7 +608,7 @@ export function Dashboard() {
   }
 
   if (effectiveRole === 'bartender') {
-    return <Navigate to="/my-shifts" replace />
+    return <Navigate to="/shifts" replace />
   }
 
   return (
