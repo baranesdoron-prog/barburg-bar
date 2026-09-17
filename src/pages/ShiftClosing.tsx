@@ -26,6 +26,7 @@ export function ShiftClosing() {
   const { id } = useParams()
   const { effectiveRole } = useAppUserContext()
   const [shift, setShift] = useState<Shift | null>(null)
+  const [openingShiftId, setOpeningShiftId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reportId, setReportId] = useState<string | null>(null)
   const [reorderSummary, setReorderSummary] = useState<ReorderSummary | null>(null)
@@ -43,9 +44,24 @@ export function ShiftClosing() {
           setError(fetchError?.message ?? 'משמרת לא נמצאה')
           return
         }
-        setShift(data as Shift)
+        const loadedShift = data as Shift
+        setShift(loadedShift)
+
+        // Attendance covers the whole night's roster, not just whoever was
+        // assigned to the closing shift specifically -- someone who only
+        // worked the opening slot still needs their attendance recorded
+        // somewhere, and this is the only closing workflow there is.
+        supabase
+          .from('shifts')
+          .select('id')
+          .eq('week_start', loadedShift.week_start)
+          .eq('shift_type', 'opening')
+          .maybeSingle()
+          .then(({ data: opening }) => setOpeningShiftId((opening as { id: string } | null)?.id ?? null))
       })
   }, [id])
+
+  const attendanceShiftIds = [openingShiftId, shift?.id].filter((v): v is string => !!v)
 
   if (error) return <p className="text-destructive text-center text-sm">{error}</p>
   if (!shift) return null
@@ -91,7 +107,7 @@ export function ShiftClosing() {
           <CardTitle className="text-base">שלב 1: נוכחות</CardTitle>
         </CardHeader>
         <CardContent>
-          <AttendanceStep shiftId={shift.id} onSaved={bumpRefresh} />
+          <AttendanceStep shiftIds={attendanceShiftIds} onSaved={bumpRefresh} />
         </CardContent>
       </Card>
 
@@ -99,6 +115,7 @@ export function ShiftClosing() {
       <InventorySection shiftId={shift.id} onSaved={bumpRefresh} />
       <SummarySection
         shift={shift}
+        attendanceShiftIds={attendanceShiftIds}
         refreshKey={refreshKey}
         onFinished={(id, summary) => {
           setReorderSummary(summary)
@@ -333,10 +350,12 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
 
 function SummarySection({
   shift,
+  attendanceShiftIds,
   refreshKey,
   onFinished,
 }: {
   shift: Shift
+  attendanceShiftIds: string[]
   refreshKey: number
   onFinished: (reportId: string, reorderSummary: ReorderSummary | null) => void
 }) {
@@ -352,7 +371,7 @@ function SummarySection({
     const { data: assignments } = await supabase
       .from('shift_assignments')
       .select('id')
-      .eq('shift_id', shift.id)
+      .in('shift_id', attendanceShiftIds)
 
     const assignmentIds = (assignments as { id: string }[] | null)?.map((a) => a.id) ?? []
 
@@ -375,7 +394,8 @@ function SummarySection({
 
   useEffect(() => {
     load()
-  }, [shift.id, refreshKey])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shift.id, attendanceShiftIds.join(','), refreshKey])
 
   async function handleFinish() {
     if (!confirm('לסיים ולסגור את המשמרת?')) return

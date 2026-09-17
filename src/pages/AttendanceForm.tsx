@@ -37,7 +37,7 @@ export function AttendanceForm() {
         <CardTitle>רישום נוכחות — {shiftTypeLabel(shift.shift_type)}</CardTitle>
       </CardHeader>
       <CardContent>
-        <AttendanceStep shiftId={shift.id} />
+        <AttendanceStep shiftIds={[shift.id]} />
       </CardContent>
       <CardFooter>
         <Button asChild variant="ghost" className="w-full">

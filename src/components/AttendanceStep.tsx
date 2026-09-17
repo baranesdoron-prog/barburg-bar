@@ -18,7 +18,7 @@ interface RowState {
 
 const statusOptions: AttendanceStatus[] = ['present', 'late', 'absent']
 
-export function AttendanceStep({ shiftId, onSaved }: { shiftId: string; onSaved?: () => void }) {
+export function AttendanceStep({ shiftIds, onSaved }: { shiftIds: string[]; onSaved?: () => void }) {
   const [assignments, setAssignments] = useState<ShiftAssignment[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [rows, setRows] = useState<Record<string, RowState>>({})
@@ -28,9 +28,15 @@ export function AttendanceStep({ shiftId, onSaved }: { shiftId: string; onSaved?
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
+    if (shiftIds.length === 0) {
+      setAssignments([])
+      setLoaded(true)
+      return
+    }
+
     async function load() {
       const [assignmentsRes, employeesRes] = await Promise.all([
-        supabase.from('shift_assignments').select('*').eq('shift_id', shiftId),
+        supabase.from('shift_assignments').select('*').in('shift_id', shiftIds),
         supabase.from('employees').select('id, full_name'),
       ])
 
@@ -61,7 +67,8 @@ export function AttendanceStep({ shiftId, onSaved }: { shiftId: string; onSaved?
     }
 
     load()
-  }, [shiftId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shiftIds.join(',')])
 
   async function handleSave() {
     setSaving(true)
