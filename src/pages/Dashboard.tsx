@@ -149,7 +149,7 @@ interface ManagerStats {
   lowStockProducts: number
 }
 
-function ManagerSummary({ shifts }: { shifts: Shift[] }) {
+function ManagerSummary() {
   const [stats, setStats] = useState<ManagerStats | null>(null)
   const [recentOrders, setRecentOrders] = useState<PurchaseOrder[]>([])
   const [orderTotals, setOrderTotals] = useState<Record<string, number>>({})
@@ -233,7 +233,6 @@ function ManagerSummary({ shifts }: { shifts: Shift[] }) {
   if (!stats) return null
 
   const supplierNames = new Map(suppliers.map((s) => [s.id, s.name]))
-  const upcomingShifts = shifts.filter((s) => s.effective_status === 'published')
 
   return (
     <>
@@ -320,46 +319,6 @@ function ManagerSummary({ shifts }: { shifts: Shift[] }) {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">משמרות קרובות</CardTitle>
-            <Link to="/shifts" className="text-muted-foreground text-xs hover:underline">
-              הצג הכל
-            </Link>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            {upcomingShifts.length === 0 && <p className="text-muted-foreground text-sm">אין משמרות קרובות</p>}
-            {upcomingShifts.map((shift) => {
-              const isFull =
-                shift.required_staff_count !== null && shift.assigned_count >= shift.required_staff_count
-
-              return (
-                <Link
-                  key={shift.id}
-                  to={`/shifts/${shift.id}`}
-                  className="hover:bg-accent flex items-center justify-between gap-2 rounded-md border p-2 text-sm transition-colors"
-                >
-                  <div className="flex flex-col">
-                    <span className="font-medium">{shiftTypeLabel(shift.shift_type)}</span>
-                    <span className="text-muted-foreground">
-                      {formatDateTime(shift.start_time)} – {formatDateTime(shift.end_time)}
-                    </span>
-                  </div>
-                  {shift.required_staff_count !== null && (
-                    <span
-                      className={cn(
-                        'shrink-0 rounded-full px-2 py-1 text-xs font-medium',
-                        isFull ? 'bg-primary text-primary-foreground' : 'bg-destructive text-white',
-                      )}
-                    >
-                      {shift.assigned_count}/{shift.required_staff_count}
-                    </span>
-                  )}
-                </Link>
-              )
-            })}
-          </CardContent>
-        </Card>
       </div>
     </>
   )
@@ -596,7 +555,7 @@ function ManagerDashboard() {
         <MyWeeklyTasksCard employeeId={appUser.employee_id} />
       )}
 
-      {canManage && <ManagerSummary shifts={shifts} />}
+      {canManage && <ManagerSummary />}
 
       <ShiftSection title="בקשות החלפה ממתינות" shifts={pendingRequestShifts} />
     </div>
