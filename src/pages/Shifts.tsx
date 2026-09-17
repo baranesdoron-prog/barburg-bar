@@ -196,7 +196,11 @@ function AllocationsList() {
         can_supervise_area: boolean
       })[]) ?? []
     setDutyEligible(allEmployees.filter((e) => roleByEmployeeId.get(e.id) !== undefined))
-    setAreaSupervisorEligible(allEmployees.filter((e) => e.can_supervise_area))
+    // Admins can cover area-supervisor duty too, on top of the explicit
+    // can_supervise_area allow-list.
+    setAreaSupervisorEligible(
+      allEmployees.filter((e) => e.can_supervise_area || roleByEmployeeId.get(e.id) === 'administrator'),
+    )
 
     const names: Record<string, string> = {}
     for (const emp of allEmployees) names[emp.id] = emp.full_name
