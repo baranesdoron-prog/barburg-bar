@@ -22,10 +22,7 @@ function SidebarContent({ greetingName, onNavigate }: { greetingName: string | n
     <div className="flex h-full flex-col gap-4">
       <div className="flex items-center gap-2">
         <img src="/logo.png" alt="ברבורג" className="size-10 shrink-0 rounded-full object-cover" />
-        <div>
-          <p className="text-lg font-semibold">ברבורג</p>
-          <p className="text-muted-foreground text-sm">{roleLabels[effectiveRole]}</p>
-        </div>
+        <p className="text-lg font-semibold">ברבורג</p>
       </div>
 
       {greetingName && <p className="text-sm font-medium">שלום, {greetingName}</p>}
