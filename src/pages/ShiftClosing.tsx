@@ -24,7 +24,7 @@ interface ReorderSummary {
 
 export function ShiftClosing() {
   const { id } = useParams()
-  const { appUser, effectiveRole } = useAppUserContext()
+  const { effectiveRole } = useAppUserContext()
   const [shift, setShift] = useState<Shift | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [reportId, setReportId] = useState<string | null>(null)
@@ -61,9 +61,9 @@ export function ShiftClosing() {
     return <ClosingComplete shiftId={shift.id} reorderSummary={reorderSummary} />
   }
 
-  const canClose =
-    effectiveRole === 'administrator' ||
-    (appUser.employee_id !== null && appUser.employee_id === shift.shift_manager_id)
+  // Any bar manager can close a shift, not just whoever was assigned to it
+  // -- matches ROLES_MANAGING_SHIFTS everywhere else in the shifts area.
+  const canClose = effectiveRole === 'administrator' || effectiveRole === 'shift_manager'
 
   if (!canClose) {
     return (
@@ -72,9 +72,7 @@ export function ShiftClosing() {
           <CardTitle>אין הרשאה לסגור משמרת זו</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-muted-foreground text-sm">
-            רק מנהל/ת הבר שמונה/תה למשמרת זו, או מנהל/ת מערכת, יכולים לסגור אותה.
-          </p>
+          <p className="text-muted-foreground text-sm">רק מנהל/ת בר או מנהל/ת מערכת יכולים לסגור משמרת.</p>
         </CardContent>
       </Card>
     )

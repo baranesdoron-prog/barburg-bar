@@ -12,6 +12,7 @@ import {
   YEAR_OPTIONS,
   toDateStr,
   activeWeekStart,
+  addDays,
   shiftDateOfWeek,
 } from '@/lib/weeklyChecklist'
 import { formatTime } from '@/lib/utils'
@@ -29,6 +30,25 @@ const currentYear = new Date().getFullYear()
 // the main list -- once a week's shift is no longer the current/next one,
 // it moves to the archive right away.
 const ARCHIVE_CUTOFF = toDateStr(activeWeekStart())
+
+// activeWeekStart() rolls to next week the moment it's Friday/Saturday --
+// but the just-finished Thursday closing shift ends at 00:30 Friday, so it
+// becomes waiting_for_closure at essentially the same moment its week
+// would otherwise vanish from this list. Always fetch one extra week back
+// so that week's shift data is available to check.
+const FETCH_FROM = toDateStr(addDays(activeWeekStart(), -7))
+
+// A week still needs to be shown even after rolling past ARCHIVE_CUTOFF if
+// it has a shift still waiting to be closed -- otherwise the "סגירת
+// משמרת" button becomes unreachable right when it's needed.
+function weekNeedsClosing(shifts: WeekShifts) {
+  return (
+    shifts.opening?.effective_status === 'waiting_for_closure' ||
+    shifts.opening?.effective_status === 'reopened' ||
+    shifts.closing?.effective_status === 'waiting_for_closure' ||
+    shifts.closing?.effective_status === 'reopened'
+  )
+}
 
 // Area manager and area supervisor run on their own hours, distinct from
 // the shift's own bartender-facing start/end times shown in ColumnHeader --
@@ -110,9 +130,13 @@ function AllocationsList() {
 
   const canManage = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
 
+  // weeks: the fetch range (includes the one-week lookback buffer).
+  // visibleWeeks: what actually renders -- the lookback week only shows up
+  // if it still has a shift waiting to be closed.
   const weeks = sundaysInYear(year)
     .map(toDateStr)
-    .filter((w) => w >= EARLIEST_WEEK_START && w >= ARCHIVE_CUTOFF)
+    .filter((w) => w >= EARLIEST_WEEK_START && w >= FETCH_FROM)
+  const visibleWeeks = weeks.filter((w) => w >= ARCHIVE_CUTOFF || weekNeedsClosing(shiftsByWeek.get(w) ?? {}))
 
   async function load() {
     if (weeks.length === 0) {
@@ -302,9 +326,9 @@ function AllocationsList() {
         </select>
       </div>
 
-      {weeks.length === 0 && <p className="text-muted-foreground text-sm">אין שבועות להצגה בשנה זו.</p>}
+      {visibleWeeks.length === 0 && <p className="text-muted-foreground text-sm">אין שבועות להצגה בשנה זו.</p>}
 
-      {weeks.map((week) => (
+      {visibleWeeks.map((week) => (
         <WeekCard
           key={week}
           week={week}
