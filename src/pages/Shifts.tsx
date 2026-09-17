@@ -664,7 +664,8 @@ function WeekCard({
 
         {viewerCanManage &&
           shifts.closing &&
-          (shifts.closing.effective_status === 'waiting_for_closure' ||
+          (shifts.closing.effective_status === 'active' ||
+            shifts.closing.effective_status === 'waiting_for_closure' ||
             shifts.closing.effective_status === 'reopened') && (
             <div className="bg-muted rounded-md p-2">
               <Button asChild className="w-full">

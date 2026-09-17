@@ -50,9 +50,13 @@ export function ShiftClosing() {
   if (error) return <p className="text-destructive text-center text-sm">{error}</p>
   if (!shift) return null
 
+  // Open for prep (attendance, journal, inventory counts) once the closing
+  // shift has actually started, not only once it's already over -- lets
+  // staff record things as the night happens. finish_shift_closing() still
+  // refuses to actually complete the shift before its scheduled end time.
   if (
     shift.shift_type !== 'closing' ||
-    (shift.effective_status !== 'waiting_for_closure' && shift.effective_status !== 'reopened')
+    !['active', 'waiting_for_closure', 'reopened'].includes(shift.effective_status)
   ) {
     return <Navigate to={`/shifts/${id}`} replace />
   }
@@ -385,7 +389,11 @@ function SummarySection({
 
     if (finishError) {
       setFinishing(false)
-      setError(finishError.message)
+      setError(
+        finishError.message.includes('before its scheduled end time')
+          ? 'אי אפשר לסיים לסגור את המשמרת לפני שעת הסיום המתוכננת שלה'
+          : finishError.message,
+      )
       return
     }
 
