@@ -528,23 +528,6 @@ function WeekCard({
             onSet={handleSetShiftManager}
           />
 
-          <AreaSupervisorRow
-            openingAssignment={openingAreaSupervisors[0]}
-            closingAssignment={closingAreaSupervisors[0]}
-            eligible={areaSupervisorEligible}
-            employeeNames={employeeNames}
-            shiftCounts={shiftCounts}
-            myEmployeeId={myEmployeeId}
-            viewerCanManage={viewerCanManage}
-            canSelfRemove={canSelfRemove}
-            canRequestReplacement={shifts.opening?.effective_status === 'published'}
-            hasPendingRequest={
-              !!openingAreaSupervisors[0] && pendingRequestAssignmentIds.has(openingAreaSupervisors[0].id)
-            }
-            onSet={handleSetAreaSupervisor}
-            onRequestReplacement={handleRequestReplacementAreaSupervisor}
-          />
-
           <div className="grid grid-cols-[auto_1fr_1fr] items-center gap-x-2 gap-y-1 text-xs">
             <span />
             <ColumnHeader shift={shifts.opening} type="opening" />
@@ -592,7 +575,24 @@ function WeekCard({
           )}
         </div>
 
-        <div className="bg-muted rounded-md p-2">
+        <div className="bg-muted flex flex-col gap-3 rounded-md p-2">
+          <AreaSupervisorRow
+            openingAssignment={openingAreaSupervisors[0]}
+            closingAssignment={closingAreaSupervisors[0]}
+            eligible={areaSupervisorEligible}
+            employeeNames={employeeNames}
+            shiftCounts={shiftCounts}
+            myEmployeeId={myEmployeeId}
+            viewerCanManage={viewerCanManage}
+            canSelfRemove={canSelfRemove}
+            canRequestReplacement={shifts.opening?.effective_status === 'published'}
+            hasPendingRequest={
+              !!openingAreaSupervisors[0] && pendingRequestAssignmentIds.has(openingAreaSupervisors[0].id)
+            }
+            onSet={handleSetAreaSupervisor}
+            onRequestReplacement={handleRequestReplacementAreaSupervisor}
+          />
+
           {viewerCanManage ? (
             <RoleSection
               label="אחראי/ת מתחם (עד 2)"
