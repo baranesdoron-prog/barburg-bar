@@ -638,6 +638,17 @@ function WeekCard({
           )}
         </div>
 
+        {viewerCanManage &&
+          shifts.closing &&
+          (shifts.closing.effective_status === 'waiting_for_closure' ||
+            shifts.closing.effective_status === 'reopened') && (
+            <div className="bg-muted rounded-md p-2">
+              <Button asChild className="w-full">
+                <Link to={`/shifts/${shifts.closing.id}/close`}>סגירת משמרת</Link>
+              </Button>
+            </div>
+          )}
+
         {error && <p className="text-destructive text-xs">{error}</p>}
       </CardContent>
     </Card>
