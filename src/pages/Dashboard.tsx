@@ -10,7 +10,7 @@ import { purchaseOrderStatusBadgeClass, purchaseOrderStatusLabels } from '@/lib/
 import { useAppUserContext } from '@/lib/outletContext'
 import { shiftTypeLabel } from '@/lib/shiftLabels'
 import { cn, formatDate, formatDateTime, formatTime } from '@/lib/utils'
-import { activeWeekStart, addDays, archiveCutoff, parseDateStr, toDateStr } from '@/lib/weeklyChecklist'
+import { activeWeekStart, addDays, parseDateStr, toDateStr } from '@/lib/weeklyChecklist'
 import type {
   PurchaseOrder,
   PurchaseOrderItem,
@@ -57,7 +57,10 @@ function ShiftSection({ title, shifts }: { title: string; shifts: Shift[] }) {
 }
 
 function ClosingAlertCard({ shifts, employeeNames }: { shifts: Shift[]; employeeNames: Map<string, string> }) {
-  const cutoff = archiveCutoff()
+  // Only the current/upcoming week's shifts belong here -- anything from a
+  // past week is stale and lives in the archive instead, same cutoff as
+  // the allocations view.
+  const cutoff = toDateStr(activeWeekStart())
   const needsClosing = shifts.filter(
     (s) =>
       s.shift_type === 'closing' &&

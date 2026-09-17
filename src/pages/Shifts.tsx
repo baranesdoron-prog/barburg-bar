@@ -26,11 +26,8 @@ const selectClass =
 const currentYear = new Date().getFullYear()
 
 // Weeks starting before this are "old" and live in the archive instead of
-// the main list. Unlike the dashboard's closing-shifts widget or a
-// bartender's own MyShifts view (which use archiveCutoff() -- the whole
-// current calendar month), the allocations view is a planning screen: once
-// a week's shift is no longer the current/next one, it moves to the
-// archive right away.
+// the main list -- once a week's shift is no longer the current/next one,
+// it moves to the archive right away.
 const ARCHIVE_CUTOFF = toDateStr(activeWeekStart())
 
 // Area manager and area supervisor run on their own hours, distinct from
