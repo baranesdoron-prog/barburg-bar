@@ -33,6 +33,11 @@ const currentYear = new Date().getFullYear()
 // archive right away.
 const ARCHIVE_CUTOFF = toDateStr(activeWeekStart())
 
+// Area manager and area supervisor run on their own hours, distinct from
+// the shift's own bartender-facing start/end times shown in ColumnHeader --
+// display only, doesn't change shifts.start_time or any self-assign window.
+const AREA_DUTY_HOURS = { opening: '19:45–22:00', closing: '22:00–00:30' }
+
 interface Employee {
   id: string
   full_name: string
@@ -43,11 +48,12 @@ interface Employee {
 // own count and its own senior flag (2+ lifetime shifts in that specific
 // duty, OR the matching employees.is_senior_* manual override for staff
 // whose history predates this app's shift history).
-type Duty = 'bartender' | 'area_manager' | 'bar_manager'
+type Duty = 'bartender' | 'area_manager' | 'area_supervisor' | 'bar_manager'
 
 interface ShiftCountInfo {
   bartender: { count: number; senior: boolean }
   area_manager: { count: number; senior: boolean }
+  area_supervisor: { count: number; senior: boolean }
   bar_manager: { count: number; senior: boolean }
 }
 
@@ -96,6 +102,7 @@ function AllocationsList() {
   const [teamByWeek, setTeamByWeek] = useState<Map<string, string>>(new Map())
   const [shiftManagers, setShiftManagers] = useState<Employee[]>([])
   const [dutyEligible, setDutyEligible] = useState<Employee[]>([])
+  const [areaSupervisorEligible, setAreaSupervisorEligible] = useState<Employee[]>([])
   const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({})
   const [shiftCounts, setShiftCounts] = useState<Record<string, ShiftCountInfo>>({})
   const [pendingRequestAssignmentIds, setPendingRequestAssignmentIds] = useState<Set<string>>(new Set())
@@ -113,6 +120,7 @@ function AllocationsList() {
       setTeamByWeek(new Map())
       setShiftManagers([])
       setDutyEligible([])
+      setAreaSupervisorEligible([])
       setEmployeeNames({})
       setShiftCounts({})
       setPendingRequestAssignmentIds(new Set())
@@ -137,7 +145,10 @@ function AllocationsList() {
         .lte('week_start', weeks[weeks.length - 1]),
       canManage ? supabase.rpc('list_shift_manager_employees') : Promise.resolve({ data: [] }),
       supabase.rpc('list_employee_roles'),
-      supabase.from('employees').select('id, full_name, is_senior_bartender, is_senior_area_manager').order('full_name'),
+      supabase
+        .from('employees')
+        .select('id, full_name, is_senior_bartender, is_senior_area_manager, can_supervise_area')
+        .order('full_name'),
       supabase.rpc('list_employee_shift_counts'),
       // Only a bartender/self-service viewer needs this, to know whether
       // their own current-week slot already has a pending replacement
@@ -178,8 +189,13 @@ function AllocationsList() {
       ((rolesRes.data as { employee_id: string; role: string | null }[]) ?? []).map((r) => [r.employee_id, r.role]),
     )
     const allEmployees =
-      (employeesRes.data as (Employee & { is_senior_bartender: boolean; is_senior_area_manager: boolean })[]) ?? []
+      (employeesRes.data as (Employee & {
+        is_senior_bartender: boolean
+        is_senior_area_manager: boolean
+        can_supervise_area: boolean
+      })[]) ?? []
     setDutyEligible(allEmployees.filter((e) => roleByEmployeeId.get(e.id) !== undefined))
+    setAreaSupervisorEligible(allEmployees.filter((e) => e.can_supervise_area))
 
     const names: Record<string, string> = {}
     for (const emp of allEmployees) names[emp.id] = emp.full_name
@@ -191,6 +207,7 @@ function AllocationsList() {
           employee_id: string
           bartender_count: number
           area_manager_count: number
+          area_supervisor_count: number
           bar_manager_count: number
         }[]) ?? []
       ).map((r) => [r.employee_id, r]),
@@ -201,6 +218,7 @@ function AllocationsList() {
           const counts = countByEmployeeId.get(emp.id)
           const bartenderCount = counts?.bartender_count ?? 0
           const areaManagerCount = counts?.area_manager_count ?? 0
+          const areaSupervisorCount = counts?.area_supervisor_count ?? 0
           const barManagerCount = counts?.bar_manager_count ?? 0
           const info: ShiftCountInfo = {
             bartender: {
@@ -210,6 +228,10 @@ function AllocationsList() {
             area_manager: {
               count: areaManagerCount,
               senior: emp.is_senior_area_manager || areaManagerCount >= SENIOR_SHIFT_THRESHOLD,
+            },
+            area_supervisor: {
+              count: areaSupervisorCount,
+              senior: areaSupervisorCount >= SENIOR_SHIFT_THRESHOLD,
             },
             bar_manager: {
               count: barManagerCount,
@@ -286,6 +308,7 @@ function AllocationsList() {
           shiftManagerId={teamByWeek.get(week) ?? null}
           shiftManagers={shiftManagers}
           dutyEligible={dutyEligible}
+          areaSupervisorEligible={areaSupervisorEligible}
           employeeNames={employeeNames}
           shiftCounts={shiftCounts}
           myEmployeeId={myEmployeeId}
@@ -306,6 +329,7 @@ function WeekCard({
   shiftManagerId,
   shiftManagers,
   dutyEligible,
+  areaSupervisorEligible,
   employeeNames,
   shiftCounts,
   myEmployeeId,
@@ -320,6 +344,7 @@ function WeekCard({
   shiftManagerId: string | null
   shiftManagers: Employee[]
   dutyEligible: Employee[]
+  areaSupervisorEligible: Employee[]
   employeeNames: Record<string, string>
   shiftCounts: Record<string, ShiftCountInfo>
   myEmployeeId: string | null
@@ -338,6 +363,8 @@ function WeekCard({
   const closingBartenders = closingAll.filter((a) => a.assignment_role === 'bartender')
   const openingAreaManagers = openingAll.filter((a) => a.assignment_role === 'area_manager')
   const closingAreaManagers = closingAll.filter((a) => a.assignment_role === 'area_manager')
+  const openingAreaSupervisors = openingAll.filter((a) => a.assignment_role === 'area_supervisor')
+  const closingAreaSupervisors = closingAll.filter((a) => a.assignment_role === 'area_supervisor')
 
   const dateLabel = shifts.opening?.start_time
     ? weekLabelFormatter.format(new Date(shifts.opening.start_time))
@@ -494,6 +521,50 @@ function WeekCard({
               onRequestReplacement={handleRequestReplacement}
             />
           )}
+
+          {viewerCanManage ? (
+            <RoleSection
+              label="מפקח/ת מתחם (עד 1)"
+              role="area_supervisor"
+              max={1}
+              openingShift={shifts.opening}
+              closingShift={shifts.closing}
+              openingAssignments={openingAreaSupervisors}
+              closingAssignments={closingAreaSupervisors}
+              openingTaken={new Set(openingAll.map((a) => a.employee_id))}
+              closingTaken={new Set(closingAll.map((a) => a.employee_id))}
+              eligible={areaSupervisorEligible}
+              employeeNames={employeeNames}
+              shiftCounts={shiftCounts}
+              myEmployeeId={myEmployeeId}
+              openingTimeLabel={AREA_DUTY_HOURS.opening}
+              closingTimeLabel={AREA_DUTY_HOURS.closing}
+              onAssign={handleAssign}
+              onSwap={handleSwap}
+              onRemove={handleRemove}
+            />
+          ) : (
+            <SelfServiceRoleSection
+              label="מפקח/ת מתחם (עד 1)"
+              role="area_supervisor"
+              max={1}
+              openingShift={shifts.opening}
+              closingShift={shifts.closing}
+              openingAssignments={openingAreaSupervisors}
+              closingAssignments={closingAreaSupervisors}
+              eligible={areaSupervisorEligible}
+              employeeNames={employeeNames}
+              shiftCounts={shiftCounts}
+              myEmployeeId={myEmployeeId}
+              canSelfRemove={canSelfRemove}
+              pendingRequestAssignmentIds={pendingRequestAssignmentIds}
+              openingTimeLabel={AREA_DUTY_HOURS.opening}
+              closingTimeLabel={AREA_DUTY_HOURS.closing}
+              onAssign={handleAssign}
+              onRemove={handleRemove}
+              onRequestReplacement={handleRequestReplacement}
+            />
+          )}
         </div>
 
         <div className="bg-muted rounded-md p-2">
@@ -512,6 +583,8 @@ function WeekCard({
               employeeNames={employeeNames}
               shiftCounts={shiftCounts}
               myEmployeeId={myEmployeeId}
+              openingTimeLabel={AREA_DUTY_HOURS.opening}
+              closingTimeLabel={AREA_DUTY_HOURS.closing}
               onAssign={handleAssign}
               onSwap={handleSwap}
               onRemove={handleRemove}
@@ -531,6 +604,8 @@ function WeekCard({
               myEmployeeId={myEmployeeId}
               canSelfRemove={canSelfRemove}
               pendingRequestAssignmentIds={pendingRequestAssignmentIds}
+              openingTimeLabel={AREA_DUTY_HOURS.opening}
+              closingTimeLabel={AREA_DUTY_HOURS.closing}
               onAssign={handleAssign}
               onRemove={handleRemove}
               onRequestReplacement={handleRequestReplacement}
@@ -767,6 +842,8 @@ function RoleSection({
   employeeNames,
   shiftCounts,
   myEmployeeId,
+  openingTimeLabel,
+  closingTimeLabel,
   onAssign,
   onSwap,
   onRemove,
@@ -784,6 +861,8 @@ function RoleSection({
   employeeNames: Record<string, string>
   shiftCounts: Record<string, ShiftCountInfo>
   myEmployeeId: string | null
+  openingTimeLabel?: string
+  closingTimeLabel?: string
   onAssign: (shiftId: string, employeeId: string, role: ShiftAssignmentRole) => void
   onSwap: (oldAssignmentId: string, shiftId: string, role: ShiftAssignmentRole, newEmployeeId: string) => void
   onRemove: (assignmentId: string) => void
@@ -796,8 +875,14 @@ function RoleSection({
   return (
     <div className="flex flex-col gap-1">
       <div className="grid grid-cols-[1fr_1fr] gap-1">
-        <span className="text-muted-foreground text-xs">{label}</span>
-        <span className="text-muted-foreground text-xs">{label}</span>
+        <span className="text-muted-foreground text-xs">
+          {label}
+          {openingTimeLabel ? ` ${openingTimeLabel}` : ''}
+        </span>
+        <span className="text-muted-foreground text-xs">
+          {label}
+          {closingTimeLabel ? ` ${closingTimeLabel}` : ''}
+        </span>
       </div>
       {rows.map((i) => {
         const openingPerson = openingAssignments[i]
@@ -866,6 +951,8 @@ function SelfServiceRoleSection({
   myEmployeeId,
   canSelfRemove,
   pendingRequestAssignmentIds,
+  openingTimeLabel,
+  closingTimeLabel,
   onAssign,
   onRemove,
   onRequestReplacement,
@@ -883,6 +970,8 @@ function SelfServiceRoleSection({
   myEmployeeId: string | null
   canSelfRemove: boolean
   pendingRequestAssignmentIds: Set<string>
+  openingTimeLabel?: string
+  closingTimeLabel?: string
   onAssign: (shiftId: string, employeeId: string, role: ShiftAssignmentRole) => void
   onRemove: (assignmentId: string) => void
   onRequestReplacement: (assignmentId: string, reason: string | null, substituteId: string | null) => Promise<string | null>
@@ -892,8 +981,14 @@ function SelfServiceRoleSection({
   return (
     <div className="flex flex-col gap-1">
       <div className="grid grid-cols-2 gap-2">
-        <span className="text-muted-foreground text-xs">{label}</span>
-        <span className="text-muted-foreground text-xs">{label}</span>
+        <span className="text-muted-foreground text-xs">
+          {label}
+          {openingTimeLabel ? ` ${openingTimeLabel}` : ''}
+        </span>
+        <span className="text-muted-foreground text-xs">
+          {label}
+          {closingTimeLabel ? ` ${closingTimeLabel}` : ''}
+        </span>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <SelfServiceColumn

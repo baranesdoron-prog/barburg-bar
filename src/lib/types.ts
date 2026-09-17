@@ -78,7 +78,7 @@ export interface ShiftManagerAssignment {
   assigned_at: string
 }
 
-export type ShiftAssignmentRole = 'bartender' | 'area_manager'
+export type ShiftAssignmentRole = 'bartender' | 'area_manager' | 'area_supervisor'
 
 export interface ShiftAssignment {
   id: string
