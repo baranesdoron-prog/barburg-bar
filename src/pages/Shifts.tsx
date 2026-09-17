@@ -38,6 +38,10 @@ const ARCHIVE_CUTOFF = toDateStr(activeWeekStart())
 // display only, doesn't change shifts.start_time or any self-assign window.
 const AREA_DUTY_HOURS = { opening: '19:45–22:00', closing: '22:00–00:30' }
 
+// Area supervisor is one continuous shift for the whole night, not two
+// separate opening/closing windows like area manager.
+const AREA_SUPERVISOR_HOURS = '19:45–00:30'
+
 interface Employee {
   id: string
   full_name: string
@@ -439,6 +443,53 @@ function WeekCard({
     onSaved()
   }
 
+  // Area supervisor is one person for the whole night, like bar manager --
+  // unlike bartender/area manager, it isn't stored as an independent pick
+  // per shift-type. There's no week-level table for it (unlike bar
+  // manager's shift_manager_assignments), so it's just the same
+  // shift_assignments row inserted for both the opening and closing shift
+  // at once, and always touched together.
+  async function handleSetAreaSupervisor(employeeId: string | null) {
+    setError(null)
+    const existingIds = [openingAreaSupervisors[0]?.id, closingAreaSupervisors[0]?.id].filter(
+      (id): id is string => !!id,
+    )
+    if (existingIds.length > 0) {
+      const { error: deleteError } = await supabase.from('shift_assignments').delete().in('id', existingIds)
+      if (deleteError) {
+        setError(friendlyAssignmentError(deleteError))
+        return
+      }
+    }
+    if (employeeId) {
+      const rows = [openingId, closingId]
+        .filter((id): id is string => !!id)
+        .map((shift_id) => ({ shift_id, employee_id: employeeId, assignment_role: 'area_supervisor' as const }))
+      if (rows.length > 0) {
+        const { error: insertError } = await supabase.from('shift_assignments').insert(rows)
+        if (insertError) {
+          setError(friendlyAssignmentError(insertError))
+          return
+        }
+      }
+    }
+    onSaved()
+  }
+
+  async function handleRequestReplacementAreaSupervisor(
+    reason: string | null,
+    substituteId: string | null,
+  ): Promise<string | null> {
+    const ids = [openingAreaSupervisors[0]?.id, closingAreaSupervisors[0]?.id].filter(
+      (id): id is string => !!id,
+    )
+    for (const id of ids) {
+      const submitError = await handleRequestReplacement(id, reason, substituteId)
+      if (submitError) return submitError
+    }
+    return null
+  }
+
   // Matches shift_assignments_delete_self_future_week's RLS: a bartender
   // can only remove their own assignment for a strictly-future week, not
   // the current one.
@@ -474,6 +525,23 @@ function WeekCard({
             readOnly={!viewerCanManage}
             canPickAnyone={isAdmin}
             onSet={handleSetShiftManager}
+          />
+
+          <AreaSupervisorRow
+            openingAssignment={openingAreaSupervisors[0]}
+            closingAssignment={closingAreaSupervisors[0]}
+            eligible={areaSupervisorEligible}
+            employeeNames={employeeNames}
+            shiftCounts={shiftCounts}
+            myEmployeeId={myEmployeeId}
+            viewerCanManage={viewerCanManage}
+            canSelfRemove={canSelfRemove}
+            canRequestReplacement={shifts.opening?.effective_status === 'published'}
+            hasPendingRequest={
+              !!openingAreaSupervisors[0] && pendingRequestAssignmentIds.has(openingAreaSupervisors[0].id)
+            }
+            onSet={handleSetAreaSupervisor}
+            onRequestReplacement={handleRequestReplacementAreaSupervisor}
           />
 
           <div className="grid grid-cols-[auto_1fr_1fr] items-center gap-x-2 gap-y-1 text-xs">
@@ -516,50 +584,6 @@ function WeekCard({
               myEmployeeId={myEmployeeId}
               canSelfRemove={canSelfRemove}
               pendingRequestAssignmentIds={pendingRequestAssignmentIds}
-              onAssign={handleAssign}
-              onRemove={handleRemove}
-              onRequestReplacement={handleRequestReplacement}
-            />
-          )}
-
-          {viewerCanManage ? (
-            <RoleSection
-              label="מפקח/ת מתחם (עד 1)"
-              role="area_supervisor"
-              max={1}
-              openingShift={shifts.opening}
-              closingShift={shifts.closing}
-              openingAssignments={openingAreaSupervisors}
-              closingAssignments={closingAreaSupervisors}
-              openingTaken={new Set(openingAll.map((a) => a.employee_id))}
-              closingTaken={new Set(closingAll.map((a) => a.employee_id))}
-              eligible={areaSupervisorEligible}
-              employeeNames={employeeNames}
-              shiftCounts={shiftCounts}
-              myEmployeeId={myEmployeeId}
-              openingTimeLabel={AREA_DUTY_HOURS.opening}
-              closingTimeLabel={AREA_DUTY_HOURS.closing}
-              onAssign={handleAssign}
-              onSwap={handleSwap}
-              onRemove={handleRemove}
-            />
-          ) : (
-            <SelfServiceRoleSection
-              label="מפקח/ת מתחם (עד 1)"
-              role="area_supervisor"
-              max={1}
-              openingShift={shifts.opening}
-              closingShift={shifts.closing}
-              openingAssignments={openingAreaSupervisors}
-              closingAssignments={closingAreaSupervisors}
-              eligible={areaSupervisorEligible}
-              employeeNames={employeeNames}
-              shiftCounts={shiftCounts}
-              myEmployeeId={myEmployeeId}
-              canSelfRemove={canSelfRemove}
-              pendingRequestAssignmentIds={pendingRequestAssignmentIds}
-              openingTimeLabel={AREA_DUTY_HOURS.opening}
-              closingTimeLabel={AREA_DUTY_HOURS.closing}
               onAssign={handleAssign}
               onRemove={handleRemove}
               onRequestReplacement={handleRequestReplacement}
@@ -820,6 +844,155 @@ function BarManagerRow({
               בחר מרשימה
             </button>
           </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// One person for the whole night (opening + closing together), like bar
+// manager -- unlike area manager/bartender, not picked independently per
+// shift-type. Backed by two shift_assignments rows (one per shift
+// instance, same employee), always touched together via onSet.
+function AreaSupervisorRow({
+  openingAssignment,
+  closingAssignment,
+  eligible,
+  employeeNames,
+  shiftCounts,
+  myEmployeeId,
+  viewerCanManage,
+  canSelfRemove,
+  canRequestReplacement,
+  hasPendingRequest,
+  onSet,
+  onRequestReplacement,
+}: {
+  openingAssignment?: ShiftAssignment
+  closingAssignment?: ShiftAssignment
+  eligible: Employee[]
+  employeeNames: Record<string, string>
+  shiftCounts: Record<string, ShiftCountInfo>
+  myEmployeeId: string | null
+  viewerCanManage: boolean
+  canSelfRemove: boolean
+  canRequestReplacement: boolean
+  hasPendingRequest: boolean
+  onSet: (employeeId: string | null) => void
+  onRequestReplacement: (reason: string | null, substituteId: string | null) => Promise<string | null>
+}) {
+  const [editing, setEditing] = useState(false)
+  const employeeId = openingAssignment?.employee_id ?? closingAssignment?.employee_id ?? null
+  const iAmEligible = !!myEmployeeId && eligible.some((e) => e.id === myEmployeeId)
+  const isMine = !!employeeId && employeeId === myEmployeeId
+  const name = employeeId ? nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId, 'area_supervisor') : null
+
+  const label = (
+    <span className="text-muted-foreground text-xs">מנהל/ת מתחם ({AREA_SUPERVISOR_HOURS})</span>
+  )
+
+  if (viewerCanManage) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border p-2 text-sm">
+        {label}
+        <div className="flex flex-1 items-center justify-center gap-2">
+          {editing ? (
+            <select
+              autoFocus
+              className={cn(selectClass, 'h-8 max-w-48 text-sm')}
+              defaultValue=""
+              onBlur={() => setEditing(false)}
+              onChange={(e) => {
+                const v = e.target.value
+                setEditing(false)
+                if (v === '__remove__') onSet(null)
+                else if (v) onSet(v)
+              }}
+            >
+              <option value="">בחר מרשימה</option>
+              {employeeId && <option value="__remove__">— הסרה —</option>}
+              {eligible
+                .filter((e) => e.id !== employeeId)
+                .map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {nameWithCount(e.full_name, shiftCounts, e.id, 'area_supervisor')}
+                  </option>
+                ))}
+            </select>
+          ) : employeeId ? (
+            <button type="button" onClick={() => setEditing(true)} className="underline-offset-2 hover:underline">
+              {name}
+            </button>
+          ) : (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+                disabled={!iAmEligible}
+                onClick={() => myEmployeeId && onSet(myEmployeeId)}
+              >
+                שבץ אותי
+              </Button>
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="text-muted-foreground text-xs underline-offset-2 hover:underline"
+              >
+                בחר מרשימה
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Self-service viewer: can view whoever's on it, self-associate if
+  // eligible and empty, or manage their own pick (remove/replacement
+  // request) -- same as the bartender/area-manager self-service columns.
+  return (
+    <div className="flex items-center gap-2 rounded-md border p-2 text-sm">
+      {label}
+      <div className="flex flex-1 items-center justify-center gap-2">
+        {employeeId && !isMine && <span className="truncate">{name}</span>}
+
+        {isMine && canSelfRemove && (
+          <div className="flex items-center gap-1">
+            <span className="truncate">{name}</span>
+            <button
+              type="button"
+              onClick={() => onSet(null)}
+              className="text-destructive text-[10px] underline-offset-2 hover:underline"
+            >
+              ביטול
+            </button>
+          </div>
+        )}
+
+        {isMine && !canSelfRemove && canRequestReplacement && (
+          <ReplacementRequestControl
+            name={name ?? ''}
+            hasPendingRequest={hasPendingRequest}
+            eligible={eligible}
+            onSubmit={onRequestReplacement}
+          />
+        )}
+
+        {isMine && !canSelfRemove && !canRequestReplacement && <span className="truncate">{name}</span>}
+
+        {!employeeId && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-xs"
+            disabled={!iAmEligible}
+            onClick={() => myEmployeeId && onSet(myEmployeeId)}
+          >
+            שבץ אותי
+          </Button>
         )}
       </div>
     </div>
