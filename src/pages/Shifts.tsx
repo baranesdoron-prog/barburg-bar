@@ -111,13 +111,22 @@ export function ShiftsArchive() {
 }
 
 // ---------------------------------------------------------------------
-// Unified allocations view (current + future weeks)
+// Shared week data loading -- both the current/future list and the
+// archive render the exact same WeekCard, just for a different range of
+// weeks, so they share one loader instead of drifting apart.
 // ---------------------------------------------------------------------
 
-function AllocationsList() {
-  const { appUser, effectiveRole } = useAppUserContext()
-  const myEmployeeId = appUser.employee_id
-  const [year, setYear] = useState(currentYear)
+function useShiftWeeksData({
+  weeks,
+  canManage,
+  appUserId,
+  callEnsureUpcoming,
+}: {
+  weeks: string[]
+  canManage: boolean
+  appUserId: string
+  callEnsureUpcoming: boolean
+}) {
   const [shiftsByWeek, setShiftsByWeek] = useState<Map<string, WeekShifts>>(new Map())
   const [assignmentsByShift, setAssignmentsByShift] = useState<Map<string, ShiftAssignment[]>>(new Map())
   const [teamByWeek, setTeamByWeek] = useState<Map<string, string>>(new Map())
@@ -127,16 +136,6 @@ function AllocationsList() {
   const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({})
   const [shiftCounts, setShiftCounts] = useState<Record<string, ShiftCountInfo>>({})
   const [pendingRequestAssignmentIds, setPendingRequestAssignmentIds] = useState<Set<string>>(new Set())
-
-  const canManage = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
-
-  // weeks: the fetch range (includes the one-week lookback buffer).
-  // visibleWeeks: what actually renders -- the lookback week only shows up
-  // if it still has a shift waiting to be closed.
-  const weeks = sundaysInYear(year)
-    .map(toDateStr)
-    .filter((w) => w >= EARLIEST_WEEK_START && w >= FETCH_FROM)
-  const visibleWeeks = weeks.filter((w) => w >= ARCHIVE_CUTOFF || weekNeedsClosing(shiftsByWeek.get(w) ?? {}))
 
   async function load() {
     if (weeks.length === 0) {
@@ -155,7 +154,7 @@ function AllocationsList() {
     // Both manager-only server-side: bartenders can't provision shifts or
     // pick a bar manager, so skip these calls entirely for them instead of
     // firing requests RLS will just reject.
-    if (canManage) await supabase.rpc('ensure_upcoming_shifts')
+    if (callEnsureUpcoming && canManage) await supabase.rpc('ensure_upcoming_shifts')
 
     const [shiftsRes, teamRes, shiftManagersRes, rolesRes, employeesRes, countsRes, myRequestsRes] = await Promise.all([
       supabase
@@ -180,7 +179,7 @@ function AllocationsList() {
       // request instead of offering the button again.
       canManage
         ? Promise.resolve({ data: [] })
-        : supabase.from('replacement_requests').select('shift_assignment_id').eq('requested_by', appUser.id).eq('status', 'pending'),
+        : supabase.from('replacement_requests').select('shift_assignment_id').eq('requested_by', appUserId).eq('status', 'pending'),
     ])
 
     setPendingRequestAssignmentIds(
@@ -293,7 +292,56 @@ function AllocationsList() {
   useEffect(() => {
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year])
+  }, [weeks.join(','), canManage])
+
+  return {
+    shiftsByWeek,
+    assignmentsByShift,
+    teamByWeek,
+    shiftManagers,
+    dutyEligible,
+    areaSupervisorEligible,
+    employeeNames,
+    shiftCounts,
+    pendingRequestAssignmentIds,
+    reload: load,
+  }
+}
+
+// ---------------------------------------------------------------------
+// Unified allocations view (current + future weeks)
+// ---------------------------------------------------------------------
+
+function AllocationsList() {
+  const { appUser, effectiveRole } = useAppUserContext()
+  const myEmployeeId = appUser.employee_id
+  const [year, setYear] = useState(currentYear)
+
+  const canManage = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
+
+  // weeks: the fetch range (includes the one-week lookback buffer).
+  // visibleWeeks: what actually renders -- the lookback week only shows up
+  // if it still has a shift waiting to be closed.
+  const weeks = sundaysInYear(year)
+    .map(toDateStr)
+    .filter((w) => w >= EARLIEST_WEEK_START && w >= FETCH_FROM)
+
+  const {
+    shiftsByWeek,
+    assignmentsByShift,
+    teamByWeek,
+    shiftManagers,
+    dutyEligible,
+    areaSupervisorEligible,
+    employeeNames,
+    shiftCounts,
+    pendingRequestAssignmentIds,
+    reload,
+  } = useShiftWeeksData({ weeks, canManage, appUserId: appUser.id, callEnsureUpcoming: true })
+
+  // visibleWeeks: what actually renders -- the lookback week only shows up
+  // if it still has a shift waiting to be closed.
+  const visibleWeeks = weeks.filter((w) => w >= ARCHIVE_CUTOFF || weekNeedsClosing(shiftsByWeek.get(w) ?? {}))
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
@@ -344,7 +392,7 @@ function AllocationsList() {
           viewerCanManage={canManage}
           isAdmin={effectiveRole === 'administrator'}
           pendingRequestAssignmentIds={pendingRequestAssignmentIds}
-          onSaved={load}
+          onSaved={reload}
         />
       ))}
     </div>
@@ -1548,53 +1596,37 @@ function ReplacementRequestControl({
 // Archive (read-only, unchanged behavior)
 // ---------------------------------------------------------------------
 
+// Same per-week card as the current/future list above (status, bar
+// manager, area supervisor + area managers, bartenders) -- the only
+// difference is the week range: strictly before ARCHIVE_CUTOFF, and no
+// ensure_upcoming_shifts call since archived weeks never need new shifts
+// provisioned.
 function ArchiveList() {
+  const { appUser, effectiveRole } = useAppUserContext()
+  const myEmployeeId = appUser.employee_id
   const [year, setYear] = useState(currentYear)
-  const [shiftsByWeek, setShiftsByWeek] = useState<Map<string, WeekShifts>>(new Map())
-  const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({})
+
+  const canManage = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
 
   const weeks = sundaysInYear(year)
     .map(toDateStr)
     .filter((w) => w >= EARLIEST_WEEK_START && w < ARCHIVE_CUTOFF)
 
-  useEffect(() => {
-    async function load() {
-      if (weeks.length === 0) {
-        setShiftsByWeek(new Map())
-        setEmployeeNames({})
-        return
-      }
-
-      const [shiftsRes, employeesRes] = await Promise.all([
-        supabase
-          .from('shifts_with_effective_status')
-          .select('*')
-          .gte('week_start', weeks[0])
-          .lte('week_start', weeks[weeks.length - 1]),
-        supabase.from('employees').select('id, full_name'),
-      ])
-
-      const grouped = new Map<string, WeekShifts>()
-      for (const shift of (shiftsRes.data as Shift[]) ?? []) {
-        const entry = grouped.get(shift.week_start) ?? {}
-        entry[shift.shift_type as ShiftType] = shift
-        grouped.set(shift.week_start, entry)
-      }
-      setShiftsByWeek(grouped)
-
-      const names: Record<string, string> = {}
-      for (const emp of (employeesRes.data as { id: string; full_name: string }[]) ?? []) {
-        names[emp.id] = emp.full_name
-      }
-      setEmployeeNames(names)
-    }
-
-    load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year])
+  const {
+    shiftsByWeek,
+    assignmentsByShift,
+    teamByWeek,
+    shiftManagers,
+    dutyEligible,
+    areaSupervisorEligible,
+    employeeNames,
+    shiftCounts,
+    pendingRequestAssignmentIds,
+    reload,
+  } = useShiftWeeksData({ weeks, canManage, appUserId: appUser.id, callEnsureUpcoming: false })
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-4">
+    <div className="mx-auto flex max-w-2xl flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">ארכיון משמרות</h1>
         <Button asChild variant="outline">
@@ -1602,74 +1634,42 @@ function ArchiveList() {
         </Button>
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">שבועות {year}</CardTitle>
-          <select className={cn(selectClass, 'h-9 w-28 text-sm')} value={year} onChange={(e) => setYear(Number(e.target.value))}>
-            {YEAR_OPTIONS.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          {weeks.length === 0 && <p className="text-muted-foreground text-sm">אין שבועות להצגה בשנה זו.</p>}
-          {weeks.map((week) => (
-            <ArchiveWeekRow key={week} week={week} shifts={shiftsByWeek.get(week) ?? {}} employeeNames={employeeNames} />
+      <div className="flex items-center justify-between">
+        <span className="text-muted-foreground text-sm">שבועות {year}</span>
+        <select
+          className={cn(selectClass, 'h-9 w-28 text-sm')}
+          value={year}
+          onChange={(e) => setYear(Number(e.target.value))}
+        >
+          {YEAR_OPTIONS.map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
           ))}
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
-function ArchiveWeekRow({
-  week,
-  shifts,
-  employeeNames,
-}: {
-  week: string
-  shifts: WeekShifts
-  employeeNames: Record<string, string>
-}) {
-  const managerId = shifts.opening?.shift_manager_id ?? shifts.closing?.shift_manager_id
-  const managerName = managerId ? (employeeNames[managerId] ?? '—') : '—'
-  const shiftDate = shifts.opening?.start_time ?? shifts.closing?.start_time
-  const dateLabel = shiftDate ? weekLabelFormatter.format(new Date(shiftDate)) : weekLabelFormatter.format(shiftDateOfWeek(week))
-
-  return (
-    <div className="flex flex-col gap-1 rounded-md border p-2 text-sm">
-      <div className="flex items-center justify-between gap-2">
-        <span>{dateLabel}</span>
-        <span className="text-muted-foreground text-xs">מנהל/ת בר: {managerName}</span>
+        </select>
       </div>
-      <div className="flex gap-2">
-        <ArchiveShiftSlot shift={shifts.opening} type="opening" />
-        <ArchiveShiftSlot shift={shifts.closing} type="closing" />
-      </div>
+
+      {weeks.length === 0 && <p className="text-muted-foreground text-sm">אין שבועות להצגה בשנה זו.</p>}
+
+      {weeks.map((week) => (
+        <WeekCard
+          key={week}
+          week={week}
+          shifts={shiftsByWeek.get(week) ?? {}}
+          assignmentsByShift={assignmentsByShift}
+          shiftManagerId={teamByWeek.get(week) ?? null}
+          shiftManagers={shiftManagers}
+          dutyEligible={dutyEligible}
+          areaSupervisorEligible={areaSupervisorEligible}
+          employeeNames={employeeNames}
+          shiftCounts={shiftCounts}
+          myEmployeeId={myEmployeeId}
+          viewerCanManage={canManage}
+          isAdmin={effectiveRole === 'administrator'}
+          pendingRequestAssignmentIds={pendingRequestAssignmentIds}
+          onSaved={reload}
+        />
+      ))}
     </div>
-  )
-}
-
-function ArchiveShiftSlot({ shift, type }: { shift?: Shift; type: ShiftType }) {
-  if (!shift) {
-    return (
-      <span className="text-muted-foreground flex-1 rounded-md border border-dashed px-2 py-1 text-xs">
-        {shiftTypeLabel(type)}: לא נפתחה
-      </span>
-    )
-  }
-
-  return (
-    <Link
-      to={`/shifts/${shift.id}`}
-      className="hover:bg-accent/50 flex flex-1 items-center justify-between gap-2 rounded-md border px-2 py-1 text-xs transition-colors"
-    >
-      <span>{shiftTypeLabel(shift.shift_type)}</span>
-      <span className={cn('rounded-full px-2 py-0.5 font-medium', effectiveStatusBadgeClass[shift.effective_status])}>
-        {effectiveStatusLabels[shift.effective_status]}
-      </span>
-    </Link>
   )
 }
