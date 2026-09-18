@@ -439,6 +439,142 @@ function ShiftManagerAssignmentCard() {
   )
 }
 
+// Area supervisor ("מנהל/ת מתחם") is one person for the whole night, same
+// as bar manager -- but unlike bar manager there's no dedicated
+// week-level table for it, just a pair of shift_assignments rows (one per
+// shift instance, opening + closing) always written/removed together.
+// Matches WeekCard's handleSetAreaSupervisor in Shifts.tsx.
+function AreaSupervisorAssignmentCard() {
+  const weeks = [toDateStr(activeWeekStart()), toDateStr(addDays(activeWeekStart(), 7))]
+  const [eligible, setEligible] = useState<ShiftManagerEmployee[]>([])
+  const [shiftIdsByWeek, setShiftIdsByWeek] = useState<Map<string, string[]>>(new Map())
+  const [assignments, setAssignments] = useState<Map<string, string>>(new Map())
+  const [saving, setSaving] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function load() {
+    await supabase.rpc('ensure_upcoming_shifts')
+
+    const [shiftsRes, employeesRes, rolesRes] = await Promise.all([
+      supabase.from('shifts').select('id, week_start, shift_type').in('week_start', weeks),
+      supabase.from('employees').select('id, full_name, can_supervise_area').order('full_name'),
+      supabase.rpc('list_employee_roles'),
+    ])
+
+    const shiftsByWeek = new Map<string, string[]>()
+    for (const s of (shiftsRes.data as { id: string; week_start: string; shift_type: string }[]) ?? []) {
+      shiftsByWeek.set(s.week_start, [...(shiftsByWeek.get(s.week_start) ?? []), s.id])
+    }
+    setShiftIdsByWeek(shiftsByWeek)
+
+    const roleByEmployeeId = new Map(
+      ((rolesRes.data as { employee_id: string; role: string | null }[]) ?? []).map((r) => [r.employee_id, r.role]),
+    )
+    const allEmployees = (employeesRes.data as { id: string; full_name: string; can_supervise_area: boolean }[]) ?? []
+    // Admins can cover area-supervisor duty too, on top of the explicit
+    // can_supervise_area allow-list -- matches AllocationsList in Shifts.tsx.
+    setEligible(allEmployees.filter((e) => e.can_supervise_area || roleByEmployeeId.get(e.id) === 'administrator'))
+
+    const allShiftIds = [...shiftsByWeek.values()].flat()
+    if (allShiftIds.length === 0) {
+      setAssignments(new Map())
+      return
+    }
+
+    const { data: assignmentRows } = await supabase
+      .from('shift_assignments')
+      .select('shift_id, employee_id')
+      .in('shift_id', allShiftIds)
+      .eq('assignment_role', 'area_supervisor')
+
+    const shiftToWeek = new Map<string, string>()
+    for (const [week, ids] of shiftsByWeek) {
+      for (const id of ids) shiftToWeek.set(id, week)
+    }
+
+    const loadedAssignments = new Map<string, string>()
+    for (const row of (assignmentRows as { shift_id: string; employee_id: string }[]) ?? []) {
+      const week = shiftToWeek.get(row.shift_id)
+      if (week) loadedAssignments.set(week, row.employee_id)
+    }
+    setAssignments(loadedAssignments)
+  }
+
+  useEffect(() => {
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function handleAssign(week: string, employeeId: string) {
+    if (!employeeId) return
+    setSaving(week)
+    setError(null)
+
+    const shiftIds = shiftIdsByWeek.get(week) ?? []
+    const { error: deleteError } = await supabase
+      .from('shift_assignments')
+      .delete()
+      .in('shift_id', shiftIds)
+      .eq('assignment_role', 'area_supervisor')
+    if (deleteError) {
+      setError(deleteError.message)
+      setSaving(null)
+      return
+    }
+
+    if (shiftIds.length > 0) {
+      const { error: insertError } = await supabase
+        .from('shift_assignments')
+        .insert(shiftIds.map((shift_id) => ({ shift_id, employee_id: employeeId, assignment_role: 'area_supervisor' })))
+      if (insertError) {
+        setError(insertError.message)
+        setSaving(null)
+        return
+      }
+    }
+
+    setSaving(null)
+    load()
+  }
+
+  const missingCount = weeks.filter((w) => !assignments.get(w)).length
+
+  return (
+    <Card className={missingCount > 0 ? 'border-amber-500/60 bg-amber-50 dark:bg-amber-950/20' : undefined}>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="text-base">שיבוץ מנהל/ת מתחם</CardTitle>
+        <Link to="/shifts" className="text-muted-foreground text-xs hover:underline">
+          שיבוץ לפי שנה
+        </Link>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-2">
+        {weeks.map((week) => {
+          const assigned = assignments.get(week) ?? ''
+          return (
+            <div key={week} className="flex items-center justify-between gap-2 text-sm">
+              <span>שבוע {weekLabelFormatter.format(parseDateStr(week))}</span>
+              <select
+                className={cn(selectClass, 'w-40', !assigned && 'border-amber-500')}
+                value={assigned}
+                disabled={saving === week}
+                onChange={(e) => handleAssign(week, e.target.value)}
+              >
+                <option value="">— לא שובץ —</option>
+                {eligible.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.full_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )
+        })}
+        {error && <p className="text-destructive text-sm">{error}</p>}
+      </CardContent>
+    </Card>
+  )
+}
+
 function MyWeeklyTasksCard({ employeeId }: { employeeId: string }) {
   const [weekStart, setWeekStart] = useState<string | null>(null)
   const [items, setItems] = useState<WeeklyChecklistItem[]>([])
@@ -565,6 +701,8 @@ function ManagerDashboard() {
       <ClosingAlertCard shifts={shifts} employeeNames={employeeNames} />
 
       {canManage && <ShiftManagerAssignmentCard />}
+
+      {canManage && <AreaSupervisorAssignmentCard />}
 
       {effectiveRole === 'shift_manager' && appUser.employee_id && (
         <MyWeeklyTasksCard employeeId={appUser.employee_id} />
