@@ -1625,6 +1625,17 @@ function ArchiveList() {
     reload,
   } = useShiftWeeksData({ weeks, canManage, appUserId: appUser.id, callEnsureUpcoming: false })
 
+  // The lookback week (the one at FETCH_FROM) is shared with the
+  // current/future list -- it's shown there too as long as it still needs
+  // closing, so it must not also show here or it'd appear in both places.
+  // Older weeks always show, even if somehow still unclosed, so a
+  // long-forgotten shift doesn't vanish from the UI entirely. Newest
+  // completed week first -- most recently moved to the archive on top.
+  const visibleWeeks = weeks
+    .filter((w) => w < FETCH_FROM || !weekNeedsClosing(shiftsByWeek.get(w) ?? {}))
+    .slice()
+    .reverse()
+
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -1649,9 +1660,9 @@ function ArchiveList() {
         </select>
       </div>
 
-      {weeks.length === 0 && <p className="text-muted-foreground text-sm">אין שבועות להצגה בשנה זו.</p>}
+      {visibleWeeks.length === 0 && <p className="text-muted-foreground text-sm">אין שבועות להצגה בשנה זו.</p>}
 
-      {weeks.map((week) => (
+      {visibleWeeks.map((week) => (
         <WeekCard
           key={week}
           week={week}
