@@ -38,6 +38,7 @@ export function InventoryItems() {
 
   const [importSummary, setImportSummary] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   async function loadFilters() {
     const [suppliersRes, categoriesRes] = await Promise.all([
@@ -82,6 +83,24 @@ export function InventoryItems() {
 
   async function handleToggleActive(item: InventoryItem) {
     await supabase.from('inventory_items').update({ active: !item.active }).eq('id', item.id)
+    search()
+  }
+
+  async function handleDelete(item: InventoryItem) {
+    if (!window.confirm(`למחוק לצמיתות את "${item.name}"? הפעולה אינה הפיכה.`)) return
+
+    setDeleteError(null)
+    const { error: deleteErr } = await supabase.from('inventory_items').delete().eq('id', item.id)
+
+    if (deleteErr) {
+      setDeleteError(
+        deleteErr.code === '23503'
+          ? `לא ניתן למחוק את "${item.name}" — קיימת עבורו היסטוריה של ספירות מלאי או הזמנות רכש.`
+          : deleteErr.message,
+      )
+      return
+    }
+
     search()
   }
 
@@ -292,11 +311,22 @@ export function InventoryItems() {
                     <Button variant="ghost" size="sm" onClick={() => handleToggleActive(item)}>
                       {item.active ? 'השבתה' : 'הפעלה'}
                     </Button>
+                    {!item.active && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(item)}
+                      >
+                        מחיקה
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
             )
           })}
+          {deleteError && <p className="text-destructive text-sm">{deleteError}</p>}
         </CardContent>
       </Card>
 
