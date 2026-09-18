@@ -245,26 +245,79 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  const [newItemName, setNewItemName] = useState('')
+  const [newItemQuantity, setNewItemQuantity] = useState('')
+  const [addError, setAddError] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+
+  async function load() {
+    const [itemsRes, countsRes, categoriesRes] = await Promise.all([
+      supabase.from('inventory_items').select('*').eq('active', true).order('name'),
+      supabase.from('inventory_counts').select('*').eq('shift_id', shiftId),
+      supabase.from('product_categories').select('*').order('sort_order'),
+    ])
+
+    setItems((itemsRes.data as InventoryItem[]) ?? [])
+    setCategories((categoriesRes.data as ProductCategory[]) ?? [])
+
+    const initial: Record<string, string> = {}
+    for (const count of countsRes.data ?? []) {
+      initial[count.inventory_item_id] = String(count.quantity_counted)
+    }
+    setQuantities(initial)
+  }
+
   useEffect(() => {
-    async function load() {
-      const [itemsRes, countsRes, categoriesRes] = await Promise.all([
-        supabase.from('inventory_items').select('*').eq('active', true).order('name'),
-        supabase.from('inventory_counts').select('*').eq('shift_id', shiftId),
-        supabase.from('product_categories').select('*').order('sort_order'),
-      ])
+    load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shiftId])
 
-      setItems((itemsRes.data as InventoryItem[]) ?? [])
-      setCategories((categoriesRes.data as ProductCategory[]) ?? [])
+  // Quick-add for a product that isn't in the catalog yet -- just name and
+  // quantity, no category/supplier/pricing. It's created active with no
+  // category, which is exactly what flags it on the admin/bar-manager
+  // dashboard's "products missing classification" KPI, so someone goes and
+  // fills in the rest of the details later.
+  async function handleAddItem(e: FormEvent) {
+    e.preventDefault()
+    const name = newItemName.trim()
+    if (!name) return
 
-      const initial: Record<string, string> = {}
-      for (const count of countsRes.data ?? []) {
-        initial[count.inventory_item_id] = String(count.quantity_counted)
-      }
-      setQuantities(initial)
+    setAddError(null)
+    setAdding(true)
+
+    const { data: newItem, error: insertError } = await supabase
+      .from('inventory_items')
+      .insert({ name })
+      .select()
+      .single()
+
+    if (insertError || !newItem) {
+      setAddError(insertError?.message ?? 'שגיאה בהוספת המוצר')
+      setAdding(false)
+      return
     }
 
-    load()
-  }, [shiftId])
+    const quantity = newItemQuantity.trim()
+    if (quantity !== '') {
+      const { error: countError } = await supabase
+        .from('inventory_counts')
+        .upsert(
+          { shift_id: shiftId, inventory_item_id: newItem.id, quantity_counted: Number(quantity) },
+          { onConflict: 'shift_id,inventory_item_id' },
+        )
+      if (countError) {
+        setAddError(countError.message)
+        setAdding(false)
+        return
+      }
+    }
+
+    setNewItemName('')
+    setNewItemQuantity('')
+    setAdding(false)
+    await load()
+    onSaved()
+  }
 
   async function handleSave() {
     setSaving(true)
@@ -343,6 +396,29 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
             שמירת ספירה
           </Button>
         )}
+
+        <form onSubmit={handleAddItem} className="mt-2 flex flex-col gap-2 border-t pt-3">
+          <p className="text-muted-foreground text-xs font-semibold">מוצר שלא ברשימה?</p>
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="שם המוצר"
+              className="flex-1"
+              value={newItemName}
+              onChange={(e) => setNewItemName(e.target.value)}
+            />
+            <Input
+              type="number"
+              placeholder="כמות"
+              className="w-24"
+              value={newItemQuantity}
+              onChange={(e) => setNewItemQuantity(e.target.value)}
+            />
+          </div>
+          {addError && <p className="text-destructive text-sm">{addError}</p>}
+          <Button type="submit" variant="outline" disabled={adding || !newItemName.trim()}>
+            הוספת מוצר
+          </Button>
+        </form>
       </CardContent>
     </Card>
   )

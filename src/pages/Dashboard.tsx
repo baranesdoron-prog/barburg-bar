@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { AlertTriangle, Clock, Package, ShoppingCart, Truck, Users, CalendarDays, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, Clock, Package, ShoppingCart, Tag, Truck, Users, CalendarDays, type LucideIcon } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
@@ -147,6 +147,7 @@ interface ManagerStats {
   shiftsThisWeek: number
   activeEmployees: number
   lowStockProducts: number
+  unclassifiedProducts: number
 }
 
 function ManagerSummary() {
@@ -171,6 +172,7 @@ function ManagerSummary() {
         shiftsThisWeekRes,
         activeEmployeesRes,
         lowStockRes,
+        unclassifiedRes,
         ordersRes,
         suppliersRes,
       ] = await Promise.all([
@@ -192,6 +194,11 @@ function ManagerSummary() {
           .select('id', { count: 'exact', head: true })
           .eq('active', true)
           .eq('is_low_stock', true),
+        supabase
+          .from('inventory_items')
+          .select('id', { count: 'exact', head: true })
+          .eq('active', true)
+          .is('category_id', null),
         supabase.from('purchase_orders').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.from('suppliers').select('*'),
       ])
@@ -203,6 +210,7 @@ function ManagerSummary() {
         shiftsThisWeek: shiftsThisWeekRes.count ?? 0,
         activeEmployees: activeEmployeesRes.count ?? 0,
         lowStockProducts: lowStockRes.count ?? 0,
+        unclassifiedProducts: unclassifiedRes.count ?? 0,
       })
 
       const orders = (ordersRes.data as PurchaseOrder[]) ?? []
@@ -243,6 +251,13 @@ function ManagerSummary() {
           label="מוצרים מתחת למינימום"
           colorClass="bg-red-100 text-red-600"
           to="/purchase-orders/reorder"
+        />
+        <StatCard
+          icon={Tag}
+          value={stats.unclassifiedProducts}
+          label="מוצרים ללא סיווג"
+          colorClass="bg-orange-100 text-orange-600"
+          to="/inventory/items?unclassified=1"
         />
         <StatCard
           icon={ShoppingCart}

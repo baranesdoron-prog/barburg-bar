@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
 import { parseCsv, toCsv } from '@/lib/csv'
@@ -25,6 +25,9 @@ const CSV_TEMPLATE_HEADER = [
 ]
 
 export function InventoryItems() {
+  const [searchParams] = useSearchParams()
+  const unclassifiedOnly = searchParams.get('unclassified') === '1'
+
   const [items, setItems] = useState<InventoryItemWithStock[] | null>(null)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [categories, setCategories] = useState<ProductCategory[]>([])
@@ -53,7 +56,11 @@ export function InventoryItems() {
     let query = supabase.from('inventory_items_with_latest_count').select('*')
 
     if (name.trim()) query = query.ilike('name', `%${name.trim()}%`)
-    if (category) query = query.eq('category_id', category)
+    if (unclassifiedOnly) {
+      query = query.is('category_id', null)
+    } else if (category) {
+      query = query.eq('category_id', category)
+    }
     if (supplier) query = query.eq('resolved_supplier_id', supplier)
 
     const { data } = await query.order('name')
@@ -63,7 +70,8 @@ export function InventoryItems() {
   useEffect(() => {
     loadFilters()
     search()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unclassifiedOnly])
 
   function handleClearFilters() {
     setNameFilter('')
@@ -191,6 +199,15 @@ export function InventoryItems() {
     <div className="mx-auto flex max-w-md flex-col gap-4">
       <h1 className="text-xl font-semibold">פריטי מלאי</h1>
 
+      {unclassifiedOnly && (
+        <div className="flex items-center justify-between rounded-md border border-orange-500/60 bg-orange-50 p-2 text-sm dark:bg-orange-950/20">
+          <span>מוצג: מוצרים ללא סיווג (קטגוריה) בלבד</span>
+          <Link to="/inventory/items" className="text-muted-foreground text-xs hover:underline">
+            נקה
+          </Link>
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">חיפוש</CardTitle>
@@ -200,6 +217,7 @@ export function InventoryItems() {
           <select
             className={selectClass}
             value={categoryFilter}
+            disabled={unclassifiedOnly}
             onChange={(e) => setCategoryFilter(e.target.value)}
           >
             <option value="">כל הקטגוריות</option>
