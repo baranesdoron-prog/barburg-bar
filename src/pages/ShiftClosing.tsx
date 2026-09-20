@@ -187,12 +187,14 @@ function JournalSection({ shiftId, onSaved }: { shiftId: string; onSaved: () => 
       <CardContent className="flex flex-col gap-3">
         {entries.length === 0 && <p className="text-muted-foreground text-sm">אין רשומות יומן עדיין.</p>}
         {entries.map((entry) => (
-          <div key={entry.id} className="rounded-md border p-2 text-sm">
-            <p className="font-medium">{journalCategoryLabels[entry.category]}</p>
-            <p>{entry.description}</p>
-            {entry.quantity !== null && <p className="text-muted-foreground">כמות: {entry.quantity}</p>}
-            {entry.requires_follow_up && <p className="text-destructive">דורש מעקב</p>}
-          </div>
+          <JournalEntryRow
+            key={entry.id}
+            entry={entry}
+            onChanged={() => {
+              load()
+              onSaved()
+            }}
+          />
         ))}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-2 border-t pt-3">
@@ -234,6 +236,96 @@ function JournalSection({ shiftId, onSaved }: { shiftId: string; onSaved: () => 
         </form>
       </CardContent>
     </Card>
+  )
+}
+
+function JournalEntryRow({ entry, onChanged }: { entry: JournalEntry; onChanged: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const [category, setCategory] = useState(entry.category)
+  const [description, setDescription] = useState(entry.description)
+  const [quantity, setQuantity] = useState(entry.quantity !== null ? String(entry.quantity) : '')
+  const [requiresFollowUp, setRequiresFollowUp] = useState(entry.requires_follow_up)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  async function handleSave() {
+    setError(null)
+
+    if (!description.trim()) {
+      setError('יש להזין תיאור')
+      return
+    }
+
+    setSaving(true)
+    const { error: updateError } = await supabase
+      .from('journal_entries')
+      .update({
+        category,
+        description: description.trim(),
+        quantity: quantity ? Number(quantity) : null,
+        requires_follow_up: requiresFollowUp,
+      })
+      .eq('id', entry.id)
+    setSaving(false)
+
+    if (updateError) {
+      setError(updateError.message)
+      return
+    }
+
+    setEditing(false)
+    onChanged()
+  }
+
+  if (editing) {
+    return (
+      <div className="flex flex-col gap-2 rounded-md border p-2 text-sm">
+        <select
+          className={selectClass}
+          value={category}
+          onChange={(e) => setCategory(e.target.value as JournalCategory)}
+        >
+          {journalCategories.map((cat) => (
+            <option key={cat} value={cat}>
+              {journalCategoryLabels[cat]}
+            </option>
+          ))}
+        </select>
+        <textarea
+          className={selectClass + ' min-h-16'}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+        <Input type="number" placeholder="כמות (לא חובה)" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={requiresFollowUp} onChange={(e) => setRequiresFollowUp(e.target.checked)} />
+          דורש מעקב
+        </label>
+        {error && <p className="text-destructive text-sm">{error}</p>}
+        <div className="flex gap-2">
+          <Button type="button" className="flex-1" disabled={saving} onClick={handleSave}>
+            שמירה
+          </Button>
+          <Button type="button" variant="ghost" className="flex-1" onClick={() => setEditing(false)}>
+            ביטול
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-md border p-2 text-sm">
+      <div className="flex items-start justify-between gap-2">
+        <p className="font-medium">{journalCategoryLabels[entry.category]}</p>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(true)}>
+          עריכה
+        </Button>
+      </div>
+      <p>{entry.description}</p>
+      {entry.quantity !== null && <p className="text-muted-foreground">כמות: {entry.quantity}</p>}
+      {entry.requires_follow_up && <p className="text-destructive">דורש מעקב</p>}
+    </div>
   )
 }
 
