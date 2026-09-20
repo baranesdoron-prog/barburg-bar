@@ -122,6 +122,9 @@ export function Suppliers() {
   const [fields, setFields] = useState<SupplierFormFields>(emptyFields)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [categoryError, setCategoryError] = useState<string | null>(null)
+  const [addingCategory, setAddingCategory] = useState(false)
 
   async function load() {
     const [suppliersRes, categoriesRes] = await Promise.all([
@@ -171,6 +174,32 @@ export function Suppliers() {
     load()
   }
 
+  async function handleAddCategory(e: FormEvent) {
+    e.preventDefault()
+    setCategoryError(null)
+
+    const name = newCategoryName.trim()
+    if (!name) {
+      setCategoryError('יש להזין שם קטגוריה')
+      return
+    }
+
+    setAddingCategory(true)
+    const nextSortOrder = categories.length > 0 ? Math.max(...categories.map((c) => c.sort_order)) + 1 : 1
+    const { error: insertError } = await supabase
+      .from('product_categories')
+      .insert({ name, sort_order: nextSortOrder })
+    setAddingCategory(false)
+
+    if (insertError) {
+      setCategoryError(insertError.code === '23505' ? 'כבר קיימת קטגוריה בשם זה' : insertError.message)
+      return
+    }
+
+    setNewCategoryName('')
+    load()
+  }
+
   if (suppliers === null) return null
 
   const activeSuppliers = suppliers.filter((s) => s.active)
@@ -201,6 +230,19 @@ export function Suppliers() {
               </select>
             </div>
           ))}
+
+          <form onSubmit={handleAddCategory} className="flex items-center gap-2 border-t pt-3">
+            <Input
+              placeholder="קטגוריה חדשה"
+              className="flex-1"
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+            />
+            <Button type="submit" variant="outline" disabled={addingCategory}>
+              הוספה
+            </Button>
+          </form>
+          {categoryError && <p className="text-destructive text-sm">{categoryError}</p>}
         </CardContent>
       </Card>
 
