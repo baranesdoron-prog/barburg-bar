@@ -5,10 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import type { ProductCategory, Supplier } from '@/lib/types'
-
-const selectClass =
-  'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
+import type { Supplier } from '@/lib/types'
 
 interface SupplierFormFields {
   name: string
@@ -118,21 +115,13 @@ function toPayload(fields: SupplierFormFields) {
 
 export function Suppliers() {
   const [suppliers, setSuppliers] = useState<Supplier[] | null>(null)
-  const [categories, setCategories] = useState<ProductCategory[]>([])
   const [fields, setFields] = useState<SupplierFormFields>(emptyFields)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [newCategoryName, setNewCategoryName] = useState('')
-  const [categoryError, setCategoryError] = useState<string | null>(null)
-  const [addingCategory, setAddingCategory] = useState(false)
 
   async function load() {
-    const [suppliersRes, categoriesRes] = await Promise.all([
-      supabase.from('suppliers').select('*').order('name'),
-      supabase.from('product_categories').select('*').order('sort_order'),
-    ])
-    setSuppliers((suppliersRes.data as Supplier[]) ?? [])
-    setCategories((categoriesRes.data as ProductCategory[]) ?? [])
+    const { data } = await supabase.from('suppliers').select('*').order('name')
+    setSuppliers((data as Supplier[]) ?? [])
   }
 
   useEffect(() => {
@@ -166,85 +155,11 @@ export function Suppliers() {
     load()
   }
 
-  async function handleCategoryDefaultChange(categoryId: string, supplierId: string) {
-    await supabase
-      .from('product_categories')
-      .update({ default_supplier_id: supplierId || null })
-      .eq('id', categoryId)
-    load()
-  }
-
-  async function handleAddCategory(e: FormEvent) {
-    e.preventDefault()
-    setCategoryError(null)
-
-    const name = newCategoryName.trim()
-    if (!name) {
-      setCategoryError('יש להזין שם קטגוריה')
-      return
-    }
-
-    setAddingCategory(true)
-    const nextSortOrder = categories.length > 0 ? Math.max(...categories.map((c) => c.sort_order)) + 1 : 1
-    const { error: insertError } = await supabase
-      .from('product_categories')
-      .insert({ name, sort_order: nextSortOrder })
-    setAddingCategory(false)
-
-    if (insertError) {
-      setCategoryError(insertError.code === '23505' ? 'כבר קיימת קטגוריה בשם זה' : insertError.message)
-      return
-    }
-
-    setNewCategoryName('')
-    load()
-  }
-
   if (suppliers === null) return null
-
-  const activeSuppliers = suppliers.filter((s) => s.active)
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
       <h1 className="text-xl font-semibold">ספקים</h1>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">קטגוריות מוצרים</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          {categories.map((category) => (
-            <div key={category.id} className="flex items-center justify-between gap-2 text-sm">
-              <span className="flex-1">{category.name}</span>
-              <select
-                className={selectClass + ' w-40'}
-                value={category.default_supplier_id ?? ''}
-                onChange={(e) => handleCategoryDefaultChange(category.id, e.target.value)}
-              >
-                <option value="">— ללא ספק ברירת מחדל —</option>
-                {activeSuppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ))}
-
-          <form onSubmit={handleAddCategory} className="flex items-center gap-2 border-t pt-3">
-            <Input
-              placeholder="קטגוריה חדשה"
-              className="flex-1"
-              value={newCategoryName}
-              onChange={(e) => setNewCategoryName(e.target.value)}
-            />
-            <Button type="submit" variant="outline" disabled={addingCategory}>
-              הוספה
-            </Button>
-          </form>
-          {categoryError && <p className="text-destructive text-sm">{categoryError}</p>}
-        </CardContent>
-      </Card>
 
       <Card>
         <CardContent className="flex flex-col gap-2 pt-6">

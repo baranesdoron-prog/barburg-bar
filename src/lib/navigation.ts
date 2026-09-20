@@ -6,6 +6,7 @@ import {
   CheckSquare,
   Package,
   ClipboardCheck,
+  Tags,
   Truck,
   ClipboardList,
   FileText,
@@ -72,6 +73,7 @@ export function getNavItems(role: AppRole): NavItem[] {
       children: [
         { to: '/inventory/items', label: 'פריטי מלאי', icon: Package },
         { to: '/inventory/checks', label: 'בדיקות מלאי', icon: ClipboardCheck },
+        { to: '/inventory/categories', label: 'קטגוריות', icon: Tags },
       ],
     })
     items.push({ to: '/suppliers', label: 'ספקים', icon: Truck })
