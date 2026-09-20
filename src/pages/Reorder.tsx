@@ -89,10 +89,14 @@ function SupplierGroup({
   const [lines, setLines] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {}
     for (const item of lowStockItems) {
+      // A box item can't be ordered in a partial case -- round the
+      // shortfall up to a whole number of cases, same formula used when
+      // auto-generating reorder POs (create_purchase_order_with_reorder_items).
+      const unitSize = item.unit_type === 'box' && item.units_per_box ? item.units_per_box : 1
       const shortfall =
         item.minimum_quantity !== null && item.latest_counted_quantity !== null
-          ? Math.max(1, Math.ceil(item.minimum_quantity - item.latest_counted_quantity))
-          : 1
+          ? Math.max(unitSize, Math.ceil((item.minimum_quantity - item.latest_counted_quantity) / unitSize) * unitSize)
+          : unitSize
       initial[item.id] = String(shortfall)
     }
     return initial
@@ -109,7 +113,9 @@ function SupplierGroup({
 
   function handleAdd() {
     if (!addItemId) return
-    setLines((prev) => ({ ...prev, [addItemId]: '1' }))
+    const item = itemsById.get(addItemId)
+    const unitSize = item?.unit_type === 'box' && item.units_per_box ? item.units_per_box : 1
+    setLines((prev) => ({ ...prev, [addItemId]: String(unitSize) }))
     setAddItemId('')
   }
 
@@ -191,10 +197,14 @@ function SupplierGroup({
                     מלאי נוכחי: {item.latest_counted_quantity ?? 0} מתוך מינימום {item.minimum_quantity}
                   </p>
                 )}
+                {item.unit_type === 'box' && item.units_per_box && (
+                  <p className="text-muted-foreground text-xs">יחידת הזמנה: קופסה של {item.units_per_box}</p>
+                )}
               </div>
               <Input
                 type="number"
-                min={1}
+                min={item.unit_type === 'box' && item.units_per_box ? item.units_per_box : 1}
+                step={item.unit_type === 'box' && item.units_per_box ? item.units_per_box : 1}
                 className="w-20"
                 value={lines[itemId]}
                 onChange={(e) => setLines((prev) => ({ ...prev, [itemId]: e.target.value }))}
