@@ -56,6 +56,7 @@ export function Users() {
   const [showInviteForm, setShowInviteForm] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
+  const [nameFilter, setNameFilter] = useState('')
 
   async function load() {
     const [usersRes, employeesRes, delegationsRes] = await Promise.all([
@@ -86,10 +87,15 @@ export function Users() {
   if (users === null) return null
 
   const nonPendingUsers = users.filter((u) => u.status !== 'pending_approval')
+  const trimmedNameFilter = nameFilter.trim().toLowerCase()
   const visibleUsers = nonPendingUsers.filter((u) => {
-    if (statusFilter === 'all') return true
-    if (statusFilter === 'active') return u.status === 'approved'
-    return u.status === 'suspended'
+    if (statusFilter === 'active' && u.status !== 'approved') return false
+    if (statusFilter === 'inactive' && u.status !== 'suspended') return false
+    if (!trimmedNameFilter) return true
+    return (
+      (u.employee_name ?? '').toLowerCase().includes(trimmedNameFilter) ||
+      u.email.toLowerCase().includes(trimmedNameFilter)
+    )
   })
 
   return (
@@ -108,6 +114,12 @@ export function Users() {
           onCancel={() => setShowInviteForm(false)}
         />
       )}
+
+      <Input
+        placeholder="חיפוש לפי שם"
+        value={nameFilter}
+        onChange={(e) => setNameFilter(e.target.value)}
+      />
 
       <div className="flex gap-2">
         {(Object.keys(statusFilterLabels) as StatusFilter[]).map((f) => (
