@@ -5,8 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
 const BARTENDER_PROCEDURES_URL = 'https://docs.google.com/document/d/19cRzgAZq7P-wgCyD-7c4HrbOhGm0zeBvRJLypba3Qkc/edit?tab=t.0'
 const AREA_MANAGER_PROCEDURES_URL = 'https://docs.google.com/document/d/116d84LNdmPZYX7K18NDEUozdFAvbFHeA/edit'
-const BAR_MANAGER_GUIDE_URL =
-  'https://docs.google.com/document/d/1LKktHCOwZZQxhOJcQcPI792p9HIVfO_X_BIIMN457To/edit?tab=t.0#heading=h.ty20t9bogqq3'
+const BAR_MANAGER_GUIDE_URL = 'https://docs.google.com/document/d/19cRzgAZq7P-wgCyD-7c4HrbOhGm0zeBvRJLypba3Qkc/edit?tab=t.0'
 
 export function Procedures() {
   const { effectiveRole } = useAppUserContext()
