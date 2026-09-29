@@ -46,6 +46,7 @@ export function OnboardingWizard() {
   const [loadedEligibility, setLoadedEligibility] = useState(false)
   const [shiftsByWeek, setShiftsByWeek] = useState<Map<string, WeekShifts>>(new Map())
   const [assignmentsByShift, setAssignmentsByShift] = useState<Map<string, ShiftAssignment[]>>(new Map())
+  const [employeeNames, setEmployeeNames] = useState<Map<string, string>>(new Map())
   const [loadedShifts, setLoadedShifts] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [assignedCount, setAssignedCount] = useState(0)
@@ -96,14 +97,21 @@ export function OnboardingWizard() {
 
     const shiftIds = shifts.map((s) => s.id)
     if (shiftIds.length > 0) {
-      const { data: assignmentRows } = await supabase.from('shift_assignments').select('*').in('shift_id', shiftIds)
+      const [{ data: assignmentRows }, { data: employeesData }] = await Promise.all([
+        supabase.from('shift_assignments').select('*').in('shift_id', shiftIds),
+        supabase.from('employees').select('id, full_name'),
+      ])
       const byShift = new Map<string, ShiftAssignment[]>()
       for (const row of (assignmentRows as ShiftAssignment[]) ?? []) {
         byShift.set(row.shift_id, [...(byShift.get(row.shift_id) ?? []), row])
       }
       setAssignmentsByShift(byShift)
+      setEmployeeNames(
+        new Map(((employeesData as { id: string; full_name: string }[]) ?? []).map((e) => [e.id, e.full_name])),
+      )
     } else {
       setAssignmentsByShift(new Map())
+      setEmployeeNames(new Map())
     }
 
     setLoadedShifts(true)
@@ -127,6 +135,18 @@ export function OnboardingWizard() {
       return
     }
     setAssignedCount((c) => c + 1)
+    await loadShifts()
+  }
+
+  async function handleRemove(assignmentIds: string[]) {
+    if (assignmentIds.length === 0) return
+    setError(null)
+    const { error: deleteError } = await supabase.from('shift_assignments').delete().in('id', assignmentIds)
+    if (deleteError) {
+      setError(friendlyAssignmentError(deleteError))
+      return
+    }
+    setAssignedCount((c) => Math.max(0, c - 1))
     await loadShifts()
   }
 
@@ -208,6 +228,7 @@ export function OnboardingWizard() {
   }
 
   const weeks = [...shiftsByWeek.keys()].sort()
+  const currentWeek = toDateStr(activeWeekStart())
 
   interface Slot {
     key: string
@@ -215,7 +236,8 @@ export function OnboardingWizard() {
     typeLabel: string
     status: 'open' | 'mine' | 'full'
     badgeText: string
-    onAssign: () => void
+    namesTitle?: string
+    onClick?: () => void
   }
 
   const slots: Slot[] = []
@@ -224,20 +246,29 @@ export function OnboardingWizard() {
     for (const week of weeks) {
       const shifts = shiftsByWeek.get(week) ?? {}
       const dateLabel = shortDateFormatter.format(shiftDateOfWeek(week))
+      const canRevert = week > currentWeek
       for (const type of ['opening', 'closing'] as ShiftType[]) {
         const shift = shifts[type]
         if (!shift) continue
         const assignments = (assignmentsByShift.get(shift.id) ?? []).filter((a) => a.assignment_role === duty)
         const max = duty === 'bartender' ? shift.required_staff_count : 2
-        const alreadyIn = assignments.some((a) => a.employee_id === myEmployeeId)
+        const mine = assignments.find((a) => a.employee_id === myEmployeeId)
         const isFull = max !== null && assignments.length >= max
+        const names = assignments.map((a) => employeeNames.get(a.employee_id)).filter((n): n is string => !!n)
         slots.push({
           key: shift.id,
           dateLabel,
           typeLabel: shiftTypeLabel(shift.shift_type),
-          status: alreadyIn ? 'mine' : isFull ? 'full' : 'open',
-          badgeText: alreadyIn ? '✓ משובץ' : max === null ? 'פנוי' : `${assignments.length}/${max}`,
-          onAssign: () => handleAssign(shift, duty as 'bartender' | 'area_manager'),
+          status: mine ? 'mine' : isFull ? 'full' : 'open',
+          badgeText: mine ? '✓ משובץ' : max === null ? 'פנוי' : `${assignments.length}/${max}`,
+          namesTitle: names.length > 0 ? `משובצים: ${names.join(', ')}` : undefined,
+          onClick: mine
+            ? canRevert
+              ? () => handleRemove([mine.id])
+              : undefined
+            : !isFull
+              ? () => handleAssign(shift, duty as 'bartender' | 'area_manager')
+              : undefined,
         })
       }
     }
@@ -245,23 +276,32 @@ export function OnboardingWizard() {
     for (const week of weeks) {
       const shifts = shiftsByWeek.get(week) ?? {}
       const dateLabel = shortDateFormatter.format(shiftDateOfWeek(week))
+      const canRevert = week > currentWeek
       const openingAssignments = (assignmentsByShift.get(shifts.opening?.id ?? '') ?? []).filter(
         (a) => a.assignment_role === 'area_supervisor',
       )
       const closingAssignments = (assignmentsByShift.get(shifts.closing?.id ?? '') ?? []).filter(
         (a) => a.assignment_role === 'area_supervisor',
       )
-      const taken = openingAssignments.length > 0 || closingAssignments.length > 0
-      const alreadyIn =
-        openingAssignments.some((a) => a.employee_id === myEmployeeId) ||
-        closingAssignments.some((a) => a.employee_id === myEmployeeId)
+      const allAssignments = [...openingAssignments, ...closingAssignments]
+      const taken = allAssignments.length > 0
+      const mine = allAssignments.filter((a) => a.employee_id === myEmployeeId)
+      const names = [...new Set(allAssignments.map((a) => employeeNames.get(a.employee_id)).filter((n): n is string => !!n))]
       slots.push({
         key: week,
         dateLabel,
         typeLabel: 'משמרת שלמה',
-        status: alreadyIn ? 'mine' : taken ? 'full' : 'open',
-        badgeText: alreadyIn ? '✓ משובץ' : taken ? 'מלא' : 'פנוי',
-        onAssign: () => handleAssignAreaSupervisor(shifts),
+        status: mine.length > 0 ? 'mine' : taken ? 'full' : 'open',
+        badgeText: mine.length > 0 ? '✓ משובץ' : taken ? 'מלא' : 'פנוי',
+        namesTitle: names.length > 0 ? `משובצים: ${names.join(', ')}` : undefined,
+        onClick:
+          mine.length > 0
+            ? canRevert
+              ? () => handleRemove(mine.map((a) => a.id))
+              : undefined
+            : !taken
+              ? () => handleAssignAreaSupervisor(shifts)
+              : undefined,
       })
     }
   }
@@ -287,12 +327,14 @@ export function OnboardingWizard() {
             <button
               key={slot.key}
               type="button"
-              disabled={slot.status !== 'open'}
-              onClick={slot.onAssign}
+              disabled={!slot.onClick}
+              onClick={slot.onClick}
+              title={slot.namesTitle}
               className={cn(
                 'flex flex-col items-center gap-1 rounded-xl border p-3 text-center transition-colors',
-                slot.status === 'open' && 'hover:border-primary hover:bg-accent cursor-pointer',
+                slot.status === 'open' && slot.onClick && 'hover:border-primary hover:bg-accent cursor-pointer',
                 slot.status === 'mine' && 'border-green-200 bg-green-50',
+                slot.status === 'mine' && slot.onClick && 'hover:border-destructive hover:bg-destructive/10 cursor-pointer',
                 slot.status === 'full' && 'bg-muted opacity-60',
               )}
             >
