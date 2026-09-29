@@ -14,6 +14,14 @@ export interface AppUser {
   approved_at: string | null
   created_at: string
   updated_at: string
+  onboarding_seen_at: string | null
+}
+
+export interface AppSettings {
+  id: boolean
+  onboarding_wizard_enabled: boolean
+  onboarding_wizard_frequency: 'first_login' | 'every_login'
+  updated_at: string
 }
 
 export interface RoleDelegation {

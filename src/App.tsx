@@ -19,6 +19,7 @@ import { ForgotPassword } from '@/pages/ForgotPassword'
 import { ResetPassword } from '@/pages/ResetPassword'
 import { PendingApproval } from '@/pages/PendingApproval'
 import { Dashboard } from '@/pages/Dashboard'
+import { OnboardingWizard } from '@/pages/OnboardingWizard'
 import { MyShifts, MyAssignedShifts } from '@/pages/MyShifts'
 import { Profile } from '@/pages/Profile'
 import { AdminApprovals } from '@/pages/AdminApprovals'
@@ -83,6 +84,7 @@ export function App() {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<RequireApproved />}>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/onboarding" element={<OnboardingWizard />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/procedures" element={<Procedures />} />
         <Route element={<RequireRole roles={ROLES_REQUIRING_EMPLOYEE} />}>

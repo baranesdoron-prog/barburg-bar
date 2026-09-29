@@ -12,6 +12,7 @@ import { shiftTypeLabel } from '@/lib/shiftLabels'
 import { cn, formatDate, formatDateTime, formatTime } from '@/lib/utils'
 import { activeWeekStart, addDays, parseDateStr, toDateStr } from '@/lib/weeklyChecklist'
 import type {
+  AppSettings,
   PurchaseOrder,
   PurchaseOrderItem,
   ReplacementRequest,
@@ -693,9 +694,14 @@ function ManagerDashboard() {
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-semibold">לוח בקרה</h1>
-        <p className="text-muted-foreground text-sm">ברבורג — ניהול הבר הקהילתי</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">לוח בקרה</h1>
+          <p className="text-muted-foreground text-sm">ברבורג — ניהול הבר הקהילתי</p>
+        </div>
+        <Link to="/onboarding" className="text-muted-foreground text-sm hover:underline">
+          שבץ אותי למשמרת
+        </Link>
       </div>
 
       <ClosingAlertCard shifts={shifts} employeeNames={employeeNames} />
@@ -715,6 +721,36 @@ function ManagerDashboard() {
   )
 }
 
+// Decides whether a bartender lands on the onboarding wizard or goes
+// straight to /shifts as before, based on the admin-controlled
+// app_settings row (set on /admin/users) and, for "first_login" mode,
+// whether this account has ever seen it (app_users.onboarding_seen_at).
+function BartenderLanding() {
+  const { appUser } = useAppUserContext()
+  const [target, setTarget] = useState<'/onboarding' | '/shifts' | null>(null)
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from('app_settings').select('*').eq('id', true).single()
+      const settings = data as AppSettings | null
+
+      if (!settings?.onboarding_wizard_enabled) {
+        setTarget('/shifts')
+        return
+      }
+      if (settings.onboarding_wizard_frequency === 'every_login') {
+        setTarget('/onboarding')
+        return
+      }
+      setTarget(appUser.onboarding_seen_at ? '/shifts' : '/onboarding')
+    }
+    load()
+  }, [appUser.onboarding_seen_at])
+
+  if (!target) return null
+  return <Navigate to={target} replace />
+}
+
 export function Dashboard() {
   const { effectiveRole } = useAppUserContext()
 
@@ -723,7 +759,7 @@ export function Dashboard() {
   }
 
   if (effectiveRole === 'bartender') {
-    return <Navigate to="/shifts" replace />
+    return <BartenderLanding />
   }
 
   return (

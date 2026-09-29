@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn, formatDate } from '@/lib/utils'
 import { toDateStr } from '@/lib/weeklyChecklist'
-import type { AppRole, AppUserStatus, RoleDelegation } from '@/lib/types'
+import type { AppRole, AppSettings, AppUserStatus, RoleDelegation } from '@/lib/types'
 
 const todayStr = toDateStr(new Date())
 
@@ -47,6 +47,78 @@ const statusBadgeClass: Record<AppUserStatus, string> = {
   pending_approval: 'bg-secondary text-secondary-foreground',
   approved: 'bg-primary text-primary-foreground',
   suspended: 'bg-destructive text-white',
+}
+
+function OnboardingSettingsCard() {
+  const [settings, setSettings] = useState<AppSettings | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function load() {
+    const { data } = await supabase.from('app_settings').select('*').eq('id', true).single()
+    setSettings(data as AppSettings)
+  }
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  async function handleChange(patch: Partial<Pick<AppSettings, 'onboarding_wizard_enabled' | 'onboarding_wizard_frequency'>>) {
+    setSaving(true)
+    setError(null)
+    const { error: updateError } = await supabase.from('app_settings').update(patch).eq('id', true)
+    setSaving(false)
+
+    if (updateError) {
+      setError(updateError.message)
+      return
+    }
+
+    load()
+  }
+
+  if (!settings) return null
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">אשף הרשמה למשמרת</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <label className="flex items-center justify-between text-sm">
+          <span>הצגה לברמנים/יות בכניסה לאפליקציה</span>
+          <input
+            type="checkbox"
+            checked={settings.onboarding_wizard_enabled}
+            disabled={saving}
+            onChange={(e) => handleChange({ onboarding_wizard_enabled: e.target.checked })}
+          />
+        </label>
+        {settings.onboarding_wizard_enabled && (
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">תדירות הצגה</span>
+            <select
+              className={cn(selectClass, 'w-40')}
+              value={settings.onboarding_wizard_frequency}
+              disabled={saving}
+              onChange={(e) =>
+                handleChange({
+                  onboarding_wizard_frequency: e.target.value as AppSettings['onboarding_wizard_frequency'],
+                })
+              }
+            >
+              <option value="first_login">רק בפעם הראשונה</option>
+              <option value="every_login">בכל כניסה</option>
+            </select>
+          </div>
+        )}
+        {error && <p className="text-destructive text-sm">{error}</p>}
+        <p className="text-muted-foreground text-xs">
+          רלוונטי רק למשתמשים מסוג ברמן/ית. מנהלי בר ואדמינים תמיד יכולים להגיע לאשף באופן יזום דרך לוח הבקרה.
+        </p>
+      </CardContent>
+    </Card>
+  )
 }
 
 export function Users() {
@@ -104,6 +176,8 @@ export function Users() {
         <h1 className="text-xl font-semibold">משתמשים</h1>
         {!showInviteForm && <Button onClick={() => setShowInviteForm(true)}>יצירת משתמש/ת חדש/ה</Button>}
       </div>
+
+      <OnboardingSettingsCard />
 
       {showInviteForm && (
         <InviteForm
