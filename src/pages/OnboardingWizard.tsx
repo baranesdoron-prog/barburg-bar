@@ -48,6 +48,7 @@ export function OnboardingWizard() {
   const [assignmentsByShift, setAssignmentsByShift] = useState<Map<string, ShiftAssignment[]>>(new Map())
   const [employeeNames, setEmployeeNames] = useState<Map<string, string>>(new Map())
   const [loadedShifts, setLoadedShifts] = useState(false)
+  const [visibleWeekCount, setVisibleWeekCount] = useState(3)
   const [error, setError] = useState<string | null>(null)
   const [assignedCount, setAssignedCount] = useState(0)
   const [finishing, setFinishing] = useState(false)
@@ -77,7 +78,9 @@ export function OnboardingWizard() {
   async function loadShifts() {
     setLoadedShifts(false)
     const from = toDateStr(activeWeekStart())
-    const to = toDateStr(addDays(activeWeekStart(), 14))
+    // Fetches a generous window up front so "עוד משמרות" just reveals more
+    // of what's already loaded, no extra round trip.
+    const to = toDateStr(addDays(activeWeekStart(), 70))
 
     const { data: shiftsData } = await supabase
       .from('shifts_with_effective_status')
@@ -121,6 +124,7 @@ export function OnboardingWizard() {
     setDuty(role)
     setStep('shifts')
     setError(null)
+    setVisibleWeekCount(3)
     loadShifts()
   }
 
@@ -227,7 +231,9 @@ export function OnboardingWizard() {
     )
   }
 
-  const weeks = [...shiftsByWeek.keys()].sort()
+  const allWeeks = [...shiftsByWeek.keys()].sort()
+  const weeks = allWeeks.slice(0, visibleWeekCount)
+  const hasMoreWeeks = allWeeks.length > visibleWeekCount
   const currentWeek = toDateStr(activeWeekStart())
 
   interface Slot {
@@ -384,8 +390,17 @@ export function OnboardingWizard() {
         <p className="text-center text-sm text-green-600">שובצת ל־{assignedCount} משמרות עד כה.</p>
       )}
 
+      {loadedShifts && hasMoreWeeks && (
+        <Button
+          variant="outline"
+          onClick={() => setVisibleWeekCount((c) => c + (duty === 'area_supervisor' ? 6 : 3))}
+        >
+          עוד משמרות
+        </Button>
+      )}
+
       <Button variant="ghost" onClick={finish} disabled={finishing}>
-        {assignedCount > 0 ? 'סיום' : 'דלג להמשך לאפליקציה'}
+        הושלם!
       </Button>
     </div>
   )
