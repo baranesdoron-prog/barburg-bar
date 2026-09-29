@@ -399,8 +399,8 @@ export function OnboardingWizard() {
         </Button>
       )}
 
-      <Button variant="ghost" onClick={finish} disabled={finishing}>
-        הושלם!
+      <Button className="bg-green-600 text-white hover:bg-green-700" onClick={finish} disabled={finishing}>
+        סיימנו!
       </Button>
     </div>
   )
