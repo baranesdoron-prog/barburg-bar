@@ -4,11 +4,12 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
 import { shiftTypeLabel } from '@/lib/shiftLabels'
-import { formatTime } from '@/lib/utils'
-import { activeWeekStart, addDays, toDateStr, weekLabelFormatter, shiftDateOfWeek } from '@/lib/weeklyChecklist'
+import { cn } from '@/lib/utils'
+import { activeWeekStart, addDays, toDateStr, shiftDateOfWeek } from '@/lib/weeklyChecklist'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { Shift, ShiftAssignment, ShiftAssignmentRole, ShiftType } from '@/lib/types'
+
+const shortDateFormatter = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'numeric' })
 
 function friendlyAssignmentError(error: { code?: string; message: string }) {
   if (error.code === '23505') return 'כבר משובצ/ת למשמרת זו'
@@ -208,6 +209,63 @@ export function OnboardingWizard() {
 
   const weeks = [...shiftsByWeek.keys()].sort()
 
+  interface Slot {
+    key: string
+    dateLabel: string
+    typeLabel: string
+    status: 'open' | 'mine' | 'full'
+    badgeText: string
+    onAssign: () => void
+  }
+
+  const slots: Slot[] = []
+
+  if (duty && duty !== 'area_supervisor') {
+    for (const week of weeks) {
+      const shifts = shiftsByWeek.get(week) ?? {}
+      const dateLabel = shortDateFormatter.format(shiftDateOfWeek(week))
+      for (const type of ['opening', 'closing'] as ShiftType[]) {
+        const shift = shifts[type]
+        if (!shift) continue
+        const assignments = (assignmentsByShift.get(shift.id) ?? []).filter((a) => a.assignment_role === duty)
+        const max = duty === 'bartender' ? shift.required_staff_count : 2
+        const alreadyIn = assignments.some((a) => a.employee_id === myEmployeeId)
+        const isFull = max !== null && assignments.length >= max
+        slots.push({
+          key: shift.id,
+          dateLabel,
+          typeLabel: shiftTypeLabel(shift.shift_type),
+          status: alreadyIn ? 'mine' : isFull ? 'full' : 'open',
+          badgeText: alreadyIn ? '✓ משובץ' : max === null ? 'פנוי' : `${assignments.length}/${max}`,
+          onAssign: () => handleAssign(shift, duty as 'bartender' | 'area_manager'),
+        })
+      }
+    }
+  } else if (duty === 'area_supervisor') {
+    for (const week of weeks) {
+      const shifts = shiftsByWeek.get(week) ?? {}
+      const dateLabel = shortDateFormatter.format(shiftDateOfWeek(week))
+      const openingAssignments = (assignmentsByShift.get(shifts.opening?.id ?? '') ?? []).filter(
+        (a) => a.assignment_role === 'area_supervisor',
+      )
+      const closingAssignments = (assignmentsByShift.get(shifts.closing?.id ?? '') ?? []).filter(
+        (a) => a.assignment_role === 'area_supervisor',
+      )
+      const taken = openingAssignments.length > 0 || closingAssignments.length > 0
+      const alreadyIn =
+        openingAssignments.some((a) => a.employee_id === myEmployeeId) ||
+        closingAssignments.some((a) => a.employee_id === myEmployeeId)
+      slots.push({
+        key: week,
+        dateLabel,
+        typeLabel: 'משמרת שלמה',
+        status: alreadyIn ? 'mine' : taken ? 'full' : 'open',
+        badgeText: alreadyIn ? '✓ משובץ' : taken ? 'מלא' : 'פנוי',
+        onAssign: () => handleAssignAreaSupervisor(shifts),
+      })
+    }
+  }
+
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 py-10">
       <div className="flex items-center justify-between">
@@ -219,104 +277,39 @@ export function OnboardingWizard() {
 
       {!loadedShifts && <p className="text-muted-foreground text-center text-sm">טוען...</p>}
 
-      {loadedShifts && weeks.length === 0 && (
+      {loadedShifts && slots.length === 0 && (
         <p className="text-muted-foreground text-center text-sm">אין כרגע משמרות פתוחות.</p>
       )}
 
-      {loadedShifts &&
-        duty &&
-        duty !== 'area_supervisor' &&
-        weeks.map((week) => {
-          const shifts = shiftsByWeek.get(week) ?? {}
-          const dateLabel = weekLabelFormatter.format(shiftDateOfWeek(week))
-          return (
-            <Card key={week}>
-              <CardHeader>
-                <CardTitle className="text-sm">{dateLabel}</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-2">
-                {(['opening', 'closing'] as ShiftType[]).map((type) => {
-                  const shift = shifts[type]
-                  if (!shift) return null
-                  const assignments = (assignmentsByShift.get(shift.id) ?? []).filter(
-                    (a) => a.assignment_role === duty,
-                  )
-                  const max = duty === 'bartender' ? shift.required_staff_count : 2
-                  const alreadyIn = assignments.some((a) => a.employee_id === myEmployeeId)
-                  const isFull = max !== null && assignments.length >= max
-                  return (
-                    <div key={shift.id} className="rounded-md border p-3 text-sm">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="font-medium">{shiftTypeLabel(shift.shift_type)}</p>
-                          <p className="text-muted-foreground text-xs">
-                            {formatTime(shift.start_time)}–{formatTime(shift.end_time)}
-                          </p>
-                        </div>
-                        {max !== null && (
-                          <span className="text-muted-foreground text-xs font-medium">
-                            {assignments.length}/{max}
-                          </span>
-                        )}
-                      </div>
-                      {alreadyIn ? (
-                        <p className="text-muted-foreground mt-2 text-xs">כבר משובצ/ת</p>
-                      ) : isFull ? (
-                        <p className="text-muted-foreground mt-2 text-xs">מלא</p>
-                      ) : (
-                        <Button
-                          size="sm"
-                          className="mt-2 w-full"
-                          onClick={() => handleAssign(shift, duty as 'bartender' | 'area_manager')}
-                        >
-                          שבץ אותי
-                        </Button>
-                      )}
-                    </div>
-                  )
-                })}
-              </CardContent>
-            </Card>
-          )
-        })}
-
-      {loadedShifts &&
-        duty === 'area_supervisor' &&
-        weeks.map((week) => {
-          const shifts = shiftsByWeek.get(week) ?? {}
-          const dateLabel = weekLabelFormatter.format(shiftDateOfWeek(week))
-          const openingAssignments = (assignmentsByShift.get(shifts.opening?.id ?? '') ?? []).filter(
-            (a) => a.assignment_role === 'area_supervisor',
-          )
-          const closingAssignments = (assignmentsByShift.get(shifts.closing?.id ?? '') ?? []).filter(
-            (a) => a.assignment_role === 'area_supervisor',
-          )
-          const taken = openingAssignments.length > 0 || closingAssignments.length > 0
-          const alreadyIn =
-            openingAssignments.some((a) => a.employee_id === myEmployeeId) ||
-            closingAssignments.some((a) => a.employee_id === myEmployeeId)
-          return (
-            <Card key={week}>
-              <CardHeader>
-                <CardTitle className="text-sm">{dateLabel}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between rounded-md border p-3 text-sm">
-                  <p className="text-muted-foreground text-xs">19:45–00:30 · משמרת שלמה</p>
-                  {alreadyIn ? (
-                    <p className="text-muted-foreground text-xs">כבר משובצ/ת</p>
-                  ) : taken ? (
-                    <p className="text-muted-foreground text-xs">מלא</p>
-                  ) : (
-                    <Button size="sm" onClick={() => handleAssignAreaSupervisor(shifts)}>
-                      שבץ אותי
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
+      {loadedShifts && slots.length > 0 && (
+        <div className="grid grid-cols-3 gap-2.5">
+          {slots.map((slot) => (
+            <button
+              key={slot.key}
+              type="button"
+              disabled={slot.status !== 'open'}
+              onClick={slot.onAssign}
+              className={cn(
+                'flex flex-col items-center gap-1 rounded-xl border p-3 text-center transition-colors',
+                slot.status === 'open' && 'hover:border-primary hover:bg-accent cursor-pointer',
+                slot.status === 'mine' && 'border-green-200 bg-green-50',
+                slot.status === 'full' && 'bg-muted opacity-60',
+              )}
+            >
+              <span className="text-muted-foreground text-[11px]">{slot.dateLabel}</span>
+              <span className="text-sm font-semibold">{slot.typeLabel}</span>
+              <span
+                className={cn(
+                  'rounded-full px-2 py-0.5 text-[10px] font-medium',
+                  slot.status === 'mine' ? 'bg-green-100 text-green-700' : 'bg-muted text-muted-foreground',
+                )}
+              >
+                {slot.badgeText}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {error && <p className="text-destructive text-sm">{error}</p>}
 
