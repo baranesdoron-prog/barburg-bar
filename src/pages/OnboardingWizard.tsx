@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
@@ -35,7 +35,15 @@ const LIST_LABELS: Record<ShiftAssignmentRole, string> = {
 
 type Step = 'pick' | 'shifts'
 
+// The side-nav link always re-navigates to this same route -- keying on
+// the location gives each visit a fresh mount, so the wizard starts back
+// at step 1 instead of resuming wherever it was left last time.
 export function OnboardingWizard() {
+  const location = useLocation()
+  return <OnboardingWizardInner key={location.key} />
+}
+
+function OnboardingWizardInner() {
   const { appUser, effectiveRole } = useAppUserContext()
   const navigate = useNavigate()
   const myEmployeeId = appUser.employee_id
