@@ -237,6 +237,7 @@ export function OnboardingWizard() {
     status: 'open' | 'mine' | 'full'
     badgeText: string
     namesTitle?: string
+    revertible?: boolean
     onClick?: () => void
   }
 
@@ -261,11 +262,18 @@ export function OnboardingWizard() {
           typeLabel: shiftTypeLabel(shift.shift_type),
           status: mine ? 'mine' : isFull ? 'full' : 'open',
           badgeText: mine ? '✓ משובץ' : max === null ? 'פנוי' : `${assignments.length}/${max}`,
-          namesTitle: names.length > 0 ? `משובצים: ${names.join(', ')}` : undefined,
+          namesTitle: mine
+            ? canRevert
+              ? 'לחיצה נוספת תבטל את השיבוץ'
+              : 'משמרת השבוע הנוכחי — לביטול יש להגיש בקשת החלפה בעמוד המשמרת'
+            : names.length > 0
+              ? `משובצים: ${names.join(', ')}`
+              : undefined,
+          revertible: !!mine && canRevert,
           onClick: mine
             ? canRevert
               ? () => handleRemove([mine.id])
-              : undefined
+              : () => navigate(`/shifts/${shift.id}`)
             : !isFull
               ? () => handleAssign(shift, duty as 'bartender' | 'area_manager')
               : undefined,
@@ -287,18 +295,29 @@ export function OnboardingWizard() {
       const taken = allAssignments.length > 0
       const mine = allAssignments.filter((a) => a.employee_id === myEmployeeId)
       const names = [...new Set(allAssignments.map((a) => employeeNames.get(a.employee_id)).filter((n): n is string => !!n))]
+      const anyShiftId = shifts.opening?.id ?? shifts.closing?.id
       slots.push({
         key: week,
         dateLabel,
         typeLabel: 'משמרת שלמה',
         status: mine.length > 0 ? 'mine' : taken ? 'full' : 'open',
         badgeText: mine.length > 0 ? '✓ משובץ' : taken ? 'מלא' : 'פנוי',
-        namesTitle: names.length > 0 ? `משובצים: ${names.join(', ')}` : undefined,
+        namesTitle:
+          mine.length > 0
+            ? canRevert
+              ? 'לחיצה נוספת תבטל את השיבוץ'
+              : 'משמרת השבוע הנוכחי — לביטול יש להגיש בקשת החלפה בעמוד המשמרת'
+            : names.length > 0
+              ? `משובצים: ${names.join(', ')}`
+              : undefined,
+        revertible: mine.length > 0 && canRevert,
         onClick:
           mine.length > 0
             ? canRevert
               ? () => handleRemove(mine.map((a) => a.id))
-              : undefined
+              : anyShiftId
+                ? () => navigate(`/shifts/${anyShiftId}`)
+                : undefined
             : !taken
               ? () => handleAssignAreaSupervisor(shifts)
               : undefined,
@@ -334,7 +353,13 @@ export function OnboardingWizard() {
                 'flex flex-col items-center gap-1 rounded-xl border p-3 text-center transition-colors',
                 slot.status === 'open' && slot.onClick && 'hover:border-primary hover:bg-accent cursor-pointer',
                 slot.status === 'mine' && 'border-green-200 bg-green-50',
-                slot.status === 'mine' && slot.onClick && 'hover:border-destructive hover:bg-destructive/10 cursor-pointer',
+                slot.status === 'mine' &&
+                  slot.revertible &&
+                  'hover:border-destructive hover:bg-destructive/10 cursor-pointer',
+                slot.status === 'mine' &&
+                  slot.onClick &&
+                  !slot.revertible &&
+                  'hover:border-primary hover:bg-accent cursor-pointer',
                 slot.status === 'full' && 'bg-muted opacity-60',
               )}
             >
