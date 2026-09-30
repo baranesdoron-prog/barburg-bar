@@ -663,7 +663,7 @@ function ClosingComplete({
           <Link to={`/shifts/${shiftId}/report`}>פתיחת הדוח</Link>
         </Button>
         <Button asChild variant="outline" className="w-full">
-          <Link to="/">חזרה ללוח הבקרה</Link>
+          <Link to="/dashboard">חזרה ללוח הבקרה</Link>
         </Button>
       </CardFooter>
     </Card>

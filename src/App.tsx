@@ -18,7 +18,7 @@ import { Login } from '@/pages/Login'
 import { ForgotPassword } from '@/pages/ForgotPassword'
 import { ResetPassword } from '@/pages/ResetPassword'
 import { PendingApproval } from '@/pages/PendingApproval'
-import { Dashboard } from '@/pages/Dashboard'
+import { Dashboard, DashboardHome } from '@/pages/Dashboard'
 import { OnboardingWizard } from '@/pages/OnboardingWizard'
 import { MyShifts, MyAssignedShifts } from '@/pages/MyShifts'
 import { Profile } from '@/pages/Profile'
@@ -59,7 +59,7 @@ function RequireRole({ roles }: { roles: AppRole[] }) {
   const { appUser, session } = useAppUserContext()
   const { effectiveRole } = useImpersonation()
 
-  if (!roles.includes(effectiveRole)) return <Navigate to="/" replace />
+  if (!roles.includes(effectiveRole)) return <Navigate to="/dashboard" replace />
   return <Outlet context={{ appUser, session, effectiveRole } satisfies AppOutletContext} />
 }
 
@@ -84,6 +84,7 @@ export function App() {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<RequireApproved />}>
         <Route path="/" element={<Dashboard />} />
+        <Route path="/dashboard" element={<DashboardHome />} />
         <Route path="/onboarding" element={<OnboardingWizard />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/procedures" element={<Procedures />} />

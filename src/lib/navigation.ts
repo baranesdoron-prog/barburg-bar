@@ -31,7 +31,7 @@ export function getNavItems(role: AppRole): NavItem[] {
   const items: NavItem[] = []
 
   if (role !== 'bartender') {
-    items.push({ to: '/', label: 'לוח בקרה', icon: LayoutDashboard })
+    items.push({ to: '/dashboard', label: 'לוח בקרה', icon: LayoutDashboard })
   }
 
   items.push({ to: '/procedures', label: 'נהלים', icon: BookOpen })

@@ -746,26 +746,32 @@ function RoleHome({ effectiveRole }: { effectiveRole: AppRole }) {
   )
 }
 
+// The actual dashboard content, reachable unconditionally at /dashboard
+// (the "לוח בקרה" nav link, and every internal "back to dashboard" link)
+// -- never runs the wizard check, so it's never blocked by the toggle.
+export function DashboardHome() {
+  const { effectiveRole } = useAppUserContext()
+  return <RoleHome effectiveRole={effectiveRole} />
+}
+
 // "Login" here means once per browser session (tab), not every time the
-// route happens to be "/" -- otherwise clicking the "לוח בקרה" nav link
-// mid-session (a normal thing bar managers/admins do constantly) would
-// bounce them straight back into the wizard forever, with no way back
-// to their real dashboard. sessionStorage naturally resets on tab
+// route happens to be "/" -- sessionStorage naturally resets on tab
 // close/reopen and is keyed per account so switching users on the same
 // tab doesn't reuse someone else's flag.
 function wizardLandingSessionKey(userId: string) {
   return `barburg:onboardingWizardChecked:${userId}`
 }
 
-// Decides whether whoever just logged in lands on the onboarding wizard
-// first, based on the admin-controlled app_settings row (set on
-// /admin/users) and, for "first_login" mode, whether this account has
-// ever seen it (app_users.onboarding_seen_at) -- applies to every role
-// (bartender, bar manager, administrator) alike. Only evaluated once per
-// session; after that (or once the wizard isn't due), falls through to
-// each role's normal landing (RoleHome).
+// "/" is a one-shot landing dispatcher, hit only right after login (or a
+// fresh page load) -- it decides whether whoever just logged in lands on
+// the onboarding wizard first, based on the admin-controlled app_settings
+// row (set on /admin/users) and, for "first_login" mode, whether this
+// account has ever seen it (app_users.onboarding_seen_at). Applies to
+// every role (bartender, bar manager, administrator) alike. Only
+// evaluated once per session; after that (or once the wizard isn't due)
+// it just forwards to /dashboard, same as the nav link would.
 export function Dashboard() {
-  const { appUser, effectiveRole } = useAppUserContext()
+  const { appUser } = useAppUserContext()
   const storageKey = wizardLandingSessionKey(appUser.id)
   const [alreadyChecked] = useState(() => {
     try {
@@ -787,7 +793,7 @@ export function Dashboard() {
   }, [alreadyChecked])
 
   if (alreadyChecked) {
-    return <RoleHome effectiveRole={effectiveRole} />
+    return <Navigate to="/dashboard" replace />
   }
 
   if (!settings) return null
@@ -807,5 +813,5 @@ export function Dashboard() {
     return <Navigate to="/onboarding" replace />
   }
 
-  return <RoleHome effectiveRole={effectiveRole} />
+  return <Navigate to="/dashboard" replace />
 }
