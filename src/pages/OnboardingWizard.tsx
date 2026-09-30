@@ -361,7 +361,7 @@ function OnboardingWizardInner() {
           barManagerName,
           peerNames,
           status: mine ? 'mine' : isFull ? 'full' : 'open',
-          badgeText: mine ? '✓ משובץ' : max === null ? 'פנוי' : `${assignments.length}/${max}`,
+          badgeText: mine ? '✓ משובץ' : isFull ? 'מלא' : 'פנוי',
           namesTitle: mine
             ? canRevert
               ? 'לחיצה נוספת תבטל את השיבוץ'
@@ -482,7 +482,7 @@ function OnboardingWizardInner() {
         <h1 className="text-base font-semibold">{duty ? LIST_LABELS[duty] : ''}</h1>
       </div>
 
-      <p className="text-muted-foreground text-center text-sm">לאיזה משמרת תרצה/י להשתבץ?</p>
+      <p className="text-center text-lg font-bold">לאיזה משמרת תרצה/י להשתבץ?</p>
 
       {!loadedShifts && <p className="text-muted-foreground text-center text-sm">טוען...</p>}
 
