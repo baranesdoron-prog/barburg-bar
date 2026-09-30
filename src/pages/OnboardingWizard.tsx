@@ -7,7 +7,7 @@ import { shiftTypeLabel } from '@/lib/shiftLabels'
 import { cn } from '@/lib/utils'
 import { activeWeekStart, addDays, toDateStr, shiftDateOfWeek } from '@/lib/weeklyChecklist'
 import { Button } from '@/components/ui/button'
-import type { Shift, ShiftAssignment, ShiftAssignmentRole, ShiftType } from '@/lib/types'
+import type { Shift, ShiftAssignment, ShiftAssignmentRole, ShiftManagerAssignment, ShiftType } from '@/lib/types'
 
 const shortDateFormatter = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'numeric' })
 
@@ -21,13 +21,21 @@ interface WeekShifts {
   closing?: Shift
 }
 
-const PICK_LABELS: Record<ShiftAssignmentRole, string> = {
+// "בר מנהל" isn't a shift_assignments role like the other three -- it's a
+// week-level field on shift_manager_assignments (set_weekly_shift_manager),
+// same as it works everywhere else in the app -- but it's still just
+// another duty as far as this wizard's picker is concerned.
+type Duty = ShiftAssignmentRole | 'bar_manager'
+
+const PICK_LABELS: Record<Duty, string> = {
+  bar_manager: 'להתנדב כמנהל/ת בר',
   bartender: 'להתנדב כברמן/ית',
   area_manager: 'להתנדב כאחראי/ת מתחם',
   area_supervisor: 'להתנדב כמנהל/ת מתחם',
 }
 
-const LIST_LABELS: Record<ShiftAssignmentRole, string> = {
+const LIST_LABELS: Record<Duty, string> = {
+  bar_manager: 'משמרות פתוחות לניהול בר',
   bartender: 'משמרות פתוחות לברמנים/יות',
   area_manager: 'משמרות פתוחות לאחראי/ת מתחם',
   area_supervisor: 'משמרות פתוחות למנהל/ת מתחם',
@@ -49,17 +57,24 @@ function OnboardingWizardInner() {
   const myEmployeeId = appUser.employee_id
 
   const [step, setStep] = useState<Step>('pick')
-  const [duty, setDuty] = useState<ShiftAssignmentRole | null>(null)
+  const [duty, setDuty] = useState<Duty | null>(null)
   const [canSuperviseArea, setCanSuperviseArea] = useState(false)
   const [loadedEligibility, setLoadedEligibility] = useState(false)
   const [shiftsByWeek, setShiftsByWeek] = useState<Map<string, WeekShifts>>(new Map())
   const [assignmentsByShift, setAssignmentsByShift] = useState<Map<string, ShiftAssignment[]>>(new Map())
+  const [shiftManagerByWeek, setShiftManagerByWeek] = useState<Map<string, string>>(new Map())
   const [employeeNames, setEmployeeNames] = useState<Map<string, string>>(new Map())
   const [loadedShifts, setLoadedShifts] = useState(false)
   const [visibleWeekCount, setVisibleWeekCount] = useState(3)
   const [error, setError] = useState<string | null>(null)
   const [assignedCount, setAssignedCount] = useState(0)
   const [finishing, setFinishing] = useState(false)
+
+  const isAdmin = effectiveRole === 'administrator'
+  // Bar manager duty is offered only to the roles that can actually hold
+  // it (shift_manager/administrator) -- unlike the other three duties,
+  // every real account qualifies for those regardless of role.
+  const barManagerEligible = effectiveRole === 'shift_manager' || isAdmin
 
   useEffect(() => {
     async function loadEligibility() {
@@ -90,12 +105,21 @@ function OnboardingWizardInner() {
     // of what's already loaded, no extra round trip.
     const to = toDateStr(addDays(activeWeekStart(), 70))
 
-    const { data: shiftsData } = await supabase
-      .from('shifts_with_effective_status')
-      .select('*')
-      .eq('status', 'published')
-      .gte('week_start', from)
-      .lte('week_start', to)
+    const [{ data: shiftsData }, { data: shiftManagerData }] = await Promise.all([
+      supabase
+        .from('shifts_with_effective_status')
+        .select('*')
+        .eq('status', 'published')
+        .gte('week_start', from)
+        .lte('week_start', to),
+      supabase.from('shift_manager_assignments').select('*').gte('week_start', from).lte('week_start', to),
+    ])
+
+    setShiftManagerByWeek(
+      new Map(
+        ((shiftManagerData as ShiftManagerAssignment[]) ?? []).map((a) => [a.week_start, a.employee_id]),
+      ),
+    )
 
     const shifts = (shiftsData as Shift[]) ?? []
     const grouped = new Map<string, WeekShifts>()
@@ -128,7 +152,7 @@ function OnboardingWizardInner() {
     setLoadedShifts(true)
   }
 
-  function pickDuty(role: ShiftAssignmentRole) {
+  function pickDuty(role: Duty) {
     setDuty(role)
     setStep('shifts')
     setError(null)
@@ -181,6 +205,35 @@ function OnboardingWizardInner() {
     await loadShifts()
   }
 
+  async function handleAssignBarManager(week: string) {
+    if (!myEmployeeId) return
+    setError(null)
+    const { error: rpcError } = await supabase.rpc('set_weekly_shift_manager', {
+      p_week_start: week,
+      p_employee_id: myEmployeeId,
+    })
+    if (rpcError) {
+      setError(rpcError.message)
+      return
+    }
+    setAssignedCount((c) => c + 1)
+    await loadShifts()
+  }
+
+  async function handleRemoveBarManager(week: string) {
+    setError(null)
+    const { error: rpcError } = await supabase.rpc('set_weekly_shift_manager', {
+      p_week_start: week,
+      p_employee_id: null,
+    })
+    if (rpcError) {
+      setError(rpcError.message)
+      return
+    }
+    setAssignedCount((c) => Math.max(0, c - 1))
+    await loadShifts()
+  }
+
   async function finish() {
     setFinishing(true)
     await supabase.rpc('mark_onboarding_seen')
@@ -209,7 +262,21 @@ function OnboardingWizardInner() {
         </div>
 
         <div className="flex flex-col gap-3">
-          <Button size="lg" className="h-auto justify-start px-5 py-4 text-base" onClick={() => pickDuty('bartender')}>
+          {barManagerEligible && (
+            <Button
+              size="lg"
+              className="h-auto justify-start px-5 py-4 text-base"
+              onClick={() => pickDuty('bar_manager')}
+            >
+              {PICK_LABELS.bar_manager}
+            </Button>
+          )}
+          <Button
+            size="lg"
+            variant={barManagerEligible ? 'outline' : 'default'}
+            className="h-auto justify-start px-5 py-4 text-base"
+            onClick={() => pickDuty('bartender')}
+          >
             {PICK_LABELS.bartender}
           </Button>
           <Button
@@ -257,7 +324,7 @@ function OnboardingWizardInner() {
 
   const slots: Slot[] = []
 
-  if (duty && duty !== 'area_supervisor') {
+  if (duty === 'bartender' || duty === 'area_manager') {
     for (const week of weeks) {
       const shifts = shiftsByWeek.get(week) ?? {}
       const dateLabel = shortDateFormatter.format(shiftDateOfWeek(week))
@@ -337,6 +404,41 @@ function OnboardingWizardInner() {
               : undefined,
       })
     }
+  } else if (duty === 'bar_manager') {
+    for (const week of weeks) {
+      const dateLabel = shortDateFormatter.format(shiftDateOfWeek(week))
+      const assignedEmployeeId = shiftManagerByWeek.get(week) ?? null
+      const taken = !!assignedEmployeeId
+      const mine = assignedEmployeeId === myEmployeeId
+      const name = assignedEmployeeId ? employeeNames.get(assignedEmployeeId) : undefined
+      // Matches BarManagerRow in Shifts.tsx: a bar manager (non-admin) can
+      // only fill an empty week, never touch an existing assignment --
+      // their own or anyone else's. An administrator can revert any week
+      // (set_weekly_shift_manager has no week-timing restriction, unlike
+      // the strictly-future-week rule for the other three duties).
+      slots.push({
+        key: week,
+        dateLabel,
+        typeLabel: 'משמרת שלמה',
+        status: mine ? 'mine' : taken ? 'full' : 'open',
+        badgeText: mine ? '✓ משובץ' : taken ? 'מלא' : 'פנוי',
+        namesTitle: mine
+          ? isAdmin
+            ? 'לחיצה נוספת תבטל את השיבוץ'
+            : 'לביטול שיבוץ מנהל/ת בר יש לפנות לאדמין בעמוד המשמרות'
+          : name
+            ? `מנהל/ת בר: ${name}`
+            : undefined,
+        revertible: mine && isAdmin,
+        onClick: mine
+          ? isAdmin
+            ? () => handleRemoveBarManager(week)
+            : undefined
+          : !taken
+            ? () => handleAssignBarManager(week)
+            : undefined,
+      })
+    }
   }
 
   return (
@@ -401,7 +503,9 @@ function OnboardingWizardInner() {
       {loadedShifts && hasMoreWeeks && (
         <Button
           variant="outline"
-          onClick={() => setVisibleWeekCount((c) => c + (duty === 'area_supervisor' ? 6 : 3))}
+          onClick={() =>
+            setVisibleWeekCount((c) => c + (duty === 'area_supervisor' || duty === 'bar_manager' ? 6 : 3))
+          }
         >
           עוד משמרות
         </Button>
