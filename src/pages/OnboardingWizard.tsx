@@ -324,7 +324,6 @@ function OnboardingWizardInner() {
     barManagerName?: string
     peerNames: string[]
     status: 'open' | 'mine' | 'full'
-    badgeText: string
     namesTitle?: string
     revertible?: boolean
     onClick?: () => void
@@ -361,7 +360,6 @@ function OnboardingWizardInner() {
           barManagerName,
           peerNames,
           status: mine ? 'mine' : isFull ? 'full' : 'open',
-          badgeText: mine ? '✓ משובץ' : isFull ? 'מלא' : 'פנוי',
           namesTitle: mine
             ? canRevert
               ? 'לחיצה נוספת תבטל את השיבוץ'
@@ -411,7 +409,6 @@ function OnboardingWizardInner() {
         barManagerName,
         peerNames,
         status: mine.length > 0 ? 'mine' : taken ? 'full' : 'open',
-        badgeText: mine.length > 0 ? '✓ משובץ' : taken ? 'מלא' : 'פנוי',
         namesTitle:
           mine.length > 0
             ? canRevert
@@ -455,7 +452,6 @@ function OnboardingWizardInner() {
         hoursLabel,
         peerNames: !mine && name ? [name] : [],
         status: mine ? 'mine' : taken ? 'full' : 'open',
-        badgeText: mine ? '✓ משובץ' : taken ? 'מלא' : 'פנוי',
         namesTitle: mine
           ? isAdmin
             ? 'לחיצה נוספת תבטל את השיבוץ'
@@ -500,7 +496,7 @@ function OnboardingWizardInner() {
               onClick={slot.onClick}
               title={slot.namesTitle}
               className={cn(
-                'flex flex-col items-start gap-1 rounded-xl border p-3 text-right transition-colors',
+                'relative flex flex-col items-start gap-1 overflow-hidden rounded-xl border p-3 text-right transition-colors',
                 slot.status === 'open' && slot.onClick && 'hover:border-primary hover:bg-accent cursor-pointer',
                 slot.status === 'mine' && 'border-green-200 bg-green-50',
                 slot.status === 'mine' &&
@@ -524,14 +520,18 @@ function OnboardingWizardInner() {
               {slot.peerNames.length > 0 && (
                 <span className="text-muted-foreground text-[10px]">גם: {slot.peerNames.join(', ')}</span>
               )}
-              <span
-                className={cn(
-                  'rounded-full px-2 py-0.5 text-[10px] font-medium',
-                  slot.status === 'mine' ? 'bg-green-100 text-green-700' : 'bg-muted text-muted-foreground',
-                )}
-              >
-                {slot.badgeText}
-              </span>
+              {slot.status === 'mine' && (
+                <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700">
+                  ✓ משובץ
+                </span>
+              )}
+              {slot.status === 'full' && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <span className="-rotate-12 rounded-md border-2 border-red-600/70 px-2 py-0.5 text-[11px] font-bold text-red-600/70">
+                    משמרת מלאה
+                  </span>
+                </div>
+              )}
             </button>
           ))}
         </div>
