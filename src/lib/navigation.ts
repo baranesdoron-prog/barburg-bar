@@ -27,7 +27,7 @@ export interface NavItem {
   children?: NavItem[]
 }
 
-export function getNavItems(role: AppRole): NavItem[] {
+export function getNavItems(role: AppRole, wizardEnabled: boolean): NavItem[] {
   const items: NavItem[] = []
 
   if (role !== 'bartender') {
@@ -42,7 +42,7 @@ export function getNavItems(role: AppRole): NavItem[] {
         label: 'משמרות',
         icon: CalendarClock,
         children: [
-          { to: '/onboarding', label: 'אשף שיבוץ', icon: Wand2 },
+          ...(wizardEnabled ? [{ to: '/onboarding', label: 'אשף שיבוץ', icon: Wand2 }] : []),
           { to: '/shifts', label: 'משמרות', icon: CalendarClock },
           { to: '/reports', label: 'דוח סגירת משמרות', icon: FileText },
           { to: '/weekly-checklist', label: 'רשימת משימות שבועית', icon: CheckSquare },
@@ -60,7 +60,7 @@ export function getNavItems(role: AppRole): NavItem[] {
       label: 'משמרות',
       icon: CalendarClock,
       children: [
-        { to: '/onboarding', label: 'אשף שיבוץ', icon: Wand2 },
+        ...(wizardEnabled ? [{ to: '/onboarding', label: 'אשף שיבוץ', icon: Wand2 }] : []),
         { to: '/shifts', label: 'שיבוצי משמרת', icon: Calendar },
         { to: '/my-shifts/assigned', label: 'המשמרות שלי', icon: CalendarCheck },
       ],

@@ -7,7 +7,7 @@ import { shiftTypeLabel } from '@/lib/shiftLabels'
 import { cn, formatTime } from '@/lib/utils'
 import { activeWeekStart, addDays, toDateStr, shiftDateOfWeek } from '@/lib/weeklyChecklist'
 import { Button } from '@/components/ui/button'
-import type { Shift, ShiftAssignment, ShiftAssignmentRole, ShiftManagerAssignment, ShiftType } from '@/lib/types'
+import type { AppSettings, Shift, ShiftAssignment, ShiftAssignmentRole, ShiftManagerAssignment, ShiftType } from '@/lib/types'
 
 const shortDateFormatter = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'numeric' })
 
@@ -74,12 +74,26 @@ function OnboardingWizardInner() {
   const [error, setError] = useState<string | null>(null)
   const [assignedCount, setAssignedCount] = useState(0)
   const [finishing, setFinishing] = useState(false)
+  const [wizardEnabled, setWizardEnabled] = useState(false)
+  const [loadedWizardSettings, setLoadedWizardSettings] = useState(false)
 
   const isAdmin = effectiveRole === 'administrator'
   // Bar manager duty is offered only to the roles that can actually hold
   // it (shift_manager/administrator) -- unlike the other three duties,
   // every real account qualifies for those regardless of role.
   const barManagerEligible = effectiveRole === 'shift_manager' || isAdmin
+
+  useEffect(() => {
+    supabase
+      .from('app_settings')
+      .select('onboarding_wizard_enabled')
+      .eq('id', true)
+      .single()
+      .then(({ data }) => {
+        setWizardEnabled(!!(data as Pick<AppSettings, 'onboarding_wizard_enabled'> | null)?.onboarding_wizard_enabled)
+        setLoadedWizardSettings(true)
+      })
+  }, [])
 
   useEffect(() => {
     async function loadEligibility() {
@@ -245,7 +259,19 @@ function OnboardingWizardInner() {
     navigate('/shifts')
   }
 
-  if (!loadedEligibility) return null
+  if (!loadedEligibility || !loadedWizardSettings) return null
+
+  // Direct-URL access (bookmark, or the nav link having been visible a
+  // moment ago) still has to respect the admin toggle -- hiding the nav
+  // link is only a convenience, this is the real gate.
+  if (!wizardEnabled) {
+    return (
+      <div className="mx-auto flex max-w-md flex-col items-center gap-4 py-16 text-center">
+        <p className="text-muted-foreground text-sm">אשף השיבוץ אינו פעיל כרגע.</p>
+        <Button onClick={() => navigate('/shifts')}>למסך המשמרות</Button>
+      </div>
+    )
+  }
 
   if (!myEmployeeId) {
     return (
