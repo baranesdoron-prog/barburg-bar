@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
 import { shiftTypeLabel } from '@/lib/shiftLabels'
-import { cn } from '@/lib/utils'
+import { cn, formatTime } from '@/lib/utils'
 import { activeWeekStart, addDays, toDateStr, shiftDateOfWeek } from '@/lib/weeklyChecklist'
 import { Button } from '@/components/ui/button'
 import type { Shift, ShiftAssignment, ShiftAssignmentRole, ShiftManagerAssignment, ShiftType } from '@/lib/types'
@@ -40,6 +40,11 @@ const LIST_LABELS: Record<Duty, string> = {
   area_manager: 'משמרות פתוחות לאחראי/ת מתחם',
   area_supervisor: 'משמרות פתוחות למנהל/ת מתחם',
 }
+
+// Area manager and area supervisor run on their own hours, distinct from
+// the shift's own bartender-facing start/end times -- matches Shifts.tsx.
+const AREA_DUTY_HOURS = { opening: '19:45–22:00', closing: '22:00–00:30' }
+const AREA_SUPERVISOR_HOURS = '19:45–00:30'
 
 type Step = 'pick' | 'shifts'
 
@@ -315,6 +320,9 @@ function OnboardingWizardInner() {
     key: string
     dateLabel: string
     typeLabel: string
+    hoursLabel: string
+    barManagerName?: string
+    peerNames: string[]
     status: 'open' | 'mine' | 'full'
     badgeText: string
     namesTitle?: string
@@ -329,6 +337,8 @@ function OnboardingWizardInner() {
       const shifts = shiftsByWeek.get(week) ?? {}
       const dateLabel = shortDateFormatter.format(shiftDateOfWeek(week))
       const canRevert = week > currentWeek
+      const weekBarManagerId = shiftManagerByWeek.get(week)
+      const barManagerName = (weekBarManagerId && employeeNames.get(weekBarManagerId)) || '— טרם שובץ —'
       for (const type of ['opening', 'closing'] as ShiftType[]) {
         const shift = shifts[type]
         if (!shift) continue
@@ -336,20 +346,27 @@ function OnboardingWizardInner() {
         const max = duty === 'bartender' ? shift.required_staff_count : 2
         const mine = assignments.find((a) => a.employee_id === myEmployeeId)
         const isFull = max !== null && assignments.length >= max
-        const names = assignments.map((a) => employeeNames.get(a.employee_id)).filter((n): n is string => !!n)
+        const peerNames = assignments
+          .filter((a) => a.employee_id !== myEmployeeId)
+          .map((a) => employeeNames.get(a.employee_id))
+          .filter((n): n is string => !!n)
         slots.push({
           key: shift.id,
           dateLabel,
           typeLabel: shiftTypeLabel(shift.shift_type),
+          hoursLabel:
+            duty === 'area_manager'
+              ? AREA_DUTY_HOURS[type]
+              : `${formatTime(shift.start_time)}–${formatTime(shift.end_time)}`,
+          barManagerName,
+          peerNames,
           status: mine ? 'mine' : isFull ? 'full' : 'open',
           badgeText: mine ? '✓ משובץ' : max === null ? 'פנוי' : `${assignments.length}/${max}`,
           namesTitle: mine
             ? canRevert
               ? 'לחיצה נוספת תבטל את השיבוץ'
               : 'משמרת השבוע הנוכחי — לביטול יש להגיש בקשת החלפה בעמוד המשמרת'
-            : names.length > 0
-              ? `משובצים: ${names.join(', ')}`
-              : undefined,
+            : undefined,
           revertible: !!mine && canRevert,
           onClick: mine
             ? canRevert
@@ -366,6 +383,8 @@ function OnboardingWizardInner() {
       const shifts = shiftsByWeek.get(week) ?? {}
       const dateLabel = shortDateFormatter.format(shiftDateOfWeek(week))
       const canRevert = week > currentWeek
+      const weekBarManagerId = shiftManagerByWeek.get(week)
+      const barManagerName = (weekBarManagerId && employeeNames.get(weekBarManagerId)) || '— טרם שובץ —'
       const openingAssignments = (assignmentsByShift.get(shifts.opening?.id ?? '') ?? []).filter(
         (a) => a.assignment_role === 'area_supervisor',
       )
@@ -375,12 +394,22 @@ function OnboardingWizardInner() {
       const allAssignments = [...openingAssignments, ...closingAssignments]
       const taken = allAssignments.length > 0
       const mine = allAssignments.filter((a) => a.employee_id === myEmployeeId)
-      const names = [...new Set(allAssignments.map((a) => employeeNames.get(a.employee_id)).filter((n): n is string => !!n))]
+      const peerNames = [
+        ...new Set(
+          allAssignments
+            .filter((a) => a.employee_id !== myEmployeeId)
+            .map((a) => employeeNames.get(a.employee_id))
+            .filter((n): n is string => !!n),
+        ),
+      ]
       const anyShiftId = shifts.opening?.id ?? shifts.closing?.id
       slots.push({
         key: week,
         dateLabel,
         typeLabel: 'משמרת שלמה',
+        hoursLabel: AREA_SUPERVISOR_HOURS,
+        barManagerName,
+        peerNames,
         status: mine.length > 0 ? 'mine' : taken ? 'full' : 'open',
         badgeText: mine.length > 0 ? '✓ משובץ' : taken ? 'מלא' : 'פנוי',
         namesTitle:
@@ -388,9 +417,7 @@ function OnboardingWizardInner() {
             ? canRevert
               ? 'לחיצה נוספת תבטל את השיבוץ'
               : 'משמרת השבוע הנוכחי — לביטול יש להגיש בקשת החלפה בעמוד המשמרת'
-            : names.length > 0
-              ? `משובצים: ${names.join(', ')}`
-              : undefined,
+            : undefined,
         revertible: mine.length > 0 && canRevert,
         onClick:
           mine.length > 0
@@ -406,11 +433,16 @@ function OnboardingWizardInner() {
     }
   } else if (duty === 'bar_manager') {
     for (const week of weeks) {
+      const shifts = shiftsByWeek.get(week) ?? {}
       const dateLabel = shortDateFormatter.format(shiftDateOfWeek(week))
       const assignedEmployeeId = shiftManagerByWeek.get(week) ?? null
       const taken = !!assignedEmployeeId
       const mine = assignedEmployeeId === myEmployeeId
       const name = assignedEmployeeId ? employeeNames.get(assignedEmployeeId) : undefined
+      const hoursLabel =
+        shifts.opening && shifts.closing
+          ? `${formatTime(shifts.opening.start_time)}–${formatTime(shifts.closing.end_time)}`
+          : AREA_SUPERVISOR_HOURS
       // Matches BarManagerRow in Shifts.tsx: a bar manager (non-admin) can
       // only fill an empty week, never touch an existing assignment --
       // their own or anyone else's. An administrator can revert any week
@@ -420,15 +452,15 @@ function OnboardingWizardInner() {
         key: week,
         dateLabel,
         typeLabel: 'משמרת שלמה',
+        hoursLabel,
+        peerNames: !mine && name ? [name] : [],
         status: mine ? 'mine' : taken ? 'full' : 'open',
         badgeText: mine ? '✓ משובץ' : taken ? 'מלא' : 'פנוי',
         namesTitle: mine
           ? isAdmin
             ? 'לחיצה נוספת תבטל את השיבוץ'
             : 'לביטול שיבוץ מנהל/ת בר יש לפנות לאדמין בעמוד המשמרות'
-          : name
-            ? `מנהל/ת בר: ${name}`
-            : undefined,
+          : undefined,
         revertible: mine && isAdmin,
         onClick: mine
           ? isAdmin
@@ -450,6 +482,8 @@ function OnboardingWizardInner() {
         <h1 className="text-base font-semibold">{duty ? LIST_LABELS[duty] : ''}</h1>
       </div>
 
+      <p className="text-muted-foreground text-center text-sm">לאיזה משמרת תרצה/י להשתבץ?</p>
+
       {!loadedShifts && <p className="text-muted-foreground text-center text-sm">טוען...</p>}
 
       {loadedShifts && slots.length === 0 && (
@@ -457,7 +491,7 @@ function OnboardingWizardInner() {
       )}
 
       {loadedShifts && slots.length > 0 && (
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-2 gap-2.5">
           {slots.map((slot) => (
             <button
               key={slot.key}
@@ -466,7 +500,7 @@ function OnboardingWizardInner() {
               onClick={slot.onClick}
               title={slot.namesTitle}
               className={cn(
-                'flex flex-col items-center gap-1 rounded-xl border p-3 text-center transition-colors',
+                'flex flex-col items-start gap-1 rounded-xl border p-3 text-right transition-colors',
                 slot.status === 'open' && slot.onClick && 'hover:border-primary hover:bg-accent cursor-pointer',
                 slot.status === 'mine' && 'border-green-200 bg-green-50',
                 slot.status === 'mine' &&
@@ -479,8 +513,17 @@ function OnboardingWizardInner() {
                 slot.status === 'full' && 'bg-muted opacity-60',
               )}
             >
-              <span className="text-muted-foreground text-[11px]">{slot.dateLabel}</span>
-              <span className="text-sm font-semibold">{slot.typeLabel}</span>
+              <div className="flex w-full items-center justify-between">
+                <span className="text-sm font-semibold">{slot.typeLabel}</span>
+                <span className="text-muted-foreground text-[11px]">{slot.dateLabel}</span>
+              </div>
+              <span className="text-muted-foreground text-[11px]">{slot.hoursLabel}</span>
+              {slot.barManagerName && (
+                <span className="text-muted-foreground text-[10px]">מנהל/ת בר: {slot.barManagerName}</span>
+              )}
+              {slot.peerNames.length > 0 && (
+                <span className="text-muted-foreground text-[10px]">גם: {slot.peerNames.join(', ')}</span>
+              )}
               <span
                 className={cn(
                   'rounded-full px-2 py-0.5 text-[10px] font-medium',
