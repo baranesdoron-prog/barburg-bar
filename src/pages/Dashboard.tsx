@@ -746,26 +746,58 @@ function RoleHome({ effectiveRole }: { effectiveRole: AppRole }) {
   )
 }
 
+// "Login" here means once per browser session (tab), not every time the
+// route happens to be "/" -- otherwise clicking the "לוח בקרה" nav link
+// mid-session (a normal thing bar managers/admins do constantly) would
+// bounce them straight back into the wizard forever, with no way back
+// to their real dashboard. sessionStorage naturally resets on tab
+// close/reopen and is keyed per account so switching users on the same
+// tab doesn't reuse someone else's flag.
+function wizardLandingSessionKey(userId: string) {
+  return `barburg:onboardingWizardChecked:${userId}`
+}
+
 // Decides whether whoever just logged in lands on the onboarding wizard
 // first, based on the admin-controlled app_settings row (set on
 // /admin/users) and, for "first_login" mode, whether this account has
 // ever seen it (app_users.onboarding_seen_at) -- applies to every role
-// (bartender, bar manager, administrator) alike. When the wizard isn't
-// due, falls through to each role's normal landing (RoleHome).
+// (bartender, bar manager, administrator) alike. Only evaluated once per
+// session; after that (or once the wizard isn't due), falls through to
+// each role's normal landing (RoleHome).
 export function Dashboard() {
   const { appUser, effectiveRole } = useAppUserContext()
+  const storageKey = wizardLandingSessionKey(appUser.id)
+  const [alreadyChecked] = useState(() => {
+    try {
+      return sessionStorage.getItem(storageKey) === '1'
+    } catch {
+      return false
+    }
+  })
   const [settings, setSettings] = useState<AppSettings | null>(null)
 
   useEffect(() => {
+    if (alreadyChecked) return
     supabase
       .from('app_settings')
       .select('*')
       .eq('id', true)
       .single()
       .then(({ data }) => setSettings(data as AppSettings | null))
-  }, [])
+  }, [alreadyChecked])
+
+  if (alreadyChecked) {
+    return <RoleHome effectiveRole={effectiveRole} />
+  }
 
   if (!settings) return null
+
+  try {
+    sessionStorage.setItem(storageKey, '1')
+  } catch {
+    // Private-browsing or storage-disabled -- worst case the check just
+    // re-runs on the next visit to "/", which is harmless.
+  }
 
   const wizardDue =
     settings.onboarding_wizard_enabled &&
