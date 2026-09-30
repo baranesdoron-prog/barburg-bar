@@ -4,6 +4,7 @@ import { Navigate, Outlet, Route, Routes, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAppUser } from '@/hooks/useAppUser'
 import { useAppUserContext, type AppOutletContext } from '@/lib/outletContext'
+import { clearWizardLandingSession } from '@/lib/onboardingWizard'
 import { ImpersonationProvider, useImpersonation } from '@/lib/impersonation'
 import type { AppRole } from '@/lib/types'
 import {
@@ -69,8 +70,13 @@ export function App() {
   useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') navigate('/reset-password', { replace: true })
+      // A real sign-in (not the initial session restore on page load) --
+      // clear the wizard-landing flag so "every_login" actually re-checks
+      // on this new login instead of reusing a stale same-tab flag from
+      // a previous session.
+      if (event === 'SIGNED_IN' && session) clearWizardLandingSession(session.user.id)
     })
 
     return () => subscription.unsubscribe()

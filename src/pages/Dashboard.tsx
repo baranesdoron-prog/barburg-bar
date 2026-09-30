@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { roleLabels, ROLES_MANAGING_SHIFTS, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
 import { purchaseOrderStatusBadgeClass, purchaseOrderStatusLabels } from '@/lib/purchaseOrderLabels'
 import { useAppUserContext } from '@/lib/outletContext'
+import { hasCheckedWizardLandingThisSession, markWizardLandingChecked } from '@/lib/onboardingWizard'
 import { shiftTypeLabel } from '@/lib/shiftLabels'
 import { cn, formatDate, formatDateTime, formatTime } from '@/lib/utils'
 import { activeWeekStart, addDays, parseDateStr, toDateStr } from '@/lib/weeklyChecklist'
@@ -754,32 +755,19 @@ export function DashboardHome() {
   return <RoleHome effectiveRole={effectiveRole} />
 }
 
-// "Login" here means once per browser session (tab), not every time the
-// route happens to be "/" -- sessionStorage naturally resets on tab
-// close/reopen and is keyed per account so switching users on the same
-// tab doesn't reuse someone else's flag.
-function wizardLandingSessionKey(userId: string) {
-  return `barburg:onboardingWizardChecked:${userId}`
-}
-
 // "/" is a one-shot landing dispatcher, hit only right after login (or a
 // fresh page load) -- it decides whether whoever just logged in lands on
 // the onboarding wizard first, based on the admin-controlled app_settings
 // row (set on /admin/users) and, for "first_login" mode, whether this
 // account has ever seen it (app_users.onboarding_seen_at). Applies to
 // every role (bartender, bar manager, administrator) alike. Only
-// evaluated once per session; after that (or once the wizard isn't due)
-// it just forwards to /dashboard, same as the nav link would.
+// evaluated once per real login (see clearWizardLandingSession in
+// App.tsx, called on every SIGNED_IN event) -- after that, or once the
+// wizard isn't due, it just forwards to /dashboard, same as the nav link
+// would.
 export function Dashboard() {
   const { appUser } = useAppUserContext()
-  const storageKey = wizardLandingSessionKey(appUser.id)
-  const [alreadyChecked] = useState(() => {
-    try {
-      return sessionStorage.getItem(storageKey) === '1'
-    } catch {
-      return false
-    }
-  })
+  const [alreadyChecked] = useState(() => hasCheckedWizardLandingThisSession(appUser.id))
   const [settings, setSettings] = useState<AppSettings | null>(null)
 
   useEffect(() => {
@@ -798,12 +786,7 @@ export function Dashboard() {
 
   if (!settings) return null
 
-  try {
-    sessionStorage.setItem(storageKey, '1')
-  } catch {
-    // Private-browsing or storage-disabled -- worst case the check just
-    // re-runs on the next visit to "/", which is harmless.
-  }
+  markWizardLandingChecked(appUser.id)
 
   const wizardDue =
     settings.onboarding_wizard_enabled &&
