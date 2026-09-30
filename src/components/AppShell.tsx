@@ -8,7 +8,7 @@ import { getNavItems } from '@/lib/navigation'
 import { roleLabels } from '@/lib/roleLabels'
 import { useImpersonation } from '@/lib/impersonation'
 import type { AppOutletContext } from '@/lib/outletContext'
-import type { AppRole, AppSettings, AppUser } from '@/lib/types'
+import type { AppRole, AppUser } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -16,18 +16,8 @@ const PREVIEWABLE_ROLES: AppRole[] = ['bartender', 'shift_manager']
 
 function SidebarContent({ greetingName, onNavigate }: { greetingName: string | null; onNavigate?: () => void }) {
   const { realRole, effectiveRole, isPreviewing, startPreview, stopPreview } = useImpersonation()
-  const [wizardEnabled, setWizardEnabled] = useState(false)
 
-  useEffect(() => {
-    supabase
-      .from('app_settings')
-      .select('onboarding_wizard_enabled')
-      .eq('id', true)
-      .single()
-      .then(({ data }) => setWizardEnabled(!!(data as Pick<AppSettings, 'onboarding_wizard_enabled'> | null)?.onboarding_wizard_enabled))
-  }, [])
-
-  const navItems = getNavItems(effectiveRole, wizardEnabled)
+  const navItems = getNavItems(effectiveRole)
 
   return (
     <div className="flex h-full flex-col gap-4">
