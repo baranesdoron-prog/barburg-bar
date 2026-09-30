@@ -12,6 +12,7 @@ import { shiftTypeLabel } from '@/lib/shiftLabels'
 import { cn, formatDate, formatDateTime, formatTime } from '@/lib/utils'
 import { activeWeekStart, addDays, parseDateStr, toDateStr } from '@/lib/weeklyChecklist'
 import type {
+  AppRole,
   AppSettings,
   PurchaseOrder,
   PurchaseOrderItem,
@@ -721,45 +722,13 @@ function ManagerDashboard() {
   )
 }
 
-// Decides whether a bartender lands on the onboarding wizard or goes
-// straight to /shifts as before, based on the admin-controlled
-// app_settings row (set on /admin/users) and, for "first_login" mode,
-// whether this account has ever seen it (app_users.onboarding_seen_at).
-function BartenderLanding() {
-  const { appUser } = useAppUserContext()
-  const [target, setTarget] = useState<'/onboarding' | '/shifts' | null>(null)
-
-  useEffect(() => {
-    async function load() {
-      const { data } = await supabase.from('app_settings').select('*').eq('id', true).single()
-      const settings = data as AppSettings | null
-
-      if (!settings?.onboarding_wizard_enabled) {
-        setTarget('/shifts')
-        return
-      }
-      if (settings.onboarding_wizard_frequency === 'every_login') {
-        setTarget('/onboarding')
-        return
-      }
-      setTarget(appUser.onboarding_seen_at ? '/shifts' : '/onboarding')
-    }
-    load()
-  }, [appUser.onboarding_seen_at])
-
-  if (!target) return null
-  return <Navigate to={target} replace />
-}
-
-export function Dashboard() {
-  const { effectiveRole } = useAppUserContext()
-
+function RoleHome({ effectiveRole }: { effectiveRole: AppRole }) {
   if (ROLES_VIEWING_SHIFTS.includes(effectiveRole)) {
     return <ManagerDashboard />
   }
 
   if (effectiveRole === 'bartender') {
-    return <BartenderLanding />
+    return <Navigate to="/shifts" replace />
   }
 
   return (
@@ -775,4 +744,36 @@ export function Dashboard() {
       </CardContent>
     </Card>
   )
+}
+
+// Decides whether whoever just logged in lands on the onboarding wizard
+// first, based on the admin-controlled app_settings row (set on
+// /admin/users) and, for "first_login" mode, whether this account has
+// ever seen it (app_users.onboarding_seen_at) -- applies to every role
+// (bartender, bar manager, administrator) alike. When the wizard isn't
+// due, falls through to each role's normal landing (RoleHome).
+export function Dashboard() {
+  const { appUser, effectiveRole } = useAppUserContext()
+  const [settings, setSettings] = useState<AppSettings | null>(null)
+
+  useEffect(() => {
+    supabase
+      .from('app_settings')
+      .select('*')
+      .eq('id', true)
+      .single()
+      .then(({ data }) => setSettings(data as AppSettings | null))
+  }, [])
+
+  if (!settings) return null
+
+  const wizardDue =
+    settings.onboarding_wizard_enabled &&
+    (settings.onboarding_wizard_frequency === 'every_login' || !appUser.onboarding_seen_at)
+
+  if (wizardDue) {
+    return <Navigate to="/onboarding" replace />
+  }
+
+  return <RoleHome effectiveRole={effectiveRole} />
 }

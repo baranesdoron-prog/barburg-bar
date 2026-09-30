@@ -86,7 +86,7 @@ function OnboardingSettingsCard() {
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <label className="flex items-center justify-between text-sm">
-          <span>הצגת אשף השיבוץ כמסך נחיתה לברמנים/יות בכניסה</span>
+          <span>הצגת אשף השיבוץ כמסך נחיתה בכניסה (לכל המשתמשים)</span>
           <input
             type="checkbox"
             checked={settings.onboarding_wizard_enabled}
@@ -114,9 +114,9 @@ function OnboardingSettingsCard() {
         )}
         {error && <p className="text-destructive text-sm">{error}</p>}
         <p className="text-muted-foreground text-xs">
-          האשף זמין תמיד לכולם דרך התפריט הצדדי, ללא קשר להגדרה זו. כאשר ההגדרה פעילה, ברמנים/יות מגיעים אליו
-          אוטומטית בכניסה לאפליקציה (במקום למסך המשמרות) לפי התדירות שנבחרה; כאשר כבויה, ברמנים/יות מגיעים ישירות
-          למסך המשמרות כרגיל.
+          האשף זמין תמיד לכולם דרך התפריט הצדדי, ללא קשר להגדרה זו. כאשר ההגדרה פעילה, כל משתמש/ת (ברמנים/יות, מנהלי
+          בר, אחראי/ות מתחם ואדמינים כאחד) מגיע/ה אליו אוטומטית בכניסה לאפליקציה במקום למסך הבית הרגיל שלו/ה, לפי
+          התדירות שנבחרה; כאשר כבויה, כולם מגיעים ישירות למסך הבית הרגיל כרגיל.
         </p>
       </CardContent>
     </Card>
