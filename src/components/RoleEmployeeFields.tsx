@@ -10,6 +10,25 @@ import type { Employee, RoleEmployeeAssignment } from '@/hooks/useRoleEmployeeAs
 const selectClass =
   'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
 
+// "מנהל/ת מתחם" isn't a real AppRole -- it's a bartender account with
+// employees.can_supervise_area set, the eligibility flag for the area-
+// supervisor duty in the onboarding wizard. Folding it into this one
+// dropdown (instead of a separate bartender-only checkbox) is a
+// deliberate UI convenience: picking it sets role='bartender' and the
+// flag together; picking plain "ברמן/ית" clears the flag. Administrator
+// and shift_manager are already auto-eligible for that duty regardless
+// of the flag, so switching to/from those leaves it untouched.
+type RoleFieldValue = AppRole | 'area_supervisor'
+
+const roleFieldLabels: Record<RoleFieldValue, string> = {
+  administrator: roleLabels.administrator,
+  shift_manager: roleLabels.shift_manager,
+  bartender: roleLabels.bartender,
+  area_supervisor: 'מנהל/ת מתחם',
+}
+
+const roleFieldOrder: RoleFieldValue[] = ['administrator', 'shift_manager', 'bartender', 'area_supervisor']
+
 export function RoleEmployeeFields({
   idPrefix,
   employees,
@@ -50,6 +69,20 @@ export function RoleEmployeeFields({
     }
   }, [employeeMode, employeeId, employees, setNewName, setNewPhone, setNewPhotoUrl, setCanSuperviseArea])
 
+  const roleFieldValue: RoleFieldValue | '' = role === '' ? '' : role === 'bartender' && canSuperviseArea ? 'area_supervisor' : role
+
+  function handleRoleFieldChange(value: RoleFieldValue) {
+    if (value === 'area_supervisor') {
+      setRole('bartender')
+      setCanSuperviseArea(true)
+      return
+    }
+    setRole(value)
+    if (value === 'bartender') {
+      setCanSuperviseArea(false)
+    }
+  }
+
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -78,15 +111,15 @@ export function RoleEmployeeFields({
         <select
           id={`role-${idPrefix}`}
           className={selectClass}
-          value={role}
-          onChange={(e) => setRole(e.target.value as AppRole)}
+          value={roleFieldValue}
+          onChange={(e) => handleRoleFieldChange(e.target.value as RoleFieldValue)}
         >
           <option value="" disabled>
             בחר תפקיד
           </option>
-          {(Object.keys(roleLabels) as AppRole[]).map((r) => (
+          {roleFieldOrder.map((r) => (
             <option key={r} value={r}>
-              {roleLabels[r]}
+              {roleFieldLabels[r]}
             </option>
           ))}
         </select>
@@ -149,15 +182,6 @@ export function RoleEmployeeFields({
                 <Input type="file" accept="image/*" disabled={uploading} onChange={handlePhotoChange} />
               </div>
               {uploadError && <p className="text-destructive text-sm">{uploadError}</p>}
-
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={canSuperviseArea}
-                  onChange={(e) => setCanSuperviseArea(e.target.checked)}
-                />
-                זכאי/ת לתפקיד &quot;מנהל/ת מתחם&quot; באשף השיבוץ
-              </label>
             </div>
           )}
         </div>
