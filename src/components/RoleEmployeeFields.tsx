@@ -32,6 +32,8 @@ export function RoleEmployeeFields({
     setNewPhone,
     newPhotoUrl,
     setNewPhotoUrl,
+    canSuperviseArea,
+    setCanSuperviseArea,
     needsEmployee,
   } = assignment
   const [uploading, setUploading] = useState(false)
@@ -44,8 +46,9 @@ export function RoleEmployeeFields({
       setNewName(emp.full_name)
       setNewPhone(emp.phone ?? '')
       setNewPhotoUrl(emp.photo_url)
+      setCanSuperviseArea(!!emp.can_supervise_area)
     }
-  }, [employeeMode, employeeId, employees, setNewName, setNewPhone, setNewPhotoUrl])
+  }, [employeeMode, employeeId, employees, setNewName, setNewPhone, setNewPhotoUrl, setCanSuperviseArea])
 
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -146,6 +149,15 @@ export function RoleEmployeeFields({
                 <Input type="file" accept="image/*" disabled={uploading} onChange={handlePhotoChange} />
               </div>
               {uploadError && <p className="text-destructive text-sm">{uploadError}</p>}
+
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={canSuperviseArea}
+                  onChange={(e) => setCanSuperviseArea(e.target.checked)}
+                />
+                זכאי/ת לתפקיד &quot;מנהל/ת מתחם&quot; באשף השיבוץ
+              </label>
             </div>
           )}
         </div>

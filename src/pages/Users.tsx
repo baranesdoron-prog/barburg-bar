@@ -135,7 +135,11 @@ export function Users() {
   async function load() {
     const [usersRes, employeesRes, delegationsRes] = await Promise.all([
       supabase.rpc('list_app_users_for_admin'),
-      supabase.from('employees').select('id, full_name, phone, photo_url').eq('active', true).order('full_name'),
+      supabase
+        .from('employees')
+        .select('id, full_name, phone, photo_url, can_supervise_area')
+        .eq('active', true)
+        .order('full_name'),
       supabase.from('role_delegations').select('*').order('starts_on', { ascending: false }),
     ])
 

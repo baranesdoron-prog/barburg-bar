@@ -9,6 +9,7 @@ export interface Employee {
   full_name: string
   phone: string | null
   photo_url: string | null
+  can_supervise_area: boolean
 }
 
 type ResolveResult = { employeeId: string | null; error?: undefined } | { employeeId?: undefined; error: string }
@@ -24,6 +25,7 @@ export function useRoleEmployeeAssignment(initial?: {
   const [newName, setNewName] = useState('')
   const [newPhone, setNewPhone] = useState('')
   const [newPhotoUrl, setNewPhotoUrl] = useState<string | null>(null)
+  const [canSuperviseArea, setCanSuperviseArea] = useState(false)
 
   const needsEmployee = role !== '' && ROLES_REQUIRING_EMPLOYEE.includes(role)
 
@@ -56,7 +58,12 @@ export function useRoleEmployeeAssignment(initial?: {
 
       const { error } = await supabase
         .from('employees')
-        .update({ full_name: newName.trim(), phone: newPhone.trim() || null, photo_url: newPhotoUrl })
+        .update({
+          full_name: newName.trim(),
+          phone: newPhone.trim() || null,
+          photo_url: newPhotoUrl,
+          can_supervise_area: canSuperviseArea,
+        })
         .eq('id', employeeId)
 
       if (error) {
@@ -72,8 +79,13 @@ export function useRoleEmployeeAssignment(initial?: {
 
     const { data: employee, error } = await supabase
       .from('employees')
-      .insert({ full_name: newName.trim(), phone: newPhone.trim() || null, photo_url: newPhotoUrl })
-      .select('id, full_name, phone, photo_url')
+      .insert({
+        full_name: newName.trim(),
+        phone: newPhone.trim() || null,
+        photo_url: newPhotoUrl,
+        can_supervise_area: canSuperviseArea,
+      })
+      .select('id, full_name, phone, photo_url, can_supervise_area')
       .single()
 
     if (error) {
@@ -97,6 +109,8 @@ export function useRoleEmployeeAssignment(initial?: {
     setNewPhone,
     newPhotoUrl,
     setNewPhotoUrl,
+    canSuperviseArea,
+    setCanSuperviseArea,
     needsEmployee,
     resolve,
   }
