@@ -215,6 +215,10 @@ export interface ShiftReportRow {
       item_name: string
       unit: string | null
       quantity_counted: number
+      previous_quantity: number | null
+      unit_price: number | null
+      used_quantity: number | null
+      cost: number | null
     }[]
   }
 }
