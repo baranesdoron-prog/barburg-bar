@@ -822,7 +822,7 @@ function WeekCard({
           </div>
         )}
 
-        {viewerCanManage && cancellableShiftIds.length === 0 && cancelledShiftIds.length > 0 && (
+        {viewerCanManage && cancelledShiftIds.length > 0 && (
           <div className="bg-muted rounded-md p-2">
             <Button
               className="w-full bg-green-600 text-white hover:bg-green-700 disabled:bg-green-600/50"
