@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
+import { X } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import { AttendanceStep } from '@/components/AttendanceStep'
@@ -333,6 +334,7 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
   const [items, setItems] = useState<InventoryItem[]>([])
   const [categories, setCategories] = useState<ProductCategory[]>([])
   const [quantities, setQuantities] = useState<Record<string, string>>({})
+  const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -343,20 +345,56 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
   const [adding, setAdding] = useState(false)
 
   async function load() {
-    const [itemsRes, countsRes, categoriesRes] = await Promise.all([
+    const [itemsRes, countsRes, categoriesRes, exclusionsRes] = await Promise.all([
       supabase.from('inventory_items').select('*').eq('active', true).order('name'),
       supabase.from('inventory_counts').select('*').eq('shift_id', shiftId),
       supabase.from('product_categories').select('*').order('sort_order'),
+      supabase.from('shift_inventory_exclusions').select('inventory_item_id').eq('shift_id', shiftId),
     ])
 
     setItems((itemsRes.data as InventoryItem[]) ?? [])
     setCategories((categoriesRes.data as ProductCategory[]) ?? [])
+    setExcludedIds(
+      new Set(((exclusionsRes.data as { inventory_item_id: string }[]) ?? []).map((r) => r.inventory_item_id)),
+    )
 
     const initial: Record<string, string> = {}
     for (const count of countsRes.data ?? []) {
       initial[count.inventory_item_id] = String(count.quantity_counted)
     }
     setQuantities(initial)
+  }
+
+  async function handleExclude(itemId: string) {
+    setExcludedIds((prev) => new Set(prev).add(itemId))
+    const { error: excludeError } = await supabase
+      .from('shift_inventory_exclusions')
+      .insert({ shift_id: shiftId, inventory_item_id: itemId })
+    if (excludeError) {
+      setError(excludeError.message)
+      await load()
+      return
+    }
+    onSaved()
+  }
+
+  async function handleIncludeBack(itemId: string) {
+    setExcludedIds((prev) => {
+      const next = new Set(prev)
+      next.delete(itemId)
+      return next
+    })
+    const { error: includeError } = await supabase
+      .from('shift_inventory_exclusions')
+      .delete()
+      .eq('shift_id', shiftId)
+      .eq('inventory_item_id', itemId)
+    if (includeError) {
+      setError(includeError.message)
+      await load()
+      return
+    }
+    onSaved()
   }
 
   useEffect(() => {
@@ -417,7 +455,7 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
     setSaved(false)
 
     const payload = Object.entries(quantities)
-      .filter(([, value]) => value.trim() !== '')
+      .filter(([itemId, value]) => value.trim() !== '' && !excludedIds.has(itemId))
       .map(([itemId, value]) => ({
         shift_id: shiftId,
         inventory_item_id: itemId,
@@ -440,14 +478,19 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
   }
 
   const categorySortOrder = new Map(categories.map((c) => [c.id, c.sort_order]))
-  const sortedItems = items
-    .map((item) => ({ item, categoryName: categories.find((c) => c.id === item.category_id)?.name }))
-    .sort((a, b) => {
-      const orderA = a.item.category_id ? (categorySortOrder.get(a.item.category_id) ?? Infinity) : Infinity
-      const orderB = b.item.category_id ? (categorySortOrder.get(b.item.category_id) ?? Infinity) : Infinity
-      if (orderA !== orderB) return orderA - orderB
-      return a.item.name.localeCompare(b.item.name)
-    })
+  function sortByCategory(list: InventoryItem[]) {
+    return list
+      .map((item) => ({ item, categoryName: categories.find((c) => c.id === item.category_id)?.name }))
+      .sort((a, b) => {
+        const orderA = a.item.category_id ? (categorySortOrder.get(a.item.category_id) ?? Infinity) : Infinity
+        const orderB = b.item.category_id ? (categorySortOrder.get(b.item.category_id) ?? Infinity) : Infinity
+        if (orderA !== orderB) return orderA - orderB
+        return a.item.name.localeCompare(b.item.name)
+      })
+  }
+
+  const sortedItems = sortByCategory(items.filter((i) => !excludedIds.has(i.id)))
+  const excludedItems = sortByCategory(items.filter((i) => excludedIds.has(i.id)))
 
   return (
     <Card>
@@ -478,6 +521,14 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
                 value={quantities[item.id] ?? ''}
                 onChange={(e) => setQuantities((prev) => ({ ...prev, [item.id]: e.target.value }))}
               />
+              <button
+                type="button"
+                title="הסרת הפריט מספירת המלאי של משמרת זו"
+                onClick={() => handleExclude(item.id)}
+                className="text-muted-foreground hover:text-destructive shrink-0"
+              >
+                <X className="size-4" />
+              </button>
             </div>
           </div>
         ))}
@@ -487,6 +538,26 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
           <Button disabled={saving} onClick={handleSave}>
             שמירת ספירה
           </Button>
+        )}
+
+        {excludedItems.length > 0 && (
+          <div className="mt-2 flex flex-col gap-1 border-t pt-3">
+            <p className="text-muted-foreground text-xs font-semibold">
+              פריטים שהוסרו מספירת המלאי של משמרת זו
+            </p>
+            {excludedItems.map(({ item }) => (
+              <div key={item.id} className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground flex-1 line-through">{item.name}</span>
+                <button
+                  type="button"
+                  onClick={() => handleIncludeBack(item.id)}
+                  className="text-primary text-xs underline-offset-2 hover:underline"
+                >
+                  החזרה לספירה
+                </button>
+              </div>
+            ))}
+          </div>
         )}
 
         <form onSubmit={handleAddItem} className="mt-2 flex flex-col gap-2 border-t pt-3">
@@ -532,6 +603,7 @@ function SummarySection({
   const [followUpCount, setFollowUpCount] = useState(0)
   const [inventoryCount, setInventoryCount] = useState(0)
   const [activeItemCount, setActiveItemCount] = useState(0)
+  const [excludedCount, setExcludedCount] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [finishing, setFinishing] = useState(false)
 
@@ -543,13 +615,14 @@ function SummarySection({
 
     const assignmentIds = (assignments as { id: string }[] | null)?.map((a) => a.id) ?? []
 
-    const [attendanceRes, journalRes, inventoryRes, activeItemsRes] = await Promise.all([
+    const [attendanceRes, journalRes, inventoryRes, activeItemsRes, exclusionsRes] = await Promise.all([
       assignmentIds.length > 0
         ? supabase.from('attendance_records').select('*').in('shift_assignment_id', assignmentIds)
         : Promise.resolve({ data: [] as AttendanceRecord[] }),
       supabase.from('journal_entries').select('requires_follow_up').eq('shift_id', shift.id),
       supabase.from('inventory_counts').select('id').eq('shift_id', shift.id),
       supabase.from('inventory_items').select('id').eq('active', true),
+      supabase.from('shift_inventory_exclusions').select('inventory_item_id').eq('shift_id', shift.id),
     ])
 
     setAttendanceCount((attendanceRes.data as AttendanceRecord[]).length)
@@ -558,6 +631,7 @@ function SummarySection({
     setFollowUpCount(journalRows.filter((r) => r.requires_follow_up).length)
     setInventoryCount((inventoryRes.data as { id: string }[] | null)?.length ?? 0)
     setActiveItemCount((activeItemsRes.data as { id: string }[] | null)?.length ?? 0)
+    setExcludedCount((exclusionsRes.data as { inventory_item_id: string }[] | null)?.length ?? 0)
   }
 
   useEffect(() => {
@@ -591,8 +665,9 @@ function SummarySection({
     onFinished(data.id, (reorderData as ReorderSummary | null) ?? null)
   }
 
+  const requiredInventoryCount = Math.max(activeItemCount - excludedCount, 0)
   const missingJournal = journalCount === 0
-  const missingInventory = activeItemCount > 0 && inventoryCount < activeItemCount
+  const missingInventory = requiredInventoryCount > 0 && inventoryCount < requiredInventoryCount
   const canFinish = !missingJournal && !missingInventory
 
   return (
@@ -609,7 +684,8 @@ function SummarySection({
           רשומות יומן: {journalCount} (מתוכן {followUpCount} דורשות מעקב)
         </p>
         <p>
-          פריטי מלאי שנספרו: {inventoryCount} מתוך {activeItemCount}
+          פריטי מלאי שנספרו: {inventoryCount} מתוך {requiredInventoryCount}
+          {excludedCount > 0 && ` (${excludedCount} הוסרו מהספירה)`}
         </p>
         {missingJournal && (
           <p className="text-destructive">יש להוסיף לפחות רשומת יומן אחת (מה עבד טוב, מה השתבש וכו') לפני הסיום.</p>
