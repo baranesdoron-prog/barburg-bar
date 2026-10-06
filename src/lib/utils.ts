@@ -32,3 +32,10 @@ const timeFormatter = new Intl.DateTimeFormat('he-IL', {
 export function formatTime(isoString: string) {
   return timeFormatter.format(new Date(isoString))
 }
+
+// Confirmation gate before a self-assignment actually goes through, in
+// the shift list and the onboarding wizard alike -- shows what's about
+// to happen (date + duty) and lets the person back out.
+export function confirmSelfAssign(dateLabel: string, positionLabel: string): boolean {
+  return confirm(`את/ה משובץ/ת למשמרת ${dateLabel} בתור ${positionLabel}.`)
+}

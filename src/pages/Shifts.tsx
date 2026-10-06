@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
 import { ROLES_MANAGING_SHIFTS } from '@/lib/roleLabels'
-import { effectiveStatusLabels, effectiveStatusBadgeClass, shiftTypeLabel } from '@/lib/shiftLabels'
+import { effectiveStatusLabels, effectiveStatusBadgeClass, shiftTypeLabel, shiftAssignmentRoleLabels } from '@/lib/shiftLabels'
 import {
   sundaysInYear,
   EARLIEST_WEEK_START,
@@ -15,7 +15,7 @@ import {
   addDays,
   shiftDateOfWeek,
 } from '@/lib/weeklyChecklist'
-import { formatTime } from '@/lib/utils'
+import { formatTime, confirmSelfAssign } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -672,6 +672,7 @@ function WeekCard({
             readOnly={!viewerCanManage}
             canPickAnyone={isAdmin}
             disabled={weekFullyCancelled}
+            dateLabel={dateLabel}
             onSet={handleSetShiftManager}
           />
 
@@ -733,6 +734,7 @@ function WeekCard({
             viewerCanManage={viewerCanManage}
             canSelfRemove={canSelfRemove}
             disabled={weekFullyCancelled}
+            dateLabel={dateLabel}
             canRequestReplacement={shifts.opening?.effective_status === 'published'}
             hasPendingRequest={
               !!openingAreaSupervisors[0] && pendingRequestAssignmentIds.has(openingAreaSupervisors[0].id)
@@ -959,6 +961,7 @@ function BarManagerRow({
   readOnly,
   canPickAnyone,
   disabled,
+  dateLabel,
   onSet,
 }: {
   employeeId: string | null
@@ -969,6 +972,7 @@ function BarManagerRow({
   readOnly: boolean
   canPickAnyone: boolean
   disabled?: boolean
+  dateLabel: string
   onSet: (employeeId: string | null) => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -1009,7 +1013,11 @@ function BarManagerRow({
               variant="outline"
               className="h-7 px-2 text-xs"
               disabled={!iAmEligible}
-              onClick={() => myEmployeeId && onSet(myEmployeeId)}
+              onClick={() => {
+                if (!myEmployeeId) return
+                if (!confirmSelfAssign(dateLabel, 'מנהל/ת בר')) return
+                onSet(myEmployeeId)
+              }}
             >
               שבץ אותי
             </Button>
@@ -1094,6 +1102,7 @@ function AreaSupervisorRow({
   viewerCanManage,
   canSelfRemove,
   disabled,
+  dateLabel,
   canRequestReplacement,
   hasPendingRequest,
   onSet,
@@ -1108,6 +1117,7 @@ function AreaSupervisorRow({
   viewerCanManage: boolean
   canSelfRemove: boolean
   disabled?: boolean
+  dateLabel: string
   canRequestReplacement: boolean
   hasPendingRequest: boolean
   onSet: (employeeId: string | null) => void
@@ -1165,7 +1175,11 @@ function AreaSupervisorRow({
                 variant="outline"
                 className="h-7 px-2 text-xs"
                 disabled={!iAmEligible}
-                onClick={() => myEmployeeId && onSet(myEmployeeId)}
+                onClick={() => {
+                  if (!myEmployeeId) return
+                  if (!confirmSelfAssign(dateLabel, 'מנהל/ת מתחם')) return
+                  onSet(myEmployeeId)
+                }}
               >
                 שבץ אותי
               </Button>
@@ -1225,7 +1239,11 @@ function AreaSupervisorRow({
             variant="outline"
             className="h-7 px-2 text-xs"
             disabled={!iAmEligible}
-            onClick={() => myEmployeeId && onSet(myEmployeeId)}
+            onClick={() => {
+              if (!myEmployeeId) return
+              if (!confirmSelfAssign(dateLabel, 'מנהל/ת מתחם')) return
+              onSet(myEmployeeId)
+            }}
           >
             שבץ אותי
           </Button>
@@ -1315,7 +1333,11 @@ function RoleSection({
               duty={role}
               eligible={eligible}
               takenIds={openingTaken}
-              onAssociateMe={() => openingShiftId && myEmployeeId && onAssign(openingShiftId, myEmployeeId, role)}
+              onAssociateMe={() => {
+                if (!openingShiftId || !myEmployeeId || !openingShift) return
+                if (!confirmSelfAssign(weekLabelFormatter.format(new Date(openingShift.start_time)), shiftAssignmentRoleLabels[role])) return
+                onAssign(openingShiftId, myEmployeeId, role)
+              }}
               onPick={(id) => openingShiftId && onAssign(openingShiftId, id, role)}
               onSwap={(newId) => openingShiftId && openingPerson && onSwap(openingPerson.id, openingShiftId, role, newId)}
               onRemove={() => openingPerson && onRemove(openingPerson.id)}
@@ -1329,7 +1351,11 @@ function RoleSection({
               duty={role}
               eligible={eligible}
               takenIds={closingTaken}
-              onAssociateMe={() => closingShiftId && myEmployeeId && onAssign(closingShiftId, myEmployeeId, role)}
+              onAssociateMe={() => {
+                if (!closingShiftId || !myEmployeeId || !closingShift) return
+                if (!confirmSelfAssign(weekLabelFormatter.format(new Date(closingShift.start_time)), shiftAssignmentRoleLabels[role])) return
+                onAssign(closingShiftId, myEmployeeId, role)
+              }}
               onPick={(id) => closingShiftId && onAssign(closingShiftId, id, role)}
               onSwap={(newId) => closingShiftId && closingPerson && onSwap(closingPerson.id, closingShiftId, role, newId)}
               onRemove={() => closingPerson && onRemove(closingPerson.id)}
@@ -1519,7 +1545,11 @@ function SelfServiceColumn({
           variant="outline"
           className="h-6 w-fit px-2 text-[11px]"
           disabled={!iAmEligible || !myEmployeeId || assignments.length >= max}
-          onClick={() => myEmployeeId && onAssign(shift.id, myEmployeeId, role)}
+          onClick={() => {
+            if (!myEmployeeId) return
+            if (!confirmSelfAssign(weekLabelFormatter.format(new Date(shift.start_time)), shiftAssignmentRoleLabels[role])) return
+            onAssign(shift.id, myEmployeeId, role)
+          }}
         >
           שבץ אותי
         </Button>

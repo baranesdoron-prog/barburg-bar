@@ -3,8 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
-import { shiftTypeLabel } from '@/lib/shiftLabels'
-import { cn, formatTime } from '@/lib/utils'
+import { shiftTypeLabel, shiftAssignmentRoleLabels } from '@/lib/shiftLabels'
+import { cn, formatTime, confirmSelfAssign } from '@/lib/utils'
 import { activeWeekStart, addDays, toDateStr, shiftDateOfWeek } from '@/lib/weeklyChecklist'
 import { Button } from '@/components/ui/button'
 import type { Shift, ShiftAssignment, ShiftAssignmentRole, ShiftManagerAssignment, ShiftType } from '@/lib/types'
@@ -394,7 +394,10 @@ function OnboardingWizardInner() {
               ? () => handleRemove([mine.id])
               : () => navigate(`/shifts/${shift.id}`)
             : !isFull
-              ? () => handleAssign(shift, duty as 'bartender' | 'area_manager')
+              ? () => {
+                  if (!confirmSelfAssign(dateLabel, shiftAssignmentRoleLabels[duty as 'bartender' | 'area_manager'])) return
+                  handleAssign(shift, duty as 'bartender' | 'area_manager')
+                }
               : undefined,
         })
       }
@@ -461,7 +464,10 @@ function OnboardingWizardInner() {
                 ? () => navigate(`/shifts/${anyShiftId}`)
                 : undefined
             : !taken
-              ? () => handleAssignAreaSupervisor(shifts)
+              ? () => {
+                  if (!confirmSelfAssign(dateLabel, shiftAssignmentRoleLabels.area_supervisor)) return
+                  handleAssignAreaSupervisor(shifts)
+                }
               : undefined,
       })
     }
@@ -513,7 +519,10 @@ function OnboardingWizardInner() {
             ? () => handleRemoveBarManager(week)
             : undefined
           : !taken
-            ? () => handleAssignBarManager(week)
+            ? () => {
+                if (!confirmSelfAssign(dateLabel, 'מנהל/ת בר')) return
+                handleAssignBarManager(week)
+              }
             : undefined,
       })
     }
