@@ -243,6 +243,7 @@ export interface PurchaseOrder {
   status: PurchaseOrderStatus
   notes: string | null
   created_by: string
+  created_from_shift_id: string | null
   ordered_at: string | null
   received_at: string | null
   created_at: string

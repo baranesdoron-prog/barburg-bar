@@ -585,7 +585,7 @@ function SummarySection({
       return
     }
 
-    const { data: reorderData } = await supabase.rpc('generate_reorder_purchase_orders')
+    const { data: reorderData } = await supabase.rpc('generate_reorder_purchase_orders', { p_shift_id: shift.id })
 
     setFinishing(false)
     onFinished(data.id, (reorderData as ReorderSummary | null) ?? null)

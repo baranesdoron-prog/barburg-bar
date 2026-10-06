@@ -4,15 +4,18 @@ import { Link, useParams } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { attendanceStatusLabels, shiftTypeLabel } from '@/lib/shiftLabels'
 import { journalCategoryLabels } from '@/lib/journalLabels'
-import { formatDateTime } from '@/lib/utils'
+import { purchaseOrderStatusLabels, purchaseOrderStatusBadgeClass } from '@/lib/purchaseOrderLabels'
+import { cn, formatDateTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import type { ShiftReportRow } from '@/lib/types'
+import type { PurchaseOrder, ShiftReportRow, Supplier } from '@/lib/types'
 
 export function ShiftReport() {
   const { id } = useParams()
   const [report, setReport] = useState<ShiftReportRow | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [relatedOrders, setRelatedOrders] = useState<PurchaseOrder[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
 
   useEffect(() => {
     supabase
@@ -28,6 +31,21 @@ export function ShiftReport() {
         setReport(data as ShiftReportRow)
       })
   }, [id])
+
+  useEffect(() => {
+    async function load() {
+      const [ordersRes, suppliersRes] = await Promise.all([
+        supabase.from('purchase_orders').select('*').eq('created_from_shift_id', id),
+        supabase.from('suppliers').select('*'),
+      ])
+      setRelatedOrders((ordersRes.data as PurchaseOrder[]) ?? [])
+      setSuppliers((suppliersRes.data as Supplier[]) ?? [])
+    }
+
+    load()
+  }, [id])
+
+  const supplierNames = new Map(suppliers.map((s) => [s.id, s.name]))
 
   if (error) return <p className="text-destructive text-center text-sm">{error}</p>
   if (!report) return null
@@ -117,6 +135,36 @@ export function ShiftReport() {
           ))}
         </CardContent>
       </Card>
+
+      {relatedOrders.length > 0 && (
+        <Card className="print:hidden">
+          <CardHeader>
+            <CardTitle className="text-base">הזמנות רכש שנוצרו בעקבות משמרת זו</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            {relatedOrders.map((order) => (
+              <Link
+                key={order.id}
+                to={`/purchase-orders/${order.id}`}
+                className="hover:bg-accent flex items-center justify-between rounded-md border p-2 text-sm transition-colors"
+              >
+                <div>
+                  <p className="font-medium">{supplierNames.get(order.supplier_id) ?? '—'}</p>
+                  <p className="text-muted-foreground text-xs">{order.order_number}</p>
+                </div>
+                <span
+                  className={cn(
+                    'rounded-full px-2 py-1 text-xs font-medium',
+                    purchaseOrderStatusBadgeClass[order.status],
+                  )}
+                >
+                  {purchaseOrderStatusLabels[order.status]}
+                </span>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex justify-center print:hidden">
         <Button asChild variant="ghost">
