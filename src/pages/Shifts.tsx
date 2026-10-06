@@ -779,7 +779,7 @@ function WeekCard({
             </div>
           )}
 
-        {viewerCanManage && cancellableShiftIds.length > 0 && !showCancelForm && (
+        {viewerCanManage && cancellableShiftIds.length > 0 && cancelledShiftIds.length === 0 && !showCancelForm && (
           <div className="bg-muted rounded-md p-2">
             <Button
               variant="destructive"
@@ -791,7 +791,7 @@ function WeekCard({
           </div>
         )}
 
-        {viewerCanManage && cancellableShiftIds.length > 0 && showCancelForm && (
+        {viewerCanManage && cancellableShiftIds.length > 0 && cancelledShiftIds.length === 0 && showCancelForm && (
           <div className="bg-muted flex flex-col gap-2 rounded-md p-2">
             <textarea
               className={cn(selectClass, 'min-h-16 text-xs')}
