@@ -11,7 +11,7 @@ import { useAppUserContext } from '@/lib/outletContext'
 import { hasCheckedWizardLandingThisSession, markWizardLandingChecked } from '@/lib/onboardingWizard'
 import { shiftTypeLabel } from '@/lib/shiftLabels'
 import { cn, formatDate, formatDateTime, formatTime } from '@/lib/utils'
-import { activeWeekStart, addDays, parseDateStr, toDateStr } from '@/lib/weeklyChecklist'
+import { activeWeekStart, addDays, parseDateStr, shiftDateOfWeek, toDateStr } from '@/lib/weeklyChecklist'
 import type {
   AppRole,
   AppSettings,
@@ -427,7 +427,7 @@ function ShiftManagerAssignmentCard() {
           const isCurrentWeek = week === weeks[0]
           return (
             <div key={week} className="flex items-center justify-between gap-2 text-sm">
-              <span>שבוע {weekLabelFormatter.format(parseDateStr(week))}</span>
+              <span>{weekLabelFormatter.format(shiftDateOfWeek(week))}</span>
               <div className="flex items-center gap-2">
                 {isCurrentWeek && taskStats && (
                   <Link to={`/weekly-checklist?week=${week}`} className="text-muted-foreground text-xs hover:underline">
@@ -570,7 +570,7 @@ function AreaSupervisorAssignmentCard() {
           const assigned = assignments.get(week) ?? ''
           return (
             <div key={week} className="flex items-center justify-between gap-2 text-sm">
-              <span>שבוע {weekLabelFormatter.format(parseDateStr(week))}</span>
+              <span>{weekLabelFormatter.format(shiftDateOfWeek(week))}</span>
               <select
                 className={cn(selectClass, 'w-40', !assigned && 'border-amber-500')}
                 value={assigned}
