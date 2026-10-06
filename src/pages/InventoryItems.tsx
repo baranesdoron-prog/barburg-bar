@@ -27,6 +27,7 @@ const CSV_TEMPLATE_HEADER = [
 export function InventoryItems() {
   const [searchParams] = useSearchParams()
   const unclassifiedOnly = searchParams.get('unclassified') === '1'
+  const unassignedSupplierOnly = searchParams.get('unassigned_supplier') === '1'
 
   const [items, setItems] = useState<InventoryItemWithStock[] | null>(null)
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
@@ -62,7 +63,11 @@ export function InventoryItems() {
     } else if (category) {
       query = query.eq('category_id', category)
     }
-    if (supplier) query = query.eq('resolved_supplier_id', supplier)
+    if (unassignedSupplierOnly) {
+      query = query.is('resolved_supplier_id', null)
+    } else if (supplier) {
+      query = query.eq('resolved_supplier_id', supplier)
+    }
 
     const { data } = await query.order('name')
     setItems((data as InventoryItemWithStock[]) ?? [])
@@ -72,7 +77,7 @@ export function InventoryItems() {
     loadFilters()
     search()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unclassifiedOnly])
+  }, [unclassifiedOnly, unassignedSupplierOnly])
 
   function handleClearFilters() {
     setNameFilter('')
@@ -227,6 +232,15 @@ export function InventoryItems() {
         </div>
       )}
 
+      {unassignedSupplierOnly && (
+        <div className="flex items-center justify-between rounded-md border border-fuchsia-500/60 bg-fuchsia-50 p-2 text-sm dark:bg-fuchsia-950/20">
+          <span>מוצג: מוצרים ללא ספק משויך בלבד</span>
+          <Link to="/inventory/items" className="text-muted-foreground text-xs hover:underline">
+            נקה
+          </Link>
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">חיפוש</CardTitle>
@@ -246,7 +260,12 @@ export function InventoryItems() {
               </option>
             ))}
           </select>
-          <select className={selectClass} value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)}>
+          <select
+            className={selectClass}
+            value={supplierFilter}
+            disabled={unassignedSupplierOnly}
+            onChange={(e) => setSupplierFilter(e.target.value)}
+          >
             <option value="">כל הספקים</option>
             {suppliers.map((s) => (
               <option key={s.id} value={s.id}>

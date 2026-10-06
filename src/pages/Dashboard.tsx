@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { AlertTriangle, Clock, Package, ShoppingCart, Tag, Truck, Users, CalendarDays, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, Clock, Package, PackageX, ShoppingCart, Tag, Truck, Users, CalendarDays, type LucideIcon } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
@@ -151,6 +151,7 @@ interface ManagerStats {
   activeEmployees: number
   lowStockProducts: number
   unclassifiedProducts: number
+  unassignedSupplierProducts: number
 }
 
 function ManagerSummary() {
@@ -176,6 +177,7 @@ function ManagerSummary() {
         activeEmployeesRes,
         lowStockRes,
         unclassifiedRes,
+        unassignedSupplierRes,
         ordersRes,
         suppliersRes,
       ] = await Promise.all([
@@ -202,6 +204,11 @@ function ManagerSummary() {
           .select('id', { count: 'exact', head: true })
           .eq('active', true)
           .is('category_id', null),
+        supabase
+          .from('inventory_items_with_latest_count')
+          .select('id', { count: 'exact', head: true })
+          .eq('active', true)
+          .is('resolved_supplier_id', null),
         supabase.from('purchase_orders').select('*').order('created_at', { ascending: false }).limit(5),
         supabase.from('suppliers').select('*'),
       ])
@@ -214,6 +221,7 @@ function ManagerSummary() {
         activeEmployees: activeEmployeesRes.count ?? 0,
         lowStockProducts: lowStockRes.count ?? 0,
         unclassifiedProducts: unclassifiedRes.count ?? 0,
+        unassignedSupplierProducts: unassignedSupplierRes.count ?? 0,
       })
 
       const orders = (ordersRes.data as PurchaseOrder[]) ?? []
@@ -261,6 +269,13 @@ function ManagerSummary() {
           label="מוצרים ללא סיווג"
           colorClass="bg-orange-100 text-orange-600"
           to="/inventory/items?unclassified=1"
+        />
+        <StatCard
+          icon={PackageX}
+          value={stats.unassignedSupplierProducts}
+          label="מוצרים ללא ספק משויך"
+          colorClass="bg-fuchsia-100 text-fuchsia-600"
+          to="/inventory/items?unassigned_supplier=1"
         />
         <StatCard
           icon={ShoppingCart}
