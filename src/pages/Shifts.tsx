@@ -568,6 +568,16 @@ function WeekCard({
   // the current one.
   const canSelfRemove = week > toDateStr(activeWeekStart())
 
+  async function handleCancelShift(shiftId: string, reason: string): Promise<string | null> {
+    const { error: cancelError } = await supabase
+      .from('shifts')
+      .update({ status: 'cancelled', cancellation_reason: reason })
+      .eq('id', shiftId)
+    if (cancelError) return cancelError.message
+    onSaved()
+    return null
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -602,8 +612,18 @@ function WeekCard({
 
           <div className="grid grid-cols-[auto_1fr_1fr] items-center gap-x-2 gap-y-1 text-xs">
             <span />
-            <ColumnHeader shift={shifts.opening} type="opening" />
-            <ColumnHeader shift={shifts.closing} type="closing" />
+            <ColumnHeader
+              shift={shifts.opening}
+              type="opening"
+              canManage={viewerCanManage}
+              onCancel={handleCancelShift}
+            />
+            <ColumnHeader
+              shift={shifts.closing}
+              type="closing"
+              canManage={viewerCanManage}
+              onCancel={handleCancelShift}
+            />
           </div>
 
           {viewerCanManage ? (
@@ -728,13 +748,100 @@ function WeekCard({
   )
 }
 
-function ColumnHeader({ shift, type }: { shift?: Shift; type: ShiftType }) {
+// Same cancel action as ShiftDetail.tsx's "ביטול משמרת" (status ->
+// 'cancelled', reason required) -- surfaced here too so a bar
+// manager/admin doesn't have to click into each shift individually from
+// the list page just to cancel it.
+function ColumnHeader({
+  shift,
+  type,
+  canManage,
+  onCancel,
+}: {
+  shift?: Shift
+  type: ShiftType
+  canManage?: boolean
+  onCancel?: (shiftId: string, reason: string) => Promise<string | null>
+}) {
+  const [showCancelForm, setShowCancelForm] = useState(false)
+  const [reason, setReason] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
   if (!shift) {
     return <span className="text-muted-foreground">{shiftTypeLabel(type)}: לא נפתחה</span>
   }
+
+  if (shift.status === 'cancelled') {
+    return <span className="text-muted-foreground">{shiftTypeLabel(type)}: מבוטלת</span>
+  }
+
+  const shiftId = shift.id
+
+  async function handleConfirmCancel() {
+    if (!reason.trim() || !onCancel) return
+    setSubmitting(true)
+    setError(null)
+    const submitError = await onCancel(shiftId, reason.trim())
+    setSubmitting(false)
+    if (submitError) {
+      setError(submitError)
+      return
+    }
+    setShowCancelForm(false)
+    setReason('')
+  }
+
+  if (showCancelForm) {
+    return (
+      <div className="flex flex-col gap-1">
+        <span className="font-medium">
+          {shiftTypeLabel(type)} {formatTime(shift.start_time)}–{formatTime(shift.end_time)}
+        </span>
+        <textarea
+          className={cn(selectClass, 'min-h-10 text-[11px]')}
+          placeholder="סיבת הביטול (חובה)"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+        <div className="flex gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              setShowCancelForm(false)
+              setReason('')
+              setError(null)
+            }}
+            className="text-muted-foreground text-[10px] underline-offset-2 hover:underline"
+          >
+            חזרה
+          </button>
+          <button
+            type="button"
+            disabled={!reason.trim() || submitting}
+            onClick={handleConfirmCancel}
+            className="text-destructive text-[10px] underline-offset-2 hover:underline disabled:opacity-50"
+          >
+            אישור ביטול
+          </button>
+        </div>
+        {error && <span className="text-destructive text-[10px]">{error}</span>}
+      </div>
+    )
+  }
+
   return (
-    <span className="font-medium">
+    <span className="flex items-center gap-1.5 font-medium">
       {shiftTypeLabel(type)} {formatTime(shift.start_time)}–{formatTime(shift.end_time)}
+      {canManage && (
+        <button
+          type="button"
+          onClick={() => setShowCancelForm(true)}
+          className="text-destructive text-[10px] font-normal underline-offset-2 hover:underline"
+        >
+          ביטול
+        </button>
+      )}
     </span>
   )
 }
