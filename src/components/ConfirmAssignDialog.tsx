@@ -1,11 +1,12 @@
 import { Button } from '@/components/ui/button'
+import type { ConfirmAssignState } from '@/hooks/useConfirmAssign'
 
 export function ConfirmAssignDialog({
   state,
   onApprove,
   onDecline,
 }: {
-  state: { dateLabel: string; positionLabel: string } | null
+  state: ConfirmAssignState | null
   onApprove: () => void
   onDecline: () => void
 }) {
@@ -16,7 +17,8 @@ export function ConfirmAssignDialog({
       <div className="bg-background w-full max-w-sm rounded-lg border p-5 shadow-lg">
         <p className="text-lg font-semibold">איזה כיף!</p>
         <p className="text-muted-foreground mt-2 text-sm">
-          את/ה משובץ/ת למשמרת {state.dateLabel} בתור {state.positionLabel}.
+          את/ה משובץ/ת למשמרת {state.typeLabel} בתאריך {state.dateLabel}, בשעות {state.hoursLabel}, בתור{' '}
+          {state.positionLabel}.
         </p>
         <div className="mt-4 flex gap-2">
           <Button variant="outline" className="flex-1" onClick={onDecline}>

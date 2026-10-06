@@ -398,7 +398,15 @@ function OnboardingWizardInner() {
               : () => navigate(`/shifts/${shift.id}`)
             : !isFull
               ? async () => {
-                  const ok = await confirmAssign(dateLabel, shiftAssignmentRoleLabels[duty as 'bartender' | 'area_manager'])
+                  const ok = await confirmAssign({
+                    dateLabel,
+                    typeLabel: shiftTypeLabel(shift.shift_type),
+                    hoursLabel:
+                      duty === 'area_manager'
+                        ? AREA_DUTY_HOURS[type]
+                        : `${formatTime(shift.start_time)}–${formatTime(shift.end_time)}`,
+                    positionLabel: shiftAssignmentRoleLabels[duty as 'bartender' | 'area_manager'],
+                  })
                   if (!ok) return
                   handleAssign(shift, duty as 'bartender' | 'area_manager')
                 }
@@ -469,7 +477,12 @@ function OnboardingWizardInner() {
                 : undefined
             : !taken
               ? async () => {
-                  const ok = await confirmAssign(dateLabel, shiftAssignmentRoleLabels.area_supervisor)
+                  const ok = await confirmAssign({
+                    dateLabel,
+                    typeLabel: 'משמרת שלמה',
+                    hoursLabel: AREA_SUPERVISOR_HOURS,
+                    positionLabel: shiftAssignmentRoleLabels.area_supervisor,
+                  })
                   if (!ok) return
                   handleAssignAreaSupervisor(shifts)
                 }
@@ -525,7 +538,12 @@ function OnboardingWizardInner() {
             : undefined
           : !taken
             ? async () => {
-                const ok = await confirmAssign(dateLabel, 'מנהל/ת בר')
+                const ok = await confirmAssign({
+                  dateLabel,
+                  typeLabel: 'משמרת שלמה',
+                  hoursLabel,
+                  positionLabel: 'מנהל/ת בר',
+                })
                 if (!ok) return
                 handleAssignBarManager(week)
               }
