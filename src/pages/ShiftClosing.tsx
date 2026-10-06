@@ -52,11 +52,16 @@ export function ShiftClosing() {
         // assigned to the closing shift specifically -- someone who only
         // worked the opening slot still needs their attendance recorded
         // somewhere, and this is the only closing workflow there is.
+        // Filtered to 'published' so a stale cancelled duplicate for the
+        // same (week, type) -- see the dedup fix elsewhere -- never makes
+        // this .maybeSingle() see two rows and silently come back empty,
+        // which was dropping the real opening shift's roster entirely.
         supabase
           .from('shifts')
           .select('id')
           .eq('week_start', loadedShift.week_start)
           .eq('shift_type', 'opening')
+          .eq('status', 'published')
           .maybeSingle()
           .then(({ data: opening }) => setOpeningShiftId((opening as { id: string } | null)?.id ?? null))
       })

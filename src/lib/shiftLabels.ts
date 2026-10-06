@@ -1,8 +1,14 @@
-import type { AttendanceStatus, EffectiveShiftStatus, ShiftType } from '@/lib/types'
+import type { AttendanceStatus, EffectiveShiftStatus, ShiftAssignmentRole, ShiftType } from '@/lib/types'
 
 export const shiftTypeLabels: Record<ShiftType, string> = {
   opening: 'פתיחה',
   closing: 'סגירה',
+}
+
+export const shiftAssignmentRoleLabels: Record<ShiftAssignmentRole, string> = {
+  bartender: 'ברמן/ית',
+  area_manager: 'אחראי/ת מתחם',
+  area_supervisor: 'מנהל/ת מתחם',
 }
 
 // shift_reports.snapshot is a frozen historical dump and can still hold

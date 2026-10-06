@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { supabase } from '@/lib/supabase'
-import { attendanceStatusLabels } from '@/lib/shiftLabels'
+import { attendanceStatusLabels, shiftAssignmentRoleLabels } from '@/lib/shiftLabels'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import type { AttendanceRecord, AttendanceStatus, ShiftAssignment } from '@/lib/types'
@@ -109,7 +109,10 @@ export function AttendanceStep({ shiftIds, onSaved }: { shiftIds: string[]; onSa
       )}
       {assignments.map((assignment) => (
         <div key={assignment.id} className="flex flex-col gap-2 rounded-md border p-3">
-          <span className="text-sm font-medium">{employeeNames.get(assignment.employee_id) ?? '—'}</span>
+          <span className="text-sm font-medium">
+            {employeeNames.get(assignment.employee_id) ?? '—'}
+            <span className="text-muted-foreground font-normal"> · {shiftAssignmentRoleLabels[assignment.assignment_role]}</span>
+          </span>
           <div className="flex gap-2">
             {statusOptions.map((option) => (
               <button
