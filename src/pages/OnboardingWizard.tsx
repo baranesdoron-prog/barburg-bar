@@ -4,8 +4,10 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
 import { shiftTypeLabel, shiftAssignmentRoleLabels } from '@/lib/shiftLabels'
-import { cn, formatTime, confirmSelfAssign } from '@/lib/utils'
+import { cn, formatTime } from '@/lib/utils'
 import { activeWeekStart, addDays, toDateStr, shiftDateOfWeek } from '@/lib/weeklyChecklist'
+import { useConfirmAssign } from '@/hooks/useConfirmAssign'
+import { ConfirmAssignDialog } from '@/components/ConfirmAssignDialog'
 import { Button } from '@/components/ui/button'
 import type { Shift, ShiftAssignment, ShiftAssignmentRole, ShiftManagerAssignment, ShiftType } from '@/lib/types'
 
@@ -60,6 +62,7 @@ function OnboardingWizardInner() {
   const { appUser, effectiveRole } = useAppUserContext()
   const navigate = useNavigate()
   const myEmployeeId = appUser.employee_id
+  const { confirmAssign, dialogState, handleApprove, handleDecline } = useConfirmAssign()
 
   const [step, setStep] = useState<Step>('pick')
   const [duty, setDuty] = useState<Duty | null>(null)
@@ -394,8 +397,9 @@ function OnboardingWizardInner() {
               ? () => handleRemove([mine.id])
               : () => navigate(`/shifts/${shift.id}`)
             : !isFull
-              ? () => {
-                  if (!confirmSelfAssign(dateLabel, shiftAssignmentRoleLabels[duty as 'bartender' | 'area_manager'])) return
+              ? async () => {
+                  const ok = await confirmAssign(dateLabel, shiftAssignmentRoleLabels[duty as 'bartender' | 'area_manager'])
+                  if (!ok) return
                   handleAssign(shift, duty as 'bartender' | 'area_manager')
                 }
               : undefined,
@@ -464,8 +468,9 @@ function OnboardingWizardInner() {
                 ? () => navigate(`/shifts/${anyShiftId}`)
                 : undefined
             : !taken
-              ? () => {
-                  if (!confirmSelfAssign(dateLabel, shiftAssignmentRoleLabels.area_supervisor)) return
+              ? async () => {
+                  const ok = await confirmAssign(dateLabel, shiftAssignmentRoleLabels.area_supervisor)
+                  if (!ok) return
                   handleAssignAreaSupervisor(shifts)
                 }
               : undefined,
@@ -519,8 +524,9 @@ function OnboardingWizardInner() {
             ? () => handleRemoveBarManager(week)
             : undefined
           : !taken
-            ? () => {
-                if (!confirmSelfAssign(dateLabel, 'מנהל/ת בר')) return
+            ? async () => {
+                const ok = await confirmAssign(dateLabel, 'מנהל/ת בר')
+                if (!ok) return
                 handleAssignBarManager(week)
               }
             : undefined,
@@ -530,6 +536,7 @@ function OnboardingWizardInner() {
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 py-10">
+      <ConfirmAssignDialog state={dialogState} onApprove={handleApprove} onDecline={handleDecline} />
       <div className="flex items-center justify-between">
         <Button variant="ghost" size="sm" onClick={() => setStep('pick')}>
           חזרה

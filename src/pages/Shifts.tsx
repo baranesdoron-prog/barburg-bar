@@ -15,8 +15,10 @@ import {
   addDays,
   shiftDateOfWeek,
 } from '@/lib/weeklyChecklist'
-import { formatTime, confirmSelfAssign } from '@/lib/utils'
+import { formatTime } from '@/lib/utils'
 import { cn } from '@/lib/utils'
+import { useConfirmAssign } from '@/hooks/useConfirmAssign'
+import { ConfirmAssignDialog } from '@/components/ConfirmAssignDialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { Shift, ShiftAssignment, ShiftAssignmentRole, ShiftType } from '@/lib/types'
@@ -439,6 +441,7 @@ function WeekCard({
   onSaved: () => void
 }) {
   const [error, setError] = useState<string | null>(null)
+  const { confirmAssign, dialogState, handleApprove, handleDecline } = useConfirmAssign()
 
   // Existing assignments on a shift that's since been cancelled still show
   // (read-only-ish: removable, but not swappable/fillable) -- only the
@@ -644,6 +647,7 @@ function WeekCard({
 
   return (
     <Card>
+      <ConfirmAssignDialog state={dialogState} onApprove={handleApprove} onDecline={handleDecline} />
       <CardHeader>
         <CardTitle className="text-base">{dateLabel}</CardTitle>
       </CardHeader>
@@ -673,6 +677,7 @@ function WeekCard({
             canPickAnyone={isAdmin}
             disabled={weekFullyCancelled}
             dateLabel={dateLabel}
+            confirmAssign={confirmAssign}
             onSet={handleSetShiftManager}
           />
 
@@ -697,6 +702,7 @@ function WeekCard({
               employeeNames={employeeNames}
               shiftCounts={shiftCounts}
               myEmployeeId={myEmployeeId}
+              confirmAssign={confirmAssign}
               onAssign={handleAssign}
               onSwap={handleSwap}
               onRemove={handleRemove}
@@ -716,6 +722,7 @@ function WeekCard({
               myEmployeeId={myEmployeeId}
               canSelfRemove={canSelfRemove}
               pendingRequestAssignmentIds={pendingRequestAssignmentIds}
+              confirmAssign={confirmAssign}
               onAssign={handleAssign}
               onRemove={handleRemove}
               onRequestReplacement={handleRequestReplacement}
@@ -735,6 +742,7 @@ function WeekCard({
             canSelfRemove={canSelfRemove}
             disabled={weekFullyCancelled}
             dateLabel={dateLabel}
+            confirmAssign={confirmAssign}
             canRequestReplacement={shifts.opening?.effective_status === 'published'}
             hasPendingRequest={
               !!openingAreaSupervisors[0] && pendingRequestAssignmentIds.has(openingAreaSupervisors[0].id)
@@ -760,6 +768,7 @@ function WeekCard({
               myEmployeeId={myEmployeeId}
               openingTimeLabel={AREA_DUTY_HOURS.opening}
               closingTimeLabel={AREA_DUTY_HOURS.closing}
+              confirmAssign={confirmAssign}
               onAssign={handleAssign}
               onSwap={handleSwap}
               onRemove={handleRemove}
@@ -781,6 +790,7 @@ function WeekCard({
               pendingRequestAssignmentIds={pendingRequestAssignmentIds}
               openingTimeLabel={AREA_DUTY_HOURS.opening}
               closingTimeLabel={AREA_DUTY_HOURS.closing}
+              confirmAssign={confirmAssign}
               onAssign={handleAssign}
               onRemove={handleRemove}
               onRequestReplacement={handleRequestReplacement}
@@ -962,6 +972,7 @@ function BarManagerRow({
   canPickAnyone,
   disabled,
   dateLabel,
+  confirmAssign,
   onSet,
 }: {
   employeeId: string | null
@@ -973,6 +984,7 @@ function BarManagerRow({
   canPickAnyone: boolean
   disabled?: boolean
   dateLabel: string
+  confirmAssign: (dateLabel: string, positionLabel: string) => Promise<boolean>
   onSet: (employeeId: string | null) => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -1013,9 +1025,10 @@ function BarManagerRow({
               variant="outline"
               className="h-7 px-2 text-xs"
               disabled={!iAmEligible}
-              onClick={() => {
+              onClick={async () => {
                 if (!myEmployeeId) return
-                if (!confirmSelfAssign(dateLabel, 'מנהל/ת בר')) return
+                const ok = await confirmAssign(dateLabel, 'מנהל/ת בר')
+                if (!ok) return
                 onSet(myEmployeeId)
               }}
             >
@@ -1103,6 +1116,7 @@ function AreaSupervisorRow({
   canSelfRemove,
   disabled,
   dateLabel,
+  confirmAssign,
   canRequestReplacement,
   hasPendingRequest,
   onSet,
@@ -1118,6 +1132,7 @@ function AreaSupervisorRow({
   canSelfRemove: boolean
   disabled?: boolean
   dateLabel: string
+  confirmAssign: (dateLabel: string, positionLabel: string) => Promise<boolean>
   canRequestReplacement: boolean
   hasPendingRequest: boolean
   onSet: (employeeId: string | null) => void
@@ -1175,9 +1190,10 @@ function AreaSupervisorRow({
                 variant="outline"
                 className="h-7 px-2 text-xs"
                 disabled={!iAmEligible}
-                onClick={() => {
+                onClick={async () => {
                   if (!myEmployeeId) return
-                  if (!confirmSelfAssign(dateLabel, 'מנהל/ת מתחם')) return
+                  const ok = await confirmAssign(dateLabel, 'מנהל/ת מתחם')
+                  if (!ok) return
                   onSet(myEmployeeId)
                 }}
               >
@@ -1239,9 +1255,10 @@ function AreaSupervisorRow({
             variant="outline"
             className="h-7 px-2 text-xs"
             disabled={!iAmEligible}
-            onClick={() => {
+            onClick={async () => {
               if (!myEmployeeId) return
-              if (!confirmSelfAssign(dateLabel, 'מנהל/ת מתחם')) return
+              const ok = await confirmAssign(dateLabel, 'מנהל/ת מתחם')
+              if (!ok) return
               onSet(myEmployeeId)
             }}
           >
@@ -1271,6 +1288,7 @@ function RoleSection({
   myEmployeeId,
   openingTimeLabel,
   closingTimeLabel,
+  confirmAssign,
   onAssign,
   onSwap,
   onRemove,
@@ -1290,6 +1308,7 @@ function RoleSection({
   myEmployeeId: string | null
   openingTimeLabel?: string
   closingTimeLabel?: string
+  confirmAssign: (dateLabel: string, positionLabel: string) => Promise<boolean>
   onAssign: (shiftId: string, employeeId: string, role: ShiftAssignmentRole) => void
   onSwap: (oldAssignmentId: string, shiftId: string, role: ShiftAssignmentRole, newEmployeeId: string) => void
   onRemove: (assignmentId: string) => void
@@ -1333,9 +1352,10 @@ function RoleSection({
               duty={role}
               eligible={eligible}
               takenIds={openingTaken}
-              onAssociateMe={() => {
+              onAssociateMe={async () => {
                 if (!openingShiftId || !myEmployeeId || !openingShift) return
-                if (!confirmSelfAssign(weekLabelFormatter.format(new Date(openingShift.start_time)), shiftAssignmentRoleLabels[role])) return
+                const ok = await confirmAssign(weekLabelFormatter.format(new Date(openingShift.start_time)), shiftAssignmentRoleLabels[role])
+                if (!ok) return
                 onAssign(openingShiftId, myEmployeeId, role)
               }}
               onPick={(id) => openingShiftId && onAssign(openingShiftId, id, role)}
@@ -1351,9 +1371,10 @@ function RoleSection({
               duty={role}
               eligible={eligible}
               takenIds={closingTaken}
-              onAssociateMe={() => {
+              onAssociateMe={async () => {
                 if (!closingShiftId || !myEmployeeId || !closingShift) return
-                if (!confirmSelfAssign(weekLabelFormatter.format(new Date(closingShift.start_time)), shiftAssignmentRoleLabels[role])) return
+                const ok = await confirmAssign(weekLabelFormatter.format(new Date(closingShift.start_time)), shiftAssignmentRoleLabels[role])
+                if (!ok) return
                 onAssign(closingShiftId, myEmployeeId, role)
               }}
               onPick={(id) => closingShiftId && onAssign(closingShiftId, id, role)}
@@ -1388,6 +1409,7 @@ function SelfServiceRoleSection({
   pendingRequestAssignmentIds,
   openingTimeLabel,
   closingTimeLabel,
+  confirmAssign,
   onAssign,
   onRemove,
   onRequestReplacement,
@@ -1407,6 +1429,7 @@ function SelfServiceRoleSection({
   pendingRequestAssignmentIds: Set<string>
   openingTimeLabel?: string
   closingTimeLabel?: string
+  confirmAssign: (dateLabel: string, positionLabel: string) => Promise<boolean>
   onAssign: (shiftId: string, employeeId: string, role: ShiftAssignmentRole) => void
   onRemove: (assignmentId: string) => void
   onRequestReplacement: (assignmentId: string, reason: string | null, substituteId: string | null) => Promise<string | null>
@@ -1438,6 +1461,7 @@ function SelfServiceRoleSection({
           myEmployeeId={myEmployeeId}
           canSelfRemove={canSelfRemove}
           pendingRequestAssignmentIds={pendingRequestAssignmentIds}
+          confirmAssign={confirmAssign}
           onAssign={onAssign}
           onRemove={onRemove}
           onRequestReplacement={onRequestReplacement}
@@ -1454,6 +1478,7 @@ function SelfServiceRoleSection({
           myEmployeeId={myEmployeeId}
           canSelfRemove={canSelfRemove}
           pendingRequestAssignmentIds={pendingRequestAssignmentIds}
+          confirmAssign={confirmAssign}
           onAssign={onAssign}
           onRemove={onRemove}
           onRequestReplacement={onRequestReplacement}
@@ -1475,6 +1500,7 @@ function SelfServiceColumn({
   myEmployeeId,
   canSelfRemove,
   pendingRequestAssignmentIds,
+  confirmAssign,
   onAssign,
   onRemove,
   onRequestReplacement,
@@ -1490,6 +1516,7 @@ function SelfServiceColumn({
   myEmployeeId: string | null
   canSelfRemove: boolean
   pendingRequestAssignmentIds: Set<string>
+  confirmAssign: (dateLabel: string, positionLabel: string) => Promise<boolean>
   onAssign: (shiftId: string, employeeId: string, role: ShiftAssignmentRole) => void
   onRemove: (assignmentId: string) => void
   onRequestReplacement: (assignmentId: string, reason: string | null, substituteId: string | null) => Promise<string | null>
@@ -1545,9 +1572,10 @@ function SelfServiceColumn({
           variant="outline"
           className="h-6 w-fit px-2 text-[11px]"
           disabled={!iAmEligible || !myEmployeeId || assignments.length >= max}
-          onClick={() => {
+          onClick={async () => {
             if (!myEmployeeId) return
-            if (!confirmSelfAssign(weekLabelFormatter.format(new Date(shift.start_time)), shiftAssignmentRoleLabels[role])) return
+            const ok = await confirmAssign(weekLabelFormatter.format(new Date(shift.start_time)), shiftAssignmentRoleLabels[role])
+            if (!ok) return
             onAssign(shift.id, myEmployeeId, role)
           }}
         >
