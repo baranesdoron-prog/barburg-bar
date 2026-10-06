@@ -582,6 +582,11 @@ function WeekCard({
     shifts.closing && shifts.closing.status !== 'cancelled' ? shifts.closing.id : null,
   ].filter((v): v is string => !!v)
 
+  const cancelledShiftIds = [
+    shifts.opening?.status === 'cancelled' ? shifts.opening.id : null,
+    shifts.closing?.status === 'cancelled' ? shifts.closing.id : null,
+  ].filter((v): v is string => !!v)
+
   async function handleCancelWeek() {
     if (!cancelReason.trim()) return
     setCancelling(true)
@@ -597,6 +602,26 @@ function WeekCard({
     }
     setShowCancelForm(false)
     setCancelReason('')
+    onSaved()
+  }
+
+  // Undoing a cancellation is administrator-only (restore_cancelled_shifts
+  // enforces this server-side too) -- a bar manager sees the same button,
+  // disabled, with a tooltip explaining why.
+  const [restoring, setRestoring] = useState(false)
+
+  async function handleRestoreWeek() {
+    if (!confirm('לשחזר את המשמרת?')) return
+    setRestoring(true)
+    setError(null)
+    const { error: restoreError } = await supabase.rpc('restore_cancelled_shifts', {
+      p_shift_ids: cancelledShiftIds,
+    })
+    setRestoring(false)
+    if (restoreError) {
+      setError(restoreError.message)
+      return
+    }
     onSaved()
   }
 
@@ -794,6 +819,19 @@ function WeekCard({
                 אישור ביטול
               </Button>
             </div>
+          </div>
+        )}
+
+        {viewerCanManage && cancellableShiftIds.length === 0 && cancelledShiftIds.length > 0 && (
+          <div className="bg-muted rounded-md p-2">
+            <Button
+              className="w-full bg-green-600 text-white hover:bg-green-700 disabled:bg-green-600/50"
+              disabled={!isAdmin || restoring}
+              title={isAdmin ? undefined : 'רק מנהל/ת מערכת יכול/ה לשחזר משמרת מבוטלת'}
+              onClick={handleRestoreWeek}
+            >
+              שחזור משמרת
+            </Button>
           </div>
         )}
 
