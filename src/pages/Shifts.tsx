@@ -568,14 +568,36 @@ function WeekCard({
   // the current one.
   const canSelfRemove = week > toDateStr(activeWeekStart())
 
-  async function handleCancelShift(shiftId: string, reason: string): Promise<string | null> {
+  // Same cancel action as ShiftDetail.tsx's "ביטול משמרת" (status ->
+  // 'cancelled', reason required) -- there's no real row delete for
+  // shifts, cancellation is the closest thing. Applied to the whole
+  // week's pair at once rather than per opening/closing column, since
+  // the night as a whole is what's being called off.
+  const [showCancelForm, setShowCancelForm] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
+  const [cancelling, setCancelling] = useState(false)
+
+  const cancellableShiftIds = [
+    shifts.opening && shifts.opening.status !== 'cancelled' ? shifts.opening.id : null,
+    shifts.closing && shifts.closing.status !== 'cancelled' ? shifts.closing.id : null,
+  ].filter((v): v is string => !!v)
+
+  async function handleCancelWeek() {
+    if (!cancelReason.trim()) return
+    setCancelling(true)
+    setError(null)
     const { error: cancelError } = await supabase
       .from('shifts')
-      .update({ status: 'cancelled', cancellation_reason: reason })
-      .eq('id', shiftId)
-    if (cancelError) return cancelError.message
+      .update({ status: 'cancelled', cancellation_reason: cancelReason.trim() })
+      .in('id', cancellableShiftIds)
+    setCancelling(false)
+    if (cancelError) {
+      setError(cancelError.message)
+      return
+    }
+    setShowCancelForm(false)
+    setCancelReason('')
     onSaved()
-    return null
   }
 
   return (
@@ -612,18 +634,8 @@ function WeekCard({
 
           <div className="grid grid-cols-[auto_1fr_1fr] items-center gap-x-2 gap-y-1 text-xs">
             <span />
-            <ColumnHeader
-              shift={shifts.opening}
-              type="opening"
-              canManage={viewerCanManage}
-              onCancel={handleCancelShift}
-            />
-            <ColumnHeader
-              shift={shifts.closing}
-              type="closing"
-              canManage={viewerCanManage}
-              onCancel={handleCancelShift}
-            />
+            <ColumnHeader shift={shifts.opening} type="opening" />
+            <ColumnHeader shift={shifts.closing} type="closing" />
           </div>
 
           {viewerCanManage ? (
@@ -742,106 +754,65 @@ function WeekCard({
             </div>
           )}
 
+        {viewerCanManage && cancellableShiftIds.length > 0 && !showCancelForm && (
+          <div className="bg-muted rounded-md p-2">
+            <Button
+              variant="destructive"
+              className="w-full"
+              onClick={() => setShowCancelForm(true)}
+            >
+              ביטול משמרת
+            </Button>
+          </div>
+        )}
+
+        {viewerCanManage && cancellableShiftIds.length > 0 && showCancelForm && (
+          <div className="bg-muted flex flex-col gap-2 rounded-md p-2">
+            <textarea
+              className={cn(selectClass, 'min-h-16 text-xs')}
+              placeholder="סיבת הביטול (חובה)"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+            />
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setShowCancelForm(false)
+                  setCancelReason('')
+                }}
+              >
+                חזרה
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                disabled={cancelling || !cancelReason.trim()}
+                onClick={handleCancelWeek}
+              >
+                אישור ביטול
+              </Button>
+            </div>
+          </div>
+        )}
+
         {error && <p className="text-destructive text-xs">{error}</p>}
       </CardContent>
     </Card>
   )
 }
 
-// Same cancel action as ShiftDetail.tsx's "ביטול משמרת" (status ->
-// 'cancelled', reason required) -- surfaced here too so a bar
-// manager/admin doesn't have to click into each shift individually from
-// the list page just to cancel it.
-function ColumnHeader({
-  shift,
-  type,
-  canManage,
-  onCancel,
-}: {
-  shift?: Shift
-  type: ShiftType
-  canManage?: boolean
-  onCancel?: (shiftId: string, reason: string) => Promise<string | null>
-}) {
-  const [showCancelForm, setShowCancelForm] = useState(false)
-  const [reason, setReason] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
+function ColumnHeader({ shift, type }: { shift?: Shift; type: ShiftType }) {
   if (!shift) {
     return <span className="text-muted-foreground">{shiftTypeLabel(type)}: לא נפתחה</span>
   }
-
   if (shift.status === 'cancelled') {
     return <span className="text-muted-foreground">{shiftTypeLabel(type)}: מבוטלת</span>
   }
-
-  const shiftId = shift.id
-
-  async function handleConfirmCancel() {
-    if (!reason.trim() || !onCancel) return
-    setSubmitting(true)
-    setError(null)
-    const submitError = await onCancel(shiftId, reason.trim())
-    setSubmitting(false)
-    if (submitError) {
-      setError(submitError)
-      return
-    }
-    setShowCancelForm(false)
-    setReason('')
-  }
-
-  if (showCancelForm) {
-    return (
-      <div className="flex flex-col gap-1">
-        <span className="font-medium">
-          {shiftTypeLabel(type)} {formatTime(shift.start_time)}–{formatTime(shift.end_time)}
-        </span>
-        <textarea
-          className={cn(selectClass, 'min-h-10 text-[11px]')}
-          placeholder="סיבת הביטול (חובה)"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-        />
-        <div className="flex gap-1">
-          <button
-            type="button"
-            onClick={() => {
-              setShowCancelForm(false)
-              setReason('')
-              setError(null)
-            }}
-            className="text-muted-foreground text-[10px] underline-offset-2 hover:underline"
-          >
-            חזרה
-          </button>
-          <button
-            type="button"
-            disabled={!reason.trim() || submitting}
-            onClick={handleConfirmCancel}
-            className="text-destructive text-[10px] underline-offset-2 hover:underline disabled:opacity-50"
-          >
-            אישור ביטול
-          </button>
-        </div>
-        {error && <span className="text-destructive text-[10px]">{error}</span>}
-      </div>
-    )
-  }
-
   return (
-    <span className="flex items-center gap-1.5 font-medium">
+    <span className="font-medium">
       {shiftTypeLabel(type)} {formatTime(shift.start_time)}–{formatTime(shift.end_time)}
-      {canManage && (
-        <button
-          type="button"
-          onClick={() => setShowCancelForm(true)}
-          className="text-destructive text-[10px] font-normal underline-offset-2 hover:underline"
-        >
-          ביטול
-        </button>
-      )}
     </span>
   )
 }
