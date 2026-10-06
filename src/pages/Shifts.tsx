@@ -190,7 +190,15 @@ function useShiftWeeksData({
     const grouped = new Map<string, WeekShifts>()
     for (const shift of shifts) {
       const entry = grouped.get(shift.week_start) ?? {}
-      entry[shift.shift_type as ShiftType] = shift
+      const existing = entry[shift.shift_type as ShiftType]
+      // A cancelled shift can coexist with a fresh non-cancelled one for the
+      // same (week, type) -- the partial unique index only covers non-
+      // cancelled rows. Always prefer the non-cancelled one regardless of
+      // fetch order, so a stale cancelled duplicate never shadows the real
+      // active shift.
+      if (!existing || existing.status === 'cancelled') {
+        entry[shift.shift_type as ShiftType] = shift
+      }
       grouped.set(shift.week_start, entry)
     }
     setShiftsByWeek(grouped)
@@ -432,6 +440,15 @@ function WeekCard({
 }) {
   const [error, setError] = useState<string | null>(null)
 
+  // Existing assignments on a shift that's since been cancelled still show
+  // (read-only-ish: removable, but not swappable/fillable) -- only the
+  // "assign someone new" controls need the shift to be treated as absent.
+  // Passed only into the assignment-control components, never into
+  // ColumnHeader (which still needs the raw shift to show "מבוטלת").
+  const activeOpening = shifts.opening && shifts.opening.status !== 'cancelled' ? shifts.opening : undefined
+  const activeClosing = shifts.closing && shifts.closing.status !== 'cancelled' ? shifts.closing : undefined
+  const weekFullyCancelled = !activeOpening && !activeClosing && !!(shifts.opening || shifts.closing)
+
   const openingId = shifts.opening?.id
   const closingId = shifts.closing?.id
   const openingAll = openingId ? (assignmentsByShift.get(openingId) ?? []) : []
@@ -654,6 +671,7 @@ function WeekCard({
             myEmployeeId={myEmployeeId}
             readOnly={!viewerCanManage}
             canPickAnyone={isAdmin}
+            disabled={weekFullyCancelled}
             onSet={handleSetShiftManager}
           />
 
@@ -668,8 +686,8 @@ function WeekCard({
               label="ברמנים/יות (עד 3)"
               role="bartender"
               max={3}
-              openingShift={shifts.opening}
-              closingShift={shifts.closing}
+              openingShift={activeOpening}
+              closingShift={activeClosing}
               openingAssignments={openingBartenders}
               closingAssignments={closingBartenders}
               openingTaken={new Set(openingAll.map((a) => a.employee_id))}
@@ -687,8 +705,8 @@ function WeekCard({
               label="ברמנים/יות (עד 3)"
               role="bartender"
               max={3}
-              openingShift={shifts.opening}
-              closingShift={shifts.closing}
+              openingShift={activeOpening}
+              closingShift={activeClosing}
               openingAssignments={openingBartenders}
               closingAssignments={closingBartenders}
               eligible={dutyEligible}
@@ -714,6 +732,7 @@ function WeekCard({
             myEmployeeId={myEmployeeId}
             viewerCanManage={viewerCanManage}
             canSelfRemove={canSelfRemove}
+            disabled={weekFullyCancelled}
             canRequestReplacement={shifts.opening?.effective_status === 'published'}
             hasPendingRequest={
               !!openingAreaSupervisors[0] && pendingRequestAssignmentIds.has(openingAreaSupervisors[0].id)
@@ -727,8 +746,8 @@ function WeekCard({
               label="אחראי/ת מתחם (עד 2)"
               role="area_manager"
               max={2}
-              openingShift={shifts.opening}
-              closingShift={shifts.closing}
+              openingShift={activeOpening}
+              closingShift={activeClosing}
               openingAssignments={openingAreaManagers}
               closingAssignments={closingAreaManagers}
               openingTaken={new Set(openingAll.map((a) => a.employee_id))}
@@ -748,8 +767,8 @@ function WeekCard({
               label="אחראי/ת מתחם (עד 2)"
               role="area_manager"
               max={2}
-              openingShift={shifts.opening}
-              closingShift={shifts.closing}
+              openingShift={activeOpening}
+              closingShift={activeClosing}
               openingAssignments={openingAreaManagers}
               closingAssignments={closingAreaManagers}
               eligible={dutyEligible}
@@ -939,6 +958,7 @@ function BarManagerRow({
   myEmployeeId,
   readOnly,
   canPickAnyone,
+  disabled,
   onSet,
 }: {
   employeeId: string | null
@@ -948,6 +968,7 @@ function BarManagerRow({
   myEmployeeId: string | null
   readOnly: boolean
   canPickAnyone: boolean
+  disabled?: boolean
   onSet: (employeeId: string | null) => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -959,7 +980,11 @@ function BarManagerRow({
       <div className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
         <span className="text-muted-foreground text-xs">מנהל/ת בר</span>
         <span>
-          {employeeId ? nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId, 'bar_manager') : '— לא שובץ —'}
+          {employeeId
+            ? nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId, 'bar_manager')
+            : disabled
+              ? 'מבוטל'
+              : '— לא שובץ —'}
         </span>
       </div>
     )
@@ -975,6 +1000,8 @@ function BarManagerRow({
         <div className="flex flex-1 items-center justify-center gap-2">
           {employeeId ? (
             <span>{nameWithCount(employeeNames[employeeId] ?? '—', shiftCounts, employeeId, 'bar_manager')}</span>
+          ) : disabled ? (
+            <span className="text-muted-foreground">מבוטל</span>
           ) : (
             <Button
               type="button"
@@ -998,7 +1025,9 @@ function BarManagerRow({
     <div className="flex items-center gap-2 rounded-md border p-2 text-sm">
       <span className="text-muted-foreground text-xs">מנהל/ת בר</span>
       <div className="flex flex-1 items-center justify-center gap-2">
-        {editing ? (
+        {!employeeId && disabled ? (
+          <span className="text-muted-foreground">מבוטל</span>
+        ) : editing ? (
           <select
             autoFocus
             className={cn(selectClass, 'h-8 max-w-48 text-sm')}
@@ -1064,6 +1093,7 @@ function AreaSupervisorRow({
   myEmployeeId,
   viewerCanManage,
   canSelfRemove,
+  disabled,
   canRequestReplacement,
   hasPendingRequest,
   onSet,
@@ -1077,6 +1107,7 @@ function AreaSupervisorRow({
   myEmployeeId: string | null
   viewerCanManage: boolean
   canSelfRemove: boolean
+  disabled?: boolean
   canRequestReplacement: boolean
   hasPendingRequest: boolean
   onSet: (employeeId: string | null) => void
@@ -1097,7 +1128,9 @@ function AreaSupervisorRow({
       <div className="flex items-center gap-2 rounded-md border p-2 text-sm">
         {label}
         <div className="flex flex-1 items-center justify-center gap-2">
-          {editing ? (
+          {!employeeId && disabled ? (
+            <span className="text-muted-foreground">מבוטל</span>
+          ) : editing ? (
             <select
               autoFocus
               className={cn(selectClass, 'h-8 max-w-48 text-sm')}
@@ -1183,7 +1216,9 @@ function AreaSupervisorRow({
 
         {isMine && !canSelfRemove && !canRequestReplacement && <span className="truncate">{name}</span>}
 
-        {!employeeId && (
+        {!employeeId && disabled && <span className="text-muted-foreground">מבוטל</span>}
+
+        {!employeeId && !disabled && (
           <Button
             type="button"
             size="sm"

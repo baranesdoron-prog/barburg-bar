@@ -114,7 +114,10 @@ function OnboardingWizardInner() {
       supabase
         .from('shifts_with_effective_status')
         .select('*')
-        .eq('status', 'published')
+        // Cancelled shifts are fetched too (not filtered out) so they can
+        // be shown as cancelled -- same "disabled, not just hidden"
+        // treatment as a full shift -- instead of silently disappearing.
+        .in('status', ['published', 'cancelled'])
         .gte('week_start', from)
         .lte('week_start', to),
       supabase.from('shift_manager_assignments').select('*').gte('week_start', from).lte('week_start', to),
@@ -130,7 +133,12 @@ function OnboardingWizardInner() {
     const grouped = new Map<string, WeekShifts>()
     for (const s of shifts) {
       const entry = grouped.get(s.week_start) ?? {}
-      entry[s.shift_type as ShiftType] = s
+      const existing = entry[s.shift_type as ShiftType]
+      // Prefer a non-cancelled shift over a cancelled duplicate for the
+      // same (week, type) -- see the matching fix in Shifts.tsx.
+      if (!existing || existing.status === 'cancelled') {
+        entry[s.shift_type as ShiftType] = s
+      }
       grouped.set(s.week_start, entry)
     }
     setShiftsByWeek(grouped)
@@ -323,7 +331,7 @@ function OnboardingWizardInner() {
     hoursLabel: string
     barManagerName?: string
     peerNames: string[]
-    status: 'open' | 'mine' | 'full'
+    status: 'open' | 'mine' | 'full' | 'cancelled'
     namesTitle?: string
     revertible?: boolean
     onClick?: () => void
@@ -341,6 +349,21 @@ function OnboardingWizardInner() {
       for (const type of ['opening', 'closing'] as ShiftType[]) {
         const shift = shifts[type]
         if (!shift) continue
+        if (shift.status === 'cancelled') {
+          slots.push({
+            key: shift.id,
+            dateLabel,
+            typeLabel: shiftTypeLabel(shift.shift_type),
+            hoursLabel:
+              duty === 'area_manager'
+                ? AREA_DUTY_HOURS[type]
+                : `${formatTime(shift.start_time)}–${formatTime(shift.end_time)}`,
+            barManagerName,
+            peerNames: [],
+            status: 'cancelled',
+          })
+          continue
+        }
         const assignments = (assignmentsByShift.get(shift.id) ?? []).filter((a) => a.assignment_role === duty)
         const max = duty === 'bartender' ? shift.required_staff_count : 2
         const mine = assignments.find((a) => a.employee_id === myEmployeeId)
@@ -383,6 +406,20 @@ function OnboardingWizardInner() {
       const canRevert = week > currentWeek
       const weekBarManagerId = shiftManagerByWeek.get(week)
       const barManagerName = (weekBarManagerId && employeeNames.get(weekBarManagerId)) || '— טרם שובץ —'
+      const openingActive = shifts.opening && shifts.opening.status !== 'cancelled'
+      const closingActive = shifts.closing && shifts.closing.status !== 'cancelled'
+      if (!openingActive && !closingActive && (shifts.opening || shifts.closing)) {
+        slots.push({
+          key: week,
+          dateLabel,
+          typeLabel: 'משמרת שלמה',
+          hoursLabel: AREA_SUPERVISOR_HOURS,
+          barManagerName,
+          peerNames: [],
+          status: 'cancelled',
+        })
+        continue
+      }
       const openingAssignments = (assignmentsByShift.get(shifts.opening?.id ?? '') ?? []).filter(
         (a) => a.assignment_role === 'area_supervisor',
       )
@@ -432,6 +469,19 @@ function OnboardingWizardInner() {
     for (const week of weeks) {
       const shifts = shiftsByWeek.get(week) ?? {}
       const dateLabel = shortDateFormatter.format(shiftDateOfWeek(week))
+      const openingActive = shifts.opening && shifts.opening.status !== 'cancelled'
+      const closingActive = shifts.closing && shifts.closing.status !== 'cancelled'
+      if (!openingActive && !closingActive && (shifts.opening || shifts.closing)) {
+        slots.push({
+          key: week,
+          dateLabel,
+          typeLabel: 'משמרת שלמה',
+          hoursLabel: AREA_SUPERVISOR_HOURS,
+          peerNames: [],
+          status: 'cancelled',
+        })
+        continue
+      }
       const assignedEmployeeId = shiftManagerByWeek.get(week) ?? null
       const taken = !!assignedEmployeeId
       const mine = assignedEmployeeId === myEmployeeId
@@ -507,6 +557,7 @@ function OnboardingWizardInner() {
                   !slot.revertible &&
                   'hover:border-primary hover:bg-accent cursor-pointer',
                 slot.status === 'full' && 'bg-muted opacity-60',
+                slot.status === 'cancelled' && 'bg-muted opacity-60',
               )}
             >
               <div className="flex w-full items-center justify-between">
@@ -529,6 +580,13 @@ function OnboardingWizardInner() {
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                   <span className="-rotate-12 rounded-md border-2 border-red-600/70 px-2 py-0.5 text-[11px] font-bold text-red-600/70">
                     משמרת מלאה
+                  </span>
+                </div>
+              )}
+              {slot.status === 'cancelled' && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <span className="-rotate-12 rounded-md border-2 border-slate-500/70 px-2 py-0.5 text-[11px] font-bold text-slate-600/70">
+                    משמרת מבוטלת
                   </span>
                 </div>
               )}
