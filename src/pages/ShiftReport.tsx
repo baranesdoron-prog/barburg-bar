@@ -58,10 +58,6 @@ export function ShiftReport() {
   const usageItems = snapshot.inventory_counts.filter(
     (c) => c.previous_quantity !== null && c.previous_quantity !== undefined && c.used_quantity !== null,
   )
-  const totalCost = usageItems.reduce(
-    (sum, c) => sum + (c.cost !== null && c.used_quantity! > 0 ? c.cost : 0),
-    0,
-  )
 
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4">
@@ -150,27 +146,23 @@ export function ShiftReport() {
       {usageItems.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">צריכה ועלות</CardTitle>
+            <CardTitle className="text-base">צריכה</CardTitle>
             <CardDescription>בהשוואה לספירה הקודמת</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-2">
-            {usageItems.map((c, i) => (
-              <div key={i} className="flex items-center justify-between text-sm">
-                <span>{c.item_name}</span>
-                <span className="text-muted-foreground">
-                  {c.used_quantity! > 0
-                    ? `נצרכו ${c.used_quantity} ${c.unit ?? ''}`
-                    : c.used_quantity! < 0
-                      ? `נוספו ${Math.abs(c.used_quantity!)} ${c.unit ?? ''}`
-                      : 'ללא שינוי'}
-                  {c.cost !== null && c.used_quantity! > 0 && ` · ₪${c.cost.toFixed(2)}`}
-                </span>
-              </div>
-            ))}
-            <div className="mt-2 flex items-center justify-between border-t pt-2 text-sm font-medium">
-              <span>סה&quot;כ עלות צריכה משוערת</span>
-              <span>₪{totalCost.toFixed(2)}</span>
-            </div>
+            {usageItems.map((c, i) => {
+              const delta = c.quantity_counted - c.previous_quantity!
+              return (
+                <div key={i} className="flex flex-col gap-0.5 border-b pb-2 text-sm last:border-0 last:pb-0">
+                  <span>{c.item_name}</span>
+                  <span className="text-muted-foreground text-xs">
+                    לפני המשמרת {c.previous_quantity} {c.unit ?? ''} · אחרי המשמרת {c.quantity_counted} {c.unit ?? ''} ·
+                    הפרש {delta > 0 ? '+' : ''}
+                    {delta} {c.unit ?? ''}
+                  </span>
+                </div>
+              )
+            })}
           </CardContent>
         </Card>
       )}
