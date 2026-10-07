@@ -9,17 +9,14 @@ import { roleLabels, ROLES_MANAGING_SHIFTS, ROLES_VIEWING_SHIFTS } from '@/lib/r
 import { purchaseOrderStatusBadgeClass, purchaseOrderStatusLabels } from '@/lib/purchaseOrderLabels'
 import { useAppUserContext } from '@/lib/outletContext'
 import { hasCheckedWizardLandingThisSession, markWizardLandingChecked } from '@/lib/onboardingWizard'
-import { shiftTypeLabel } from '@/lib/shiftLabels'
-import { cn, formatDate, formatDateTime, formatTime } from '@/lib/utils'
+import { cn, formatDate, formatTime } from '@/lib/utils'
 import { activeWeekStart, addDays, parseDateStr, shiftDateOfWeek, toDateStr } from '@/lib/weeklyChecklist'
 import type {
   AppRole,
   AppSettings,
   PurchaseOrder,
   PurchaseOrderItem,
-  ReplacementRequest,
   Shift,
-  ShiftAssignment,
   ShiftManagerAssignment,
   Supplier,
   WeeklyChecklistItem,
@@ -32,31 +29,6 @@ const weekLabelFormatter = new Intl.DateTimeFormat('he-IL', { day: 'numeric', mo
 interface EmployeeNameRow {
   id: string
   full_name: string
-}
-
-function ShiftSection({ title, shifts }: { title: string; shifts: Shift[] }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        {shifts.length === 0 && <p className="text-muted-foreground text-sm">אין משמרות</p>}
-        {shifts.map((shift) => (
-          <Link
-            key={shift.id}
-            to={`/shifts/${shift.id}`}
-            className="hover:bg-accent flex flex-col rounded-md border p-3 text-sm transition-colors"
-          >
-            <span className="font-medium">{shiftTypeLabel(shift.shift_type)}</span>
-            <span className="text-muted-foreground">
-              {formatDateTime(shift.start_time)} – {formatDateTime(shift.end_time)}
-            </span>
-          </Link>
-        ))}
-      </CardContent>
-    </Card>
-  )
 }
 
 function ClosingAlertCard({ shifts, employeeNames }: { shifts: Shift[]; employeeNames: Map<string, string> }) {
@@ -663,7 +635,6 @@ function MyWeeklyTasksCard({ employeeId }: { employeeId: string }) {
 function ManagerDashboard() {
   const { appUser, effectiveRole } = useAppUserContext()
   const [shifts, setShifts] = useState<Shift[] | null>(null)
-  const [pendingRequestShifts, setPendingRequestShifts] = useState<Shift[]>([])
   const [employeeNames, setEmployeeNames] = useState<Map<string, string>>(new Map())
 
   useEffect(() => {
@@ -678,28 +649,6 @@ function ManagerDashboard() {
 
       const { data: employeesData } = await supabase.from('employees').select('id, full_name')
       setEmployeeNames(new Map(((employeesData as EmployeeNameRow[]) ?? []).map((e) => [e.id, e.full_name])))
-
-      const { data: pendingRequests } = await supabase
-        .from('replacement_requests')
-        .select('*')
-        .eq('status', 'pending')
-
-      const requests = (pendingRequests as ReplacementRequest[]) ?? []
-      if (requests.length === 0) {
-        setPendingRequestShifts([])
-        return
-      }
-
-      const { data: assignments } = await supabase
-        .from('shift_assignments')
-        .select('*')
-        .in(
-          'id',
-          requests.map((r) => r.shift_assignment_id),
-        )
-
-      const shiftIds = new Set((assignments as ShiftAssignment[])?.map((a) => a.shift_id))
-      setPendingRequestShifts(loadedShifts.filter((s) => shiftIds.has(s.id)))
     }
 
     load()
@@ -732,8 +681,6 @@ function ManagerDashboard() {
       )}
 
       {canManage && <ManagerSummary />}
-
-      <ShiftSection title="בקשות החלפה ממתינות" shifts={pendingRequestShifts} />
     </div>
   )
 }

@@ -15,10 +15,10 @@ export function ConfirmAssignDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="bg-background w-full max-w-sm rounded-lg border p-5 shadow-lg">
-        <p className="text-lg font-semibold">איזה כיף!</p>
+        <p className="text-lg font-semibold">{state.title}</p>
         <p className="text-muted-foreground mt-2 text-sm">
-          את/ה משובץ/ת למשמרת {state.typeLabel} בתאריך {state.dateLabel}, בשעות {state.hoursLabel}, בתור{' '}
-          {state.positionLabel}.
+          {state.action === 'assign' ? 'את/ה משובץ/ת למשמרת' : 'את/ה מוסר/ת את עצמך ממשמרת'} {state.typeLabel}{' '}
+          בתאריך {state.dateLabel}, בשעות {state.hoursLabel}, בתור {state.positionLabel}.
         </p>
         <div className="mt-4 flex gap-2">
           <Button variant="outline" className="flex-1" onClick={onDecline}>

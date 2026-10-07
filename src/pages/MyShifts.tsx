@@ -4,14 +4,16 @@ import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
 import { effectiveStatusLabels, effectiveStatusBadgeClass, shiftTypeLabel } from '@/lib/shiftLabels'
 import { activeWeekStart, toDateStr, weekLabelFormatter, shiftDateOfWeek, addDays } from '@/lib/weeklyChecklist'
-import { cn, formatDateTime } from '@/lib/utils'
+import { cn, formatDateTime, formatTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { SelfCheckIn } from '@/components/SelfCheckIn'
-import type { ReplacementRequest, Shift, ShiftAssignment, ShiftType } from '@/lib/types'
-
-const selectClass =
-  'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
+import { useConfirmAssign } from '@/hooks/useConfirmAssign'
+import { ConfirmAssignDialog } from '@/components/ConfirmAssignDialog'
+import { useInfoDialog } from '@/hooks/useInfoDialog'
+import { InfoDialog } from '@/components/InfoDialog'
+import { shiftAssignmentRoleLabels } from '@/lib/shiftLabels'
+import type { Shift, ShiftAssignment, ShiftType } from '@/lib/types'
 
 interface Employee {
   id: string
@@ -28,7 +30,6 @@ interface UpcomingShift {
   shift: Shift
   assignedStaff: AssignedStaffer[]
   ownAssignment: ShiftAssignment | null
-  pendingRequest: ReplacementRequest | null
 }
 
 interface WeekShifts {
@@ -80,23 +81,6 @@ function MyShiftsView({ assignedOnly }: { assignedOnly: boolean }) {
     setEmployees(activeEmployees)
     const employeeNames = new Map(activeEmployees.map((e) => [e.id, e.full_name]))
 
-    const ownAssignmentIds = assignments
-      .filter((a) => a.employee_id === appUser.employee_id)
-      .map((a) => a.id)
-
-    const { data: requestsData } =
-      ownAssignmentIds.length > 0
-        ? await supabase
-            .from('replacement_requests')
-            .select('*')
-            .in('shift_assignment_id', ownAssignmentIds)
-            .eq('status', 'pending')
-        : { data: [] }
-
-    const requestsByAssignment = new Map(
-      ((requestsData as ReplacementRequest[]) ?? []).map((r) => [r.shift_assignment_id, r]),
-    )
-
     const grouped = new Map<string, WeekShifts>()
     for (const shift of shifts) {
       const shiftAssignments = assignments.filter((a) => a.shift_id === shift.id)
@@ -110,7 +94,6 @@ function MyShiftsView({ assignedOnly }: { assignedOnly: boolean }) {
           name: employeeNames.get(a.employee_id) ?? '—',
         })),
         ownAssignment,
-        pendingRequest: ownAssignment ? (requestsByAssignment.get(ownAssignment.id) ?? null) : null,
       }
 
       const entry = grouped.get(shift.week_start) ?? {}
@@ -218,7 +201,6 @@ function WeekRow({
       {weekShifts.opening && (
         <ShiftSlot
           item={weekShifts.opening}
-          employees={employees}
           currentWeekStart={currentWeekStart}
           employeeId={employeeId}
           onChanged={onChanged}
@@ -228,7 +210,6 @@ function WeekRow({
       {weekShifts.closing && (
         <ShiftSlot
           item={weekShifts.closing}
-          employees={employees}
           currentWeekStart={currentWeekStart}
           employeeId={employeeId}
           onChanged={onChanged}
@@ -240,27 +221,23 @@ function WeekRow({
 
 function ShiftSlot({
   item,
-  employees,
   currentWeekStart,
   employeeId,
   onChanged,
 }: {
   item: UpcomingShift
-  employees: Employee[]
   currentWeekStart: string
   employeeId: string
   onChanged: () => void
 }) {
-  const { shift, assignedStaff, ownAssignment, pendingRequest } = item
-  const [showForm, setShowForm] = useState(false)
-  const [reason, setReason] = useState('')
-  const [substituteId, setSubstituteId] = useState('')
+  const { shift, assignedStaff, ownAssignment } = item
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const { confirmAssign, dialogState, handleApprove, handleDecline } = useConfirmAssign()
+  const { showInfo, infoState, handleClose } = useInfoDialog()
 
   const isFutureWeek = shift.week_start > currentWeekStart
   const isFull = shift.required_staff_count !== null && assignedStaff.length >= shift.required_staff_count
-  const canRequestReplacement = shift.effective_status === 'published' && !pendingRequest
 
   async function handleJoin() {
     setSubmitting(true)
@@ -282,7 +259,16 @@ function ShiftSlot({
 
   async function handleLeave() {
     if (!ownAssignment) return
-    if (!confirm('לעזוב את המשמרת?')) return
+
+    const ok = await confirmAssign({
+      title: 'איזה באסה! לא מסתדר?',
+      action: 'remove',
+      dateLabel: weekLabelFormatter.format(new Date(shift.start_time)),
+      typeLabel: shiftTypeLabel(shift.shift_type),
+      hoursLabel: `${formatTime(shift.start_time)}–${formatTime(shift.end_time)}`,
+      positionLabel: shiftAssignmentRoleLabels[ownAssignment.assignment_role],
+    })
+    if (!ok) return
 
     const { error: leaveError } = await supabase
       .from('shift_assignments')
@@ -294,31 +280,6 @@ function ShiftSlot({
       return
     }
 
-    onChanged()
-  }
-
-  async function handleSubmitReplacement() {
-    if (!ownAssignment) return
-
-    setSubmitting(true)
-    setError(null)
-
-    const { error: requestError } = await supabase.rpc('request_replacement', {
-      p_shift_assignment_id: ownAssignment.id,
-      p_reason: reason.trim() || null,
-      p_substitute_employee_id: substituteId || null,
-    })
-
-    setSubmitting(false)
-
-    if (requestError) {
-      setError(requestError.message)
-      return
-    }
-
-    setShowForm(false)
-    setReason('')
-    setSubstituteId('')
     onChanged()
   }
 
@@ -360,53 +321,23 @@ function ShiftSlot({
       )}
 
       {ownAssignment && !isFutureWeek && (
-        <>
-          {pendingRequest && (
-            <p className="text-muted-foreground text-sm">בקשת החלפה נשלחה, ממתינה לאישור.</p>
-          )}
-
-          {canRequestReplacement && !showForm && (
-            <Button variant="outline" onClick={() => setShowForm(true)}>
-              בקש/י החלפה
-            </Button>
-          )}
-
-          {canRequestReplacement && showForm && (
-            <div className="flex flex-col gap-2">
-              <textarea
-                className={selectClass + ' min-h-16'}
-                placeholder="סיבה (לא חובה)"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-              />
-              <select
-                className={selectClass}
-                value={substituteId}
-                onChange={(e) => setSubstituteId(e.target.value)}
-              >
-                <option value="">הצעת מחליף/ה (לא חובה)</option>
-                {employees
-                  .filter((e) => e.id !== ownAssignment.employee_id)
-                  .map((e) => (
-                    <option key={e.id} value={e.id}>
-                      {e.full_name}
-                    </option>
-                  ))}
-              </select>
-              <div className="flex gap-2">
-                <Button className="flex-1" disabled={submitting} onClick={handleSubmitReplacement}>
-                  שליחת בקשה
-                </Button>
-                <Button variant="ghost" className="flex-1" onClick={() => setShowForm(false)}>
-                  ביטול
-                </Button>
-              </div>
-            </div>
-          )}
-        </>
+        <Button
+          variant="outline"
+          onClick={() =>
+            showInfo({
+              title: 'איזה באסה! לא מסתדר?',
+              body: 'לא ניתן לבטל משמרת בסמיכות למועד המשמרת. אנא צור/י קשר עם מנהל הבר של המשמרת.',
+            })
+          }
+        >
+          ביטול
+        </Button>
       )}
 
       {error && <p className="text-destructive text-sm">{error}</p>}
+
+      <ConfirmAssignDialog state={dialogState} onApprove={handleApprove} onDecline={handleDecline} />
+      <InfoDialog state={infoState} onClose={handleClose} />
     </div>
   )
 }

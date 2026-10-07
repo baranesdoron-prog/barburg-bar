@@ -8,6 +8,8 @@ import { cn, formatTime } from '@/lib/utils'
 import { activeWeekStart, addDays, toDateStr, shiftDateOfWeek } from '@/lib/weeklyChecklist'
 import { useConfirmAssign } from '@/hooks/useConfirmAssign'
 import { ConfirmAssignDialog } from '@/components/ConfirmAssignDialog'
+import { useInfoDialog } from '@/hooks/useInfoDialog'
+import { InfoDialog } from '@/components/InfoDialog'
 import { Button } from '@/components/ui/button'
 import type { Shift, ShiftAssignment, ShiftAssignmentRole, ShiftManagerAssignment, ShiftType } from '@/lib/types'
 
@@ -63,6 +65,7 @@ function OnboardingWizardInner() {
   const navigate = useNavigate()
   const myEmployeeId = appUser.employee_id
   const { confirmAssign, dialogState, handleApprove, handleDecline } = useConfirmAssign()
+  const { showInfo, infoState, handleClose } = useInfoDialog()
 
   const [step, setStep] = useState<Step>('pick')
   const [duty, setDuty] = useState<Duty | null>(null)
@@ -389,16 +392,36 @@ function OnboardingWizardInner() {
           namesTitle: mine
             ? canRevert
               ? 'לחיצה נוספת תבטל את השיבוץ'
-              : 'משמרת השבוע הנוכחי — לביטול יש להגיש בקשת החלפה בעמוד המשמרת'
+              : 'משמרת השבוע הנוכחי — לא ניתן לבטל'
             : undefined,
           revertible: !!mine && canRevert,
           onClick: mine
             ? canRevert
-              ? () => handleRemove([mine.id])
-              : () => navigate(`/shifts/${shift.id}`)
+              ? async () => {
+                  const ok = await confirmAssign({
+                    title: 'איזה באסה! לא מסתדר?',
+                    action: 'remove',
+                    dateLabel,
+                    typeLabel: shiftTypeLabel(shift.shift_type),
+                    hoursLabel:
+                      duty === 'area_manager'
+                        ? AREA_DUTY_HOURS[type]
+                        : `${formatTime(shift.start_time)}–${formatTime(shift.end_time)}`,
+                    positionLabel: shiftAssignmentRoleLabels[duty as 'bartender' | 'area_manager'],
+                  })
+                  if (!ok) return
+                  handleRemove([mine.id])
+                }
+              : () =>
+                  showInfo({
+                    title: 'איזה באסה! לא מסתדר?',
+                    body: 'לא ניתן לבטל משמרת בסמיכות למועד המשמרת. אנא צור/י קשר עם מנהל הבר של המשמרת.',
+                  })
             : !isFull
               ? async () => {
                   const ok = await confirmAssign({
+                    title: 'איזה כיף!',
+                    action: 'assign',
                     dateLabel,
                     typeLabel: shiftTypeLabel(shift.shift_type),
                     hoursLabel:
@@ -452,7 +475,6 @@ function OnboardingWizardInner() {
             .filter((n): n is string => !!n),
         ),
       ]
-      const anyShiftId = shifts.opening?.id ?? shifts.closing?.id
       slots.push({
         key: week,
         dateLabel,
@@ -465,19 +487,34 @@ function OnboardingWizardInner() {
           mine.length > 0
             ? canRevert
               ? 'לחיצה נוספת תבטל את השיבוץ'
-              : 'משמרת השבוע הנוכחי — לביטול יש להגיש בקשת החלפה בעמוד המשמרת'
+              : 'משמרת השבוע הנוכחי — לא ניתן לבטל'
             : undefined,
         revertible: mine.length > 0 && canRevert,
         onClick:
           mine.length > 0
             ? canRevert
-              ? () => handleRemove(mine.map((a) => a.id))
-              : anyShiftId
-                ? () => navigate(`/shifts/${anyShiftId}`)
-                : undefined
+              ? async () => {
+                  const ok = await confirmAssign({
+                    title: 'איזה באסה! לא מסתדר?',
+                    action: 'remove',
+                    dateLabel,
+                    typeLabel: 'משמרת שלמה',
+                    hoursLabel: AREA_SUPERVISOR_HOURS,
+                    positionLabel: shiftAssignmentRoleLabels.area_supervisor,
+                  })
+                  if (!ok) return
+                  handleRemove(mine.map((a) => a.id))
+                }
+              : () =>
+                  showInfo({
+                    title: 'איזה באסה! לא מסתדר?',
+                    body: 'לא ניתן לבטל משמרת בסמיכות למועד המשמרת. אנא צור/י קשר עם מנהל הבר של המשמרת.',
+                  })
             : !taken
               ? async () => {
                   const ok = await confirmAssign({
+                    title: 'איזה כיף!',
+                    action: 'assign',
                     dateLabel,
                     typeLabel: 'משמרת שלמה',
                     hoursLabel: AREA_SUPERVISOR_HOURS,
@@ -539,6 +576,8 @@ function OnboardingWizardInner() {
           : !taken
             ? async () => {
                 const ok = await confirmAssign({
+                    title: 'איזה כיף!',
+                    action: 'assign',
                   dateLabel,
                   typeLabel: 'משמרת שלמה',
                   hoursLabel,
@@ -555,6 +594,7 @@ function OnboardingWizardInner() {
   return (
     <div className="mx-auto flex max-w-md flex-col gap-4 py-10">
       <ConfirmAssignDialog state={dialogState} onApprove={handleApprove} onDecline={handleDecline} />
+      <InfoDialog state={infoState} onClose={handleClose} />
       <div className="flex items-center justify-between">
         <Button variant="ghost" size="sm" onClick={() => setStep('pick')}>
           חזרה

@@ -19,6 +19,9 @@ import { formatTime } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { useConfirmAssign, type ConfirmAssignState } from '@/hooks/useConfirmAssign'
 import { ConfirmAssignDialog } from '@/components/ConfirmAssignDialog'
+import { useInfoDialog } from '@/hooks/useInfoDialog'
+import type { InfoDialogState } from '@/hooks/useInfoDialog'
+import { InfoDialog } from '@/components/InfoDialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import type { Shift, ShiftAssignment, ShiftAssignmentRole, ShiftType } from '@/lib/types'
@@ -121,12 +124,10 @@ export function ShiftsArchive() {
 function useShiftWeeksData({
   weeks,
   canManage,
-  appUserId,
   callEnsureUpcoming,
 }: {
   weeks: string[]
   canManage: boolean
-  appUserId: string
   callEnsureUpcoming: boolean
 }) {
   const [shiftsByWeek, setShiftsByWeek] = useState<Map<string, WeekShifts>>(new Map())
@@ -137,7 +138,6 @@ function useShiftWeeksData({
   const [areaSupervisorEligible, setAreaSupervisorEligible] = useState<Employee[]>([])
   const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({})
   const [shiftCounts, setShiftCounts] = useState<Record<string, ShiftCountInfo>>({})
-  const [pendingRequestAssignmentIds, setPendingRequestAssignmentIds] = useState<Set<string>>(new Set())
 
   async function load() {
     if (weeks.length === 0) {
@@ -149,7 +149,6 @@ function useShiftWeeksData({
       setAreaSupervisorEligible([])
       setEmployeeNames({})
       setShiftCounts({})
-      setPendingRequestAssignmentIds(new Set())
       return
     }
 
@@ -158,7 +157,7 @@ function useShiftWeeksData({
     // firing requests RLS will just reject.
     if (callEnsureUpcoming && canManage) await supabase.rpc('ensure_upcoming_shifts')
 
-    const [shiftsRes, teamRes, shiftManagersRes, rolesRes, employeesRes, countsRes, myRequestsRes] = await Promise.all([
+    const [shiftsRes, teamRes, shiftManagersRes, rolesRes, employeesRes, countsRes] = await Promise.all([
       supabase
         .from('shifts_with_effective_status')
         .select('*')
@@ -176,17 +175,7 @@ function useShiftWeeksData({
         .select('id, full_name, is_senior_bartender, is_senior_area_manager, can_supervise_area')
         .order('full_name'),
       supabase.rpc('list_employee_shift_counts'),
-      // Only a bartender/self-service viewer needs this, to know whether
-      // their own current-week slot already has a pending replacement
-      // request instead of offering the button again.
-      canManage
-        ? Promise.resolve({ data: [] })
-        : supabase.from('replacement_requests').select('shift_assignment_id').eq('requested_by', appUserId).eq('status', 'pending'),
     ])
-
-    setPendingRequestAssignmentIds(
-      new Set(((myRequestsRes.data as { shift_assignment_id: string }[]) ?? []).map((r) => r.shift_assignment_id)),
-    )
 
     const shifts = (shiftsRes.data as Shift[]) ?? []
     const grouped = new Map<string, WeekShifts>()
@@ -313,7 +302,6 @@ function useShiftWeeksData({
     areaSupervisorEligible,
     employeeNames,
     shiftCounts,
-    pendingRequestAssignmentIds,
     reload: load,
   }
 }
@@ -345,9 +333,8 @@ function AllocationsList() {
     areaSupervisorEligible,
     employeeNames,
     shiftCounts,
-    pendingRequestAssignmentIds,
     reload,
-  } = useShiftWeeksData({ weeks, canManage, appUserId: appUser.id, callEnsureUpcoming: true })
+  } = useShiftWeeksData({ weeks, canManage, callEnsureUpcoming: true })
 
   // visibleWeeks: what actually renders -- the lookback week only shows up
   // if it still has a shift waiting to be closed.
@@ -401,7 +388,6 @@ function AllocationsList() {
           myEmployeeId={myEmployeeId}
           viewerCanManage={canManage}
           isAdmin={effectiveRole === 'administrator'}
-          pendingRequestAssignmentIds={pendingRequestAssignmentIds}
           onSaved={reload}
         />
       ))}
@@ -422,7 +408,6 @@ function WeekCard({
   myEmployeeId,
   viewerCanManage,
   isAdmin,
-  pendingRequestAssignmentIds,
   onSaved,
 }: {
   week: string
@@ -437,11 +422,11 @@ function WeekCard({
   myEmployeeId: string | null
   viewerCanManage: boolean
   isAdmin: boolean
-  pendingRequestAssignmentIds: Set<string>
   onSaved: () => void
 }) {
   const [error, setError] = useState<string | null>(null)
   const { confirmAssign, dialogState, handleApprove, handleDecline } = useConfirmAssign()
+  const { showInfo, infoState, handleClose } = useInfoDialog()
 
   // Existing assignments on a shift that's since been cancelled still show
   // (read-only-ish: removable, but not swappable/fillable) -- only the
@@ -504,21 +489,6 @@ function WeekCard({
     onSaved()
   }
 
-  async function handleRequestReplacement(
-    assignmentId: string,
-    reason: string | null,
-    substituteId: string | null,
-  ): Promise<string | null> {
-    const { error: requestError } = await supabase.rpc('request_replacement', {
-      p_shift_assignment_id: assignmentId,
-      p_reason: reason,
-      p_substitute_employee_id: substituteId,
-    })
-    if (requestError) return requestError.message
-    onSaved()
-    return null
-  }
-
   async function handleSwap(oldAssignmentId: string, shiftId: string, role: ShiftAssignmentRole, newEmployeeId: string) {
     setError(null)
     const { error: deleteError } = await supabase.from('shift_assignments').delete().eq('id', oldAssignmentId)
@@ -567,20 +537,6 @@ function WeekCard({
       }
     }
     onSaved()
-  }
-
-  async function handleRequestReplacementAreaSupervisor(
-    reason: string | null,
-    substituteId: string | null,
-  ): Promise<string | null> {
-    const ids = [openingAreaSupervisors[0]?.id, closingAreaSupervisors[0]?.id].filter(
-      (id): id is string => !!id,
-    )
-    for (const id of ids) {
-      const submitError = await handleRequestReplacement(id, reason, substituteId)
-      if (submitError) return submitError
-    }
-    return null
   }
 
   // Matches shift_assignments_delete_self_future_week's RLS: a bartender
@@ -648,6 +604,7 @@ function WeekCard({
   return (
     <Card>
       <ConfirmAssignDialog state={dialogState} onApprove={handleApprove} onDecline={handleDecline} />
+      <InfoDialog state={infoState} onClose={handleClose} />
       <CardHeader>
         <CardTitle className="text-base">{dateLabel}</CardTitle>
       </CardHeader>
@@ -721,11 +678,10 @@ function WeekCard({
               shiftCounts={shiftCounts}
               myEmployeeId={myEmployeeId}
               canSelfRemove={canSelfRemove}
-              pendingRequestAssignmentIds={pendingRequestAssignmentIds}
               confirmAssign={confirmAssign}
+              showInfo={showInfo}
               onAssign={handleAssign}
               onRemove={handleRemove}
-              onRequestReplacement={handleRequestReplacement}
             />
           )}
         </div>
@@ -743,12 +699,8 @@ function WeekCard({
             disabled={weekFullyCancelled}
             dateLabel={dateLabel}
             confirmAssign={confirmAssign}
-            canRequestReplacement={shifts.opening?.effective_status === 'published'}
-            hasPendingRequest={
-              !!openingAreaSupervisors[0] && pendingRequestAssignmentIds.has(openingAreaSupervisors[0].id)
-            }
+            showInfo={showInfo}
             onSet={handleSetAreaSupervisor}
-            onRequestReplacement={handleRequestReplacementAreaSupervisor}
           />
 
           {viewerCanManage ? (
@@ -787,13 +739,12 @@ function WeekCard({
               shiftCounts={shiftCounts}
               myEmployeeId={myEmployeeId}
               canSelfRemove={canSelfRemove}
-              pendingRequestAssignmentIds={pendingRequestAssignmentIds}
               openingTimeLabel={AREA_DUTY_HOURS.opening}
               closingTimeLabel={AREA_DUTY_HOURS.closing}
               confirmAssign={confirmAssign}
+              showInfo={showInfo}
               onAssign={handleAssign}
               onRemove={handleRemove}
-              onRequestReplacement={handleRequestReplacement}
             />
           )}
         </div>
@@ -1028,6 +979,8 @@ function BarManagerRow({
               onClick={async () => {
                 if (!myEmployeeId) return
                 const ok = await confirmAssign({
+                  title: 'איזה כיף!',
+                  action: 'assign',
                   dateLabel,
                   typeLabel: 'משמרת שלמה',
                   hoursLabel: AREA_SUPERVISOR_HOURS,
@@ -1122,10 +1075,8 @@ function AreaSupervisorRow({
   disabled,
   dateLabel,
   confirmAssign,
-  canRequestReplacement,
-  hasPendingRequest,
+  showInfo,
   onSet,
-  onRequestReplacement,
 }: {
   openingAssignment?: ShiftAssignment
   closingAssignment?: ShiftAssignment
@@ -1138,10 +1089,8 @@ function AreaSupervisorRow({
   disabled?: boolean
   dateLabel: string
   confirmAssign: (details: ConfirmAssignState) => Promise<boolean>
-  canRequestReplacement: boolean
-  hasPendingRequest: boolean
+  showInfo: (details: InfoDialogState) => Promise<void>
   onSet: (employeeId: string | null) => void
-  onRequestReplacement: (reason: string | null, substituteId: string | null) => Promise<string | null>
 }) {
   const [editing, setEditing] = useState(false)
   const employeeId = openingAssignment?.employee_id ?? closingAssignment?.employee_id ?? null
@@ -1198,6 +1147,8 @@ function AreaSupervisorRow({
                 onClick={async () => {
                   if (!myEmployeeId) return
                   const ok = await confirmAssign({
+                  title: 'איזה כיף!',
+                  action: 'assign',
                     dateLabel,
                     typeLabel: 'משמרת שלמה',
                     hoursLabel: AREA_SUPERVISOR_HOURS,
@@ -1237,7 +1188,18 @@ function AreaSupervisorRow({
             <span className="truncate">{name}</span>
             <button
               type="button"
-              onClick={() => onSet(null)}
+              onClick={async () => {
+                const ok = await confirmAssign({
+                  title: 'איזה באסה! לא מסתדר?',
+                  action: 'remove',
+                  dateLabel,
+                  typeLabel: 'משמרת שלמה',
+                  hoursLabel: AREA_SUPERVISOR_HOURS,
+                  positionLabel: 'מנהל/ת מתחם',
+                })
+                if (!ok) return
+                onSet(null)
+              }}
               className="text-destructive text-[10px] underline-offset-2 hover:underline"
             >
               ביטול
@@ -1245,16 +1207,23 @@ function AreaSupervisorRow({
           </div>
         )}
 
-        {isMine && !canSelfRemove && canRequestReplacement && (
-          <ReplacementRequestControl
-            name={name ?? ''}
-            hasPendingRequest={hasPendingRequest}
-            eligible={eligible}
-            onSubmit={onRequestReplacement}
-          />
+        {isMine && !canSelfRemove && (
+          <div className="flex items-center gap-1">
+            <span className="truncate">{name}</span>
+            <button
+              type="button"
+              onClick={() =>
+                showInfo({
+                  title: 'איזה באסה! לא מסתדר?',
+                  body: 'לא ניתן לבטל משמרת בסמיכות למועד המשמרת. אנא צור/י קשר עם מנהל הבר של המשמרת.',
+                })
+              }
+              className="text-destructive text-[10px] underline-offset-2 hover:underline"
+            >
+              ביטול
+            </button>
+          </div>
         )}
-
-        {isMine && !canSelfRemove && !canRequestReplacement && <span className="truncate">{name}</span>}
 
         {!employeeId && disabled && <span className="text-muted-foreground">מבוטל</span>}
 
@@ -1268,6 +1237,8 @@ function AreaSupervisorRow({
             onClick={async () => {
               if (!myEmployeeId) return
               const ok = await confirmAssign({
+                  title: 'איזה כיף!',
+                  action: 'assign',
                 dateLabel,
                 typeLabel: 'משמרת שלמה',
                 hoursLabel: AREA_SUPERVISOR_HOURS,
@@ -1370,6 +1341,8 @@ function RoleSection({
               onAssociateMe={async () => {
                 if (!openingShiftId || !myEmployeeId || !openingShift) return
                 const ok = await confirmAssign({
+                  title: 'איזה כיף!',
+                  action: 'assign',
                   dateLabel: weekLabelFormatter.format(new Date(openingShift.start_time)),
                   typeLabel: shiftTypeLabel(openingShift.shift_type),
                   hoursLabel: openingTimeLabel ?? `${formatTime(openingShift.start_time)}–${formatTime(openingShift.end_time)}`,
@@ -1394,6 +1367,8 @@ function RoleSection({
               onAssociateMe={async () => {
                 if (!closingShiftId || !myEmployeeId || !closingShift) return
                 const ok = await confirmAssign({
+                  title: 'איזה כיף!',
+                  action: 'assign',
                   dateLabel: weekLabelFormatter.format(new Date(closingShift.start_time)),
                   typeLabel: shiftTypeLabel(closingShift.shift_type),
                   hoursLabel: closingTimeLabel ?? `${formatTime(closingShift.start_time)}–${formatTime(closingShift.end_time)}`,
@@ -1416,8 +1391,9 @@ function RoleSection({
 // Self-service mode (bartender/area-manager viewers): one column per
 // shift-type, a plain read-only list of who else is on it, and a single
 // control reflecting the viewer's own status -- "שבץ אותי" if they're not
-// on it (and there's room), or their own remove/replacement-request action
-// if they are. No per-slot picking, no swapping other people.
+// on it (and there's room), or their own remove action if they are (a
+// confirm popup for a future week, an explanatory info popup for the
+// current one). No per-slot picking, no swapping other people.
 function SelfServiceRoleSection({
   label,
   role,
@@ -1431,13 +1407,12 @@ function SelfServiceRoleSection({
   shiftCounts,
   myEmployeeId,
   canSelfRemove,
-  pendingRequestAssignmentIds,
   openingTimeLabel,
   closingTimeLabel,
   confirmAssign,
+  showInfo,
   onAssign,
   onRemove,
-  onRequestReplacement,
 }: {
   label: string
   role: ShiftAssignmentRole
@@ -1451,13 +1426,12 @@ function SelfServiceRoleSection({
   shiftCounts: Record<string, ShiftCountInfo>
   myEmployeeId: string | null
   canSelfRemove: boolean
-  pendingRequestAssignmentIds: Set<string>
   openingTimeLabel?: string
   closingTimeLabel?: string
   confirmAssign: (details: ConfirmAssignState) => Promise<boolean>
+  showInfo: (details: InfoDialogState) => Promise<void>
   onAssign: (shiftId: string, employeeId: string, role: ShiftAssignmentRole) => void
   onRemove: (assignmentId: string) => void
-  onRequestReplacement: (assignmentId: string, reason: string | null, substituteId: string | null) => Promise<string | null>
 }) {
   const iAmEligible = !!myEmployeeId && eligible.some((e) => e.id === myEmployeeId)
 
@@ -1479,34 +1453,30 @@ function SelfServiceRoleSection({
           assignments={openingAssignments}
           max={max}
           role={role}
-          eligible={eligible}
           iAmEligible={iAmEligible}
           employeeNames={employeeNames}
           shiftCounts={shiftCounts}
           myEmployeeId={myEmployeeId}
           canSelfRemove={canSelfRemove}
-          pendingRequestAssignmentIds={pendingRequestAssignmentIds}
           confirmAssign={confirmAssign}
+          showInfo={showInfo}
           onAssign={onAssign}
           onRemove={onRemove}
-          onRequestReplacement={onRequestReplacement}
         />
         <SelfServiceColumn
           shift={closingShift}
           assignments={closingAssignments}
           max={max}
           role={role}
-          eligible={eligible}
           iAmEligible={iAmEligible}
           employeeNames={employeeNames}
           shiftCounts={shiftCounts}
           myEmployeeId={myEmployeeId}
           canSelfRemove={canSelfRemove}
-          pendingRequestAssignmentIds={pendingRequestAssignmentIds}
           confirmAssign={confirmAssign}
+          showInfo={showInfo}
           onAssign={onAssign}
           onRemove={onRemove}
-          onRequestReplacement={onRequestReplacement}
         />
       </div>
     </div>
@@ -1518,33 +1488,29 @@ function SelfServiceColumn({
   assignments,
   max,
   role,
-  eligible,
   iAmEligible,
   employeeNames,
   shiftCounts,
   myEmployeeId,
   canSelfRemove,
-  pendingRequestAssignmentIds,
   confirmAssign,
+  showInfo,
   onAssign,
   onRemove,
-  onRequestReplacement,
 }: {
   shift?: Shift
   assignments: ShiftAssignment[]
   max: number
   role: ShiftAssignmentRole
-  eligible: Employee[]
   iAmEligible: boolean
   employeeNames: Record<string, string>
   shiftCounts: Record<string, ShiftCountInfo>
   myEmployeeId: string | null
   canSelfRemove: boolean
-  pendingRequestAssignmentIds: Set<string>
   confirmAssign: (details: ConfirmAssignState) => Promise<boolean>
+  showInfo: (details: InfoDialogState) => Promise<void>
   onAssign: (shiftId: string, employeeId: string, role: ShiftAssignmentRole) => void
   onRemove: (assignmentId: string) => void
-  onRequestReplacement: (assignmentId: string, reason: string | null, substituteId: string | null) => Promise<string | null>
 }) {
   if (!shift) return <span className="text-muted-foreground text-xs">—</span>
 
@@ -1567,7 +1533,21 @@ function SelfServiceColumn({
           </span>
           <button
             type="button"
-            onClick={() => onRemove(mine.id)}
+            onClick={async () => {
+              const ok = await confirmAssign({
+                title: 'איזה באסה! לא מסתדר?',
+                action: 'remove',
+                dateLabel: weekLabelFormatter.format(new Date(shift.start_time)),
+                typeLabel: shiftTypeLabel(shift.shift_type),
+                hoursLabel:
+                  role === 'area_manager'
+                    ? AREA_DUTY_HOURS[shift.shift_type]
+                    : `${formatTime(shift.start_time)}–${formatTime(shift.end_time)}`,
+                positionLabel: shiftAssignmentRoleLabels[role],
+              })
+              if (!ok) return
+              onRemove(mine.id)
+            }}
             className="text-destructive text-[10px] underline-offset-2 hover:underline"
           >
             ביטול
@@ -1575,19 +1555,24 @@ function SelfServiceColumn({
         </div>
       )}
 
-      {mine && !canSelfRemove && shift.effective_status === 'published' && (
-        <ReplacementRequestControl
-          name={nameWithCount(employeeNames[mine.employee_id] ?? '—', shiftCounts, mine.employee_id, role)}
-          hasPendingRequest={pendingRequestAssignmentIds.has(mine.id)}
-          eligible={eligible}
-          onSubmit={(reason, substituteId) => onRequestReplacement(mine.id, reason, substituteId)}
-        />
-      )}
-
-      {mine && !canSelfRemove && shift.effective_status !== 'published' && (
-        <span className="truncate text-xs">
-          {nameWithCount(employeeNames[mine.employee_id] ?? '—', shiftCounts, mine.employee_id, role)}
-        </span>
+      {mine && !canSelfRemove && (
+        <div className="flex items-center gap-1">
+          <span className="truncate text-xs">
+            {nameWithCount(employeeNames[mine.employee_id] ?? '—', shiftCounts, mine.employee_id, role)}
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              showInfo({
+                title: 'איזה באסה! לא מסתדר?',
+                body: 'לא ניתן לבטל משמרת בסמיכות למועד המשמרת. אנא צור/י קשר עם מנהל הבר של המשמרת.',
+              })
+            }
+            className="text-destructive text-[10px] underline-offset-2 hover:underline"
+          >
+            ביטול
+          </button>
+        </div>
       )}
 
       {!mine && (
@@ -1600,6 +1585,8 @@ function SelfServiceColumn({
           onClick={async () => {
             if (!myEmployeeId) return
             const ok = await confirmAssign({
+                  title: 'איזה כיף!',
+                  action: 'assign',
               dateLabel: weekLabelFormatter.format(new Date(shift.start_time)),
               typeLabel: shiftTypeLabel(shift.shift_type),
               hoursLabel:
@@ -1739,101 +1726,6 @@ function SlotCell({
   )
 }
 
-// Own slot, current week: can't just drop it (that's what canSelfRemove
-// future-week self-remove is for), so offer a replacement request instead
-// -- same request_replacement() RPC and reason/substitute fields MyShifts'
-// self-service request form already uses, just inline here.
-function ReplacementRequestControl({
-  name,
-  hasPendingRequest,
-  eligible,
-  onSubmit,
-}: {
-  name: string
-  hasPendingRequest: boolean
-  eligible: Employee[]
-  onSubmit: (reason: string | null, substituteId: string | null) => Promise<string | null>
-}) {
-  const [showForm, setShowForm] = useState(false)
-  const [reason, setReason] = useState('')
-  const [substituteId, setSubstituteId] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  if (hasPendingRequest) {
-    return (
-      <div className="flex flex-col text-xs">
-        <span className="truncate">{name}</span>
-        <span className="text-muted-foreground text-[10px]">בקשת החלפה נשלחה, ממתינה לאישור</span>
-      </div>
-    )
-  }
-
-  if (!showForm) {
-    return (
-      <div className="flex items-center gap-1">
-        <span className="truncate text-xs">{name}</span>
-        <button
-          type="button"
-          onClick={() => setShowForm(true)}
-          className="text-[10px] underline-offset-2 hover:underline"
-        >
-          בקשת החלפה
-        </button>
-      </div>
-    )
-  }
-
-  async function handleSubmit() {
-    setSubmitting(true)
-    setError(null)
-    const submitError = await onSubmit(reason.trim() || null, substituteId || null)
-    setSubmitting(false)
-    if (submitError) {
-      setError(submitError)
-      return
-    }
-    setShowForm(false)
-    setReason('')
-    setSubstituteId('')
-  }
-
-  return (
-    <div className="flex flex-col gap-1 rounded-md border p-1.5">
-      <span className="truncate text-xs font-medium">{name}</span>
-      <textarea
-        className={cn(selectClass, 'h-auto min-h-10 py-1 text-[11px]')}
-        placeholder="סיבה (לא חובה)"
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-      />
-      <select className={cn(selectClass, 'text-[11px]')} value={substituteId} onChange={(e) => setSubstituteId(e.target.value)}>
-        <option value="">הצעת מחליף/ה</option>
-        {eligible.map((e) => (
-          <option key={e.id} value={e.id}>
-            {e.full_name}
-          </option>
-        ))}
-      </select>
-      <div className="flex gap-1">
-        <Button type="button" size="sm" className="h-6 flex-1 px-1 text-[10px]" disabled={submitting} onClick={handleSubmit}>
-          שליחה
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="h-6 flex-1 px-1 text-[10px]"
-          onClick={() => setShowForm(false)}
-        >
-          ביטול
-        </Button>
-      </div>
-      {error && <p className="text-destructive text-[10px]">{error}</p>}
-    </div>
-  )
-}
-
 // ---------------------------------------------------------------------
 // Archive (read-only, unchanged behavior)
 // ---------------------------------------------------------------------
@@ -1863,9 +1755,8 @@ function ArchiveList() {
     areaSupervisorEligible,
     employeeNames,
     shiftCounts,
-    pendingRequestAssignmentIds,
     reload,
-  } = useShiftWeeksData({ weeks, canManage, appUserId: appUser.id, callEnsureUpcoming: false })
+  } = useShiftWeeksData({ weeks, canManage, callEnsureUpcoming: false })
 
   // The lookback week (the one at FETCH_FROM) is shared with the
   // current/future list -- it's shown there too as long as it still needs
@@ -1919,7 +1810,6 @@ function ArchiveList() {
           myEmployeeId={myEmployeeId}
           viewerCanManage={canManage}
           isAdmin={effectiveRole === 'administrator'}
-          pendingRequestAssignmentIds={pendingRequestAssignmentIds}
           onSaved={reload}
         />
       ))}
