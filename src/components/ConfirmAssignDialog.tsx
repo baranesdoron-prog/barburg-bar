@@ -17,7 +17,7 @@ export function ConfirmAssignDialog({
       <div className="bg-background w-full max-w-sm rounded-lg border p-5 shadow-lg">
         <p className="text-lg font-semibold">{state.title}</p>
         <p className="text-muted-foreground mt-2 text-sm">
-          {state.action === 'assign' ? 'את/ה משובץ/ת למשמרת' : 'את/ה מוסר/ת את עצמך ממשמרת'} {state.typeLabel}{' '}
+          {state.action === 'assign' ? 'את/ה משובץ/ת למשמרת' : 'את/ה מסיר/ה את עצמך ממשמרת'} {state.typeLabel}{' '}
           בתאריך {state.dateLabel}, בשעות {state.hoursLabel}, בתור {state.positionLabel}.
         </p>
         <div className="mt-4 flex gap-2">
