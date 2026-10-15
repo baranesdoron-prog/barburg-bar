@@ -205,6 +205,7 @@ export interface ShiftReportRow {
       employee_name: string
       status: AttendanceStatus | null
       note: string | null
+      role: ShiftAssignmentRole
     }[]
     journal_entries: {
       category: JournalCategory

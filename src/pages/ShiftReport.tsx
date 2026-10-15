@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
-import { attendanceStatusLabels, shiftTypeLabel } from '@/lib/shiftLabels'
+import { attendanceStatusLabels, shiftAssignmentRoleLabels, shiftTypeLabel } from '@/lib/shiftLabels'
 import { journalCategoryLabels } from '@/lib/journalLabels'
 import { purchaseOrderStatusLabels, purchaseOrderStatusBadgeClass } from '@/lib/purchaseOrderLabels'
 import { cn, formatDateTime } from '@/lib/utils'
@@ -97,7 +97,10 @@ export function ShiftReport() {
           )}
           {snapshot.attendance.map((a, i) => (
             <div key={i} className="flex items-center justify-between text-sm">
-              <span>{a.employee_name}</span>
+              <span>
+                {a.employee_name}
+                <span className="text-muted-foreground"> · {shiftAssignmentRoleLabels[a.role]}</span>
+              </span>
               <span className="text-muted-foreground">
                 {a.status ? attendanceStatusLabels[a.status] : '—'}
               </span>
