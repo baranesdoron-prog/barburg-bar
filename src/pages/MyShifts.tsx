@@ -83,7 +83,12 @@ function MyShiftsView({ assignedOnly }: { assignedOnly: boolean }) {
 
     const grouped = new Map<string, WeekShifts>()
     for (const shift of shifts) {
-      const shiftAssignments = assignments.filter((a) => a.shift_id === shift.id)
+      // This page is bartender self-service only (handleJoin always
+      // inserts that role) -- scope everything shown here to bartender
+      // rows, not every assignment on the shift regardless of duty.
+      const shiftAssignments = assignments.filter(
+        (a) => a.shift_id === shift.id && a.assignment_role === 'bartender',
+      )
       const ownAssignment = shiftAssignments.find((a) => a.employee_id === appUser.employee_id) ?? null
 
       const item: UpcomingShift = {
@@ -175,15 +180,15 @@ function MyShiftsView({ assignedOnly }: { assignedOnly: boolean }) {
 function WeekRow({
   week,
   weekShifts,
-  employees,
   currentWeekStart,
+  employees,
   employeeId,
   onChanged,
 }: {
   week: string
   weekShifts: WeekShifts
-  employees: Employee[]
   currentWeekStart: string
+  employees: Employee[]
   employeeId: string
   onChanged: () => void
 }) {
@@ -198,54 +203,106 @@ function WeekRow({
         <span className="font-medium">שבוע {dateLabel}</span>
         <span className="text-muted-foreground text-xs">מנהל/ת בר: {managerName}</span>
       </div>
-      {weekShifts.opening && (
-        <ShiftSlot
-          item={weekShifts.opening}
-          currentWeekStart={currentWeekStart}
-          employeeId={employeeId}
-          onChanged={onChanged}
-        />
-      )}
-      {weekShifts.opening && weekShifts.closing && <div className="border-t" />}
-      {weekShifts.closing && (
-        <ShiftSlot
-          item={weekShifts.closing}
-          currentWeekStart={currentWeekStart}
-          employeeId={employeeId}
-          onChanged={onChanged}
-        />
-      )}
+      {weekShifts.opening && <ShiftStatusLine item={weekShifts.opening} />}
+      {weekShifts.closing && <ShiftStatusLine item={weekShifts.closing} />}
+      <BartenderDuty
+        weekShifts={weekShifts}
+        currentWeekStart={currentWeekStart}
+        employeeId={employeeId}
+        onChanged={onChanged}
+      />
     </div>
   )
 }
 
-function ShiftSlot({
-  item,
+// Read-only per-instance status (each half of the evening has its own
+// lifecycle) plus the self check-in control, which still needs the
+// specific shift_assignment_id for whichever instance is currently
+// check-in-able. The actual join/leave decision lives in BartenderDuty
+// below, one control for the whole evening.
+function ShiftStatusLine({ item }: { item: UpcomingShift }) {
+  const { shift, ownAssignment } = item
+
+  return (
+    <div className="flex flex-col gap-1 border-t pt-2 first:border-t-0 first:pt-0">
+      <div className="flex items-center justify-between">
+        <span className="font-medium">{shiftTypeLabel(shift.shift_type)}</span>
+        <span
+          className={cn(
+            'rounded-full px-2 py-1 text-xs font-medium',
+            effectiveStatusBadgeClass[shift.effective_status],
+          )}
+        >
+          {effectiveStatusLabels[shift.effective_status]}
+        </span>
+      </div>
+      <p className="text-muted-foreground text-xs">
+        {formatDateTime(shift.start_time)} – {formatDateTime(shift.end_time)}
+      </p>
+      {(shift.effective_status === 'active' || shift.effective_status === 'waiting_for_closure') &&
+        ownAssignment && <SelfCheckIn shiftAssignmentId={ownAssignment.id} />}
+    </div>
+  )
+}
+
+// Bartender is a whole-evening duty: joining/leaving always covers both
+// of the week's shift instances at once (one shift_assignments row
+// each), same mechanism as the manager-side unified duty in Shifts.tsx.
+function BartenderDuty({
+  weekShifts,
   currentWeekStart,
   employeeId,
   onChanged,
 }: {
-  item: UpcomingShift
+  weekShifts: WeekShifts
   currentWeekStart: string
   employeeId: string
   onChanged: () => void
 }) {
-  const { shift, assignedStaff, ownAssignment } = item
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const { confirmAssign, dialogState, handleApprove, handleDecline } = useConfirmAssign()
   const { showInfo, infoState, handleClose } = useInfoDialog()
 
-  const isFutureWeek = shift.week_start > currentWeekStart
-  const isFull = shift.required_staff_count !== null && assignedStaff.length >= shift.required_staff_count
+  const openingShift = weekShifts.opening?.shift
+  const closingShift = weekShifts.closing?.shift
+  const anyShift = openingShift ?? closingShift
+  if (!anyShift) return null
+
+  const isFutureWeek = anyShift.week_start > currentWeekStart
+
+  const byEmployee = new Map<string, { name: string; assignmentIds: string[] }>()
+  for (const item of [weekShifts.opening, weekShifts.closing]) {
+    if (!item) continue
+    for (const s of item.assignedStaff) {
+      const existing = byEmployee.get(s.employeeId)
+      if (existing) existing.assignmentIds.push(s.assignmentId)
+      else byEmployee.set(s.employeeId, { name: s.name, assignmentIds: [s.assignmentId] })
+    }
+  }
+  const bartenders = [...byEmployee.entries()].map(([id, v]) => ({ employeeId: id, ...v }))
+  const mine = bartenders.find((b) => b.employeeId === employeeId)
+  const max = openingShift?.required_staff_count ?? closingShift?.required_staff_count ?? null
+  const isFull = max !== null && bartenders.length >= max
+
+  const hoursLabel =
+    openingShift && closingShift
+      ? `${formatTime(openingShift.start_time)}–${formatTime(closingShift.end_time)}`
+      : openingShift
+        ? `${formatTime(openingShift.start_time)}–${formatTime(openingShift.end_time)}`
+        : closingShift
+          ? `${formatTime(closingShift.start_time)}–${formatTime(closingShift.end_time)}`
+          : ''
 
   async function handleJoin() {
     setSubmitting(true)
     setError(null)
 
-    const { error: joinError } = await supabase
-      .from('shift_assignments')
-      .insert({ shift_id: shift.id, employee_id: employeeId })
+    const rows = [openingShift?.id, closingShift?.id]
+      .filter((id): id is string => !!id)
+      .map((shift_id) => ({ shift_id, employee_id: employeeId, assignment_role: 'bartender' as const }))
+
+    const { error: joinError } = await supabase.from('shift_assignments').insert(rows)
 
     setSubmitting(false)
 
@@ -258,22 +315,9 @@ function ShiftSlot({
   }
 
   async function handleLeave() {
-    if (!ownAssignment) return
+    if (!mine) return
 
-    const ok = await confirmAssign({
-      title: 'איזה באסה! לא מסתדר?',
-      action: 'remove',
-      dateLabel: weekLabelFormatter.format(new Date(shift.start_time)),
-      typeLabel: shiftTypeLabel(shift.shift_type),
-      hoursLabel: `${formatTime(shift.start_time)}–${formatTime(shift.end_time)}`,
-      positionLabel: shiftAssignmentRoleLabels[ownAssignment.assignment_role],
-    })
-    if (!ok) return
-
-    const { error: leaveError } = await supabase
-      .from('shift_assignments')
-      .delete()
-      .eq('id', ownAssignment.id)
+    const { error: leaveError } = await supabase.from('shift_assignments').delete().in('id', mine.assignmentIds)
 
     if (leaveError) {
       setError('לא ניתן לעזוב את המשמרת')
@@ -284,43 +328,39 @@ function ShiftSlot({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <span className="font-medium">{shiftTypeLabel(shift.shift_type)}</span>
-        <span
-          className={cn(
-            'rounded-full px-2 py-1 text-xs font-medium',
-            effectiveStatusBadgeClass[shift.effective_status],
-          )}
-        >
-          {effectiveStatusLabels[shift.effective_status]}
-        </span>
-      </div>
-      <p className="text-muted-foreground text-sm">
-        {formatDateTime(shift.start_time)} – {formatDateTime(shift.end_time)}
-      </p>
-
+    <div className="flex flex-col gap-2 border-t pt-2">
       <p className="text-sm">
-        <span className="text-muted-foreground">משובצים: </span>
-        {assignedStaff.length > 0 ? assignedStaff.map((s) => s.name).join(', ') : 'אין עדיין משובצים'}
+        <span className="text-muted-foreground">ברמנים/יות: </span>
+        {bartenders.length > 0 ? bartenders.map((b) => b.name).join(', ') : 'אין עדיין משובצים'}
       </p>
 
-      {(shift.effective_status === 'active' || shift.effective_status === 'waiting_for_closure') &&
-        ownAssignment && <SelfCheckIn shiftAssignmentId={ownAssignment.id} />}
-
-      {!ownAssignment && (
+      {!mine && (
         <Button disabled={isFull || submitting} onClick={handleJoin}>
           {isFull ? 'המשמרת מלאה' : 'הצטרפות למשמרת'}
         </Button>
       )}
 
-      {ownAssignment && isFutureWeek && (
-        <Button variant="outline" onClick={handleLeave}>
+      {mine && isFutureWeek && (
+        <Button
+          variant="outline"
+          onClick={async () => {
+            const ok = await confirmAssign({
+              title: 'איזה באסה! לא מסתדר?',
+              action: 'remove',
+              dateLabel: weekLabelFormatter.format(new Date(anyShift.start_time)),
+              typeLabel: 'משמרת שלמה',
+              hoursLabel,
+              positionLabel: shiftAssignmentRoleLabels.bartender,
+            })
+            if (!ok) return
+            handleLeave()
+          }}
+        >
           עזיבת משמרת
         </Button>
       )}
 
-      {ownAssignment && !isFutureWeek && (
+      {mine && !isFutureWeek && (
         <Button
           variant="outline"
           onClick={() =>

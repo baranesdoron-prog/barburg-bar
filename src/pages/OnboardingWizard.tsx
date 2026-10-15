@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
-import { shiftTypeLabel, shiftAssignmentRoleLabels } from '@/lib/shiftLabels'
+import { shiftAssignmentRoleLabels } from '@/lib/shiftLabels'
 import { cn, formatTime } from '@/lib/utils'
 import { activeWeekStart, addDays, toDateStr, shiftDateOfWeek } from '@/lib/weeklyChecklist'
 import { useConfirmAssign } from '@/hooks/useConfirmAssign'
@@ -47,7 +47,7 @@ const LIST_LABELS: Record<Duty, string> = {
 
 // Area manager and area supervisor run on their own hours, distinct from
 // the shift's own bartender-facing start/end times -- matches Shifts.tsx.
-const AREA_DUTY_HOURS = { opening: '19:45–22:00', closing: '22:00–00:30' }
+// Both are whole-evening duties, one continuous window.
 const AREA_SUPERVISOR_HOURS = '19:45–00:30'
 
 type Step = 'pick' | 'shifts'
@@ -179,12 +179,17 @@ function OnboardingWizardInner() {
     loadShifts()
   }
 
-  async function handleAssign(shift: Shift, role: 'bartender' | 'area_manager') {
+  // Bartender, area manager and area supervisor are all whole-evening
+  // duties: one self-associate click covers both the week's shift
+  // instances at once (one shift_assignments row each), same mechanism
+  // area_supervisor already used, now shared by all three.
+  async function handleAssignDuty(week: WeekShifts, role: ShiftAssignmentRole) {
     if (!myEmployeeId) return
+    const shiftIds = [week.opening?.id, week.closing?.id].filter((v): v is string => !!v)
+    if (shiftIds.length === 0) return
     setError(null)
-    const { error: insertError } = await supabase
-      .from('shift_assignments')
-      .insert({ shift_id: shift.id, employee_id: myEmployeeId, assignment_role: role })
+    const rows = shiftIds.map((shift_id) => ({ shift_id, employee_id: myEmployeeId, assignment_role: role }))
+    const { error: insertError } = await supabase.from('shift_assignments').insert(rows)
     if (insertError) {
       setError(friendlyAssignmentError(insertError))
       return
@@ -202,25 +207,6 @@ function OnboardingWizardInner() {
       return
     }
     setAssignedCount((c) => Math.max(0, c - 1))
-    await loadShifts()
-  }
-
-  async function handleAssignAreaSupervisor(week: WeekShifts) {
-    if (!myEmployeeId) return
-    const shiftIds = [week.opening?.id, week.closing?.id].filter((v): v is string => !!v)
-    if (shiftIds.length === 0) return
-    setError(null)
-    const rows = shiftIds.map((shift_id) => ({
-      shift_id,
-      employee_id: myEmployeeId,
-      assignment_role: 'area_supervisor' as const,
-    }))
-    const { error: insertError } = await supabase.from('shift_assignments').insert(rows)
-    if (insertError) {
-      setError(friendlyAssignmentError(insertError))
-      return
-    }
-    setAssignedCount((c) => c + 1)
     await loadShifts()
   }
 
@@ -345,99 +331,11 @@ function OnboardingWizardInner() {
 
   const slots: Slot[] = []
 
-  if (duty === 'bartender' || duty === 'area_manager') {
-    for (const week of weeks) {
-      const shifts = shiftsByWeek.get(week) ?? {}
-      const dateLabel = shortDateFormatter.format(shiftDateOfWeek(week))
-      const canRevert = week > currentWeek
-      const weekBarManagerId = shiftManagerByWeek.get(week)
-      const barManagerName = (weekBarManagerId && employeeNames.get(weekBarManagerId)) || '— טרם שובץ —'
-      for (const type of ['opening', 'closing'] as ShiftType[]) {
-        const shift = shifts[type]
-        if (!shift) continue
-        if (shift.status === 'cancelled') {
-          slots.push({
-            key: shift.id,
-            dateLabel,
-            typeLabel: shiftTypeLabel(shift.shift_type),
-            hoursLabel:
-              duty === 'area_manager'
-                ? AREA_DUTY_HOURS[type]
-                : `${formatTime(shift.start_time)}–${formatTime(shift.end_time)}`,
-            barManagerName,
-            peerNames: [],
-            status: 'cancelled',
-          })
-          continue
-        }
-        const assignments = (assignmentsByShift.get(shift.id) ?? []).filter((a) => a.assignment_role === duty)
-        const max = duty === 'bartender' ? shift.required_staff_count : 2
-        const mine = assignments.find((a) => a.employee_id === myEmployeeId)
-        const isFull = max !== null && assignments.length >= max
-        const peerNames = assignments
-          .filter((a) => a.employee_id !== myEmployeeId)
-          .map((a) => employeeNames.get(a.employee_id))
-          .filter((n): n is string => !!n)
-        slots.push({
-          key: shift.id,
-          dateLabel,
-          typeLabel: shiftTypeLabel(shift.shift_type),
-          hoursLabel:
-            duty === 'area_manager'
-              ? AREA_DUTY_HOURS[type]
-              : `${formatTime(shift.start_time)}–${formatTime(shift.end_time)}`,
-          barManagerName,
-          peerNames,
-          status: mine ? 'mine' : isFull ? 'full' : 'open',
-          namesTitle: mine
-            ? canRevert
-              ? 'לחיצה נוספת תבטל את השיבוץ'
-              : 'משמרת השבוע הנוכחי — לא ניתן לבטל'
-            : undefined,
-          revertible: !!mine && canRevert,
-          onClick: mine
-            ? canRevert
-              ? async () => {
-                  const ok = await confirmAssign({
-                    title: 'איזה באסה! לא מסתדר?',
-                    action: 'remove',
-                    dateLabel,
-                    typeLabel: shiftTypeLabel(shift.shift_type),
-                    hoursLabel:
-                      duty === 'area_manager'
-                        ? AREA_DUTY_HOURS[type]
-                        : `${formatTime(shift.start_time)}–${formatTime(shift.end_time)}`,
-                    positionLabel: shiftAssignmentRoleLabels[duty as 'bartender' | 'area_manager'],
-                  })
-                  if (!ok) return
-                  handleRemove([mine.id])
-                }
-              : () =>
-                  showInfo({
-                    title: 'איזה באסה! לא מסתדר?',
-                    body: 'לא ניתן לבטל משמרת בסמיכות למועד המשמרת. אנא צור/י קשר עם מנהל הבר של המשמרת.',
-                  })
-            : !isFull
-              ? async () => {
-                  const ok = await confirmAssign({
-                    title: 'איזה כיף!',
-                    action: 'assign',
-                    dateLabel,
-                    typeLabel: shiftTypeLabel(shift.shift_type),
-                    hoursLabel:
-                      duty === 'area_manager'
-                        ? AREA_DUTY_HOURS[type]
-                        : `${formatTime(shift.start_time)}–${formatTime(shift.end_time)}`,
-                    positionLabel: shiftAssignmentRoleLabels[duty as 'bartender' | 'area_manager'],
-                  })
-                  if (!ok) return
-                  handleAssign(shift, duty as 'bartender' | 'area_manager')
-                }
-              : undefined,
-        })
-      }
-    }
-  } else if (duty === 'area_supervisor') {
+  // Bartender, area manager and area supervisor are all whole-evening
+  // duties now: one slot per week (not per shift instance), capped at a
+  // duty-specific number of people, a pick covering both shift instances
+  // at once.
+  if (duty === 'bartender' || duty === 'area_manager' || duty === 'area_supervisor') {
     for (const week of weeks) {
       const shifts = shiftsByWeek.get(week) ?? {}
       const dateLabel = shortDateFormatter.format(shiftDateOfWeek(week))
@@ -446,27 +344,52 @@ function OnboardingWizardInner() {
       const barManagerName = (weekBarManagerId && employeeNames.get(weekBarManagerId)) || '— טרם שובץ —'
       const openingActive = shifts.opening && shifts.opening.status !== 'cancelled'
       const closingActive = shifts.closing && shifts.closing.status !== 'cancelled'
+
+      // Bartender hours follow the shift's own real start/end times
+      // (spanning the whole evening); area manager/supervisor use the
+      // same fixed display-only window as Shifts.tsx.
+      const hoursLabel =
+        duty === 'bartender'
+          ? shifts.opening && shifts.closing
+            ? `${formatTime(shifts.opening.start_time)}–${formatTime(shifts.closing.end_time)}`
+            : shifts.opening
+              ? `${formatTime(shifts.opening.start_time)}–${formatTime(shifts.opening.end_time)}`
+              : shifts.closing
+                ? `${formatTime(shifts.closing.start_time)}–${formatTime(shifts.closing.end_time)}`
+                : ''
+          : AREA_SUPERVISOR_HOURS
+
       if (!openingActive && !closingActive && (shifts.opening || shifts.closing)) {
         slots.push({
           key: week,
           dateLabel,
           typeLabel: 'משמרת שלמה',
-          hoursLabel: AREA_SUPERVISOR_HOURS,
+          hoursLabel,
           barManagerName,
           peerNames: [],
           status: 'cancelled',
         })
         continue
       }
+
       const openingAssignments = (assignmentsByShift.get(shifts.opening?.id ?? '') ?? []).filter(
-        (a) => a.assignment_role === 'area_supervisor',
+        (a) => a.assignment_role === duty,
       )
       const closingAssignments = (assignmentsByShift.get(shifts.closing?.id ?? '') ?? []).filter(
-        (a) => a.assignment_role === 'area_supervisor',
+        (a) => a.assignment_role === duty,
       )
       const allAssignments = [...openingAssignments, ...closingAssignments]
-      const taken = allAssignments.length > 0
+      // required_staff_count is now one evening-wide number (ShiftForm
+      // keeps both shift rows in sync); area_manager/area_supervisor caps
+      // aren't backed by a column, same as Shifts.tsx.
+      const max =
+        duty === 'bartender'
+          ? (shifts.opening?.required_staff_count ?? shifts.closing?.required_staff_count ?? 3)
+          : duty === 'area_manager'
+            ? 2
+            : 1
       const mine = allAssignments.filter((a) => a.employee_id === myEmployeeId)
+      const isFull = allAssignments.length >= max
       const peerNames = [
         ...new Set(
           allAssignments
@@ -475,14 +398,15 @@ function OnboardingWizardInner() {
             .filter((n): n is string => !!n),
         ),
       ]
+
       slots.push({
         key: week,
         dateLabel,
         typeLabel: 'משמרת שלמה',
-        hoursLabel: AREA_SUPERVISOR_HOURS,
+        hoursLabel,
         barManagerName,
         peerNames,
-        status: mine.length > 0 ? 'mine' : taken ? 'full' : 'open',
+        status: mine.length > 0 ? 'mine' : isFull ? 'full' : 'open',
         namesTitle:
           mine.length > 0
             ? canRevert
@@ -499,8 +423,8 @@ function OnboardingWizardInner() {
                     action: 'remove',
                     dateLabel,
                     typeLabel: 'משמרת שלמה',
-                    hoursLabel: AREA_SUPERVISOR_HOURS,
-                    positionLabel: shiftAssignmentRoleLabels.area_supervisor,
+                    hoursLabel,
+                    positionLabel: shiftAssignmentRoleLabels[duty],
                   })
                   if (!ok) return
                   handleRemove(mine.map((a) => a.id))
@@ -510,18 +434,18 @@ function OnboardingWizardInner() {
                     title: 'איזה באסה! לא מסתדר?',
                     body: 'לא ניתן לבטל משמרת בסמיכות למועד המשמרת. אנא צור/י קשר עם מנהל הבר של המשמרת.',
                   })
-            : !taken
+            : !isFull
               ? async () => {
                   const ok = await confirmAssign({
                     title: 'איזה כיף!',
                     action: 'assign',
                     dateLabel,
                     typeLabel: 'משמרת שלמה',
-                    hoursLabel: AREA_SUPERVISOR_HOURS,
-                    positionLabel: shiftAssignmentRoleLabels.area_supervisor,
+                    hoursLabel,
+                    positionLabel: shiftAssignmentRoleLabels[duty],
                   })
                   if (!ok) return
-                  handleAssignAreaSupervisor(shifts)
+                  handleAssignDuty(shifts, duty)
                 }
               : undefined,
       })

@@ -16,10 +16,37 @@ interface RowState {
   note: string
 }
 
+// Bartender/area manager/area supervisor are whole-evening duties now --
+// the same person holds a shift_assignments row on both the opening and
+// closing shift instance covered here. Group by employee so they show up
+// once to mark, not twice; saving still writes the same status/note to
+// every one of their rows so nothing reading attendance_records by
+// shift_assignment_id sees a gap.
+interface AttendanceGroup {
+  employeeId: string
+  role: ShiftAssignment['assignment_role']
+  assignmentIds: string[]
+}
+
+function groupByEmployee(assignments: ShiftAssignment[]): AttendanceGroup[] {
+  const order: string[] = []
+  const byEmployee = new Map<string, AttendanceGroup>()
+  for (const a of assignments) {
+    const existing = byEmployee.get(a.employee_id)
+    if (existing) {
+      existing.assignmentIds.push(a.id)
+    } else {
+      byEmployee.set(a.employee_id, { employeeId: a.employee_id, role: a.assignment_role, assignmentIds: [a.id] })
+      order.push(a.employee_id)
+    }
+  }
+  return order.map((employeeId) => byEmployee.get(employeeId)!)
+}
+
 const statusOptions: AttendanceStatus[] = ['present', 'late', 'absent']
 
 export function AttendanceStep({ shiftIds, onSaved }: { shiftIds: string[]; onSaved?: () => void }) {
-  const [assignments, setAssignments] = useState<ShiftAssignment[]>([])
+  const [groups, setGroups] = useState<AttendanceGroup[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [rows, setRows] = useState<Record<string, RowState>>({})
   const [loaded, setLoaded] = useState(false)
@@ -29,7 +56,7 @@ export function AttendanceStep({ shiftIds, onSaved }: { shiftIds: string[]; onSa
 
   useEffect(() => {
     if (shiftIds.length === 0) {
-      setAssignments([])
+      setGroups([])
       setLoaded(true)
       return
     }
@@ -41,7 +68,8 @@ export function AttendanceStep({ shiftIds, onSaved }: { shiftIds: string[]; onSa
       ])
 
       const loadedAssignments = (assignmentsRes.data as ShiftAssignment[]) ?? []
-      setAssignments(loadedAssignments)
+      const loadedGroups = groupByEmployee(loadedAssignments)
+      setGroups(loadedGroups)
       setEmployees((employeesRes.data as Employee[]) ?? [])
 
       if (loadedAssignments.length > 0) {
@@ -54,11 +82,11 @@ export function AttendanceStep({ shiftIds, onSaved }: { shiftIds: string[]; onSa
           )
 
         const initial: Record<string, RowState> = {}
-        for (const assignment of loadedAssignments) {
-          const record = (existing as AttendanceRecord[] | null)?.find(
-            (r) => r.shift_assignment_id === assignment.id,
+        for (const group of loadedGroups) {
+          const record = (existing as AttendanceRecord[] | null)?.find((r) =>
+            group.assignmentIds.includes(r.shift_assignment_id),
           )
-          initial[assignment.id] = { status: record?.status ?? null, note: record?.note ?? '' }
+          initial[group.employeeId] = { status: record?.status ?? null, note: record?.note ?? '' }
         }
         setRows(initial)
       }
@@ -75,13 +103,15 @@ export function AttendanceStep({ shiftIds, onSaved }: { shiftIds: string[]; onSa
     setError(null)
     setSaved(false)
 
-    const payload = Object.entries(rows)
-      .filter(([, row]) => row.status !== null)
-      .map(([assignmentId, row]) => ({
+    const payload = groups.flatMap((group) => {
+      const row = rows[group.employeeId]
+      if (!row || row.status === null) return []
+      return group.assignmentIds.map((assignmentId) => ({
         shift_assignment_id: assignmentId,
         status: row.status,
         note: row.note.trim() || null,
       }))
+    })
 
     const { error: saveError } = await supabase
       .from('attendance_records')
@@ -104,14 +134,14 @@ export function AttendanceStep({ shiftIds, onSaved }: { shiftIds: string[]; onSa
 
   return (
     <div className="flex flex-col gap-4">
-      {assignments.length === 0 && (
+      {groups.length === 0 && (
         <p className="text-muted-foreground text-sm">אין עובדים משובצים למשמרת זו.</p>
       )}
-      {assignments.map((assignment) => (
-        <div key={assignment.id} className="flex flex-col gap-2 rounded-md border p-3">
+      {groups.map((group) => (
+        <div key={group.employeeId} className="flex flex-col gap-2 rounded-md border p-3">
           <span className="text-sm font-medium">
-            {employeeNames.get(assignment.employee_id) ?? '—'}
-            <span className="text-muted-foreground font-normal"> · {shiftAssignmentRoleLabels[assignment.assignment_role]}</span>
+            {employeeNames.get(group.employeeId) ?? '—'}
+            <span className="text-muted-foreground font-normal"> · {shiftAssignmentRoleLabels[group.role]}</span>
           </span>
           <div className="flex gap-2">
             {statusOptions.map((option) => (
@@ -120,14 +150,14 @@ export function AttendanceStep({ shiftIds, onSaved }: { shiftIds: string[]; onSa
                 type="button"
                 className={cn(
                   'flex-1 rounded-md border px-2 py-2 text-sm font-medium transition-colors',
-                  rows[assignment.id]?.status === option
+                  rows[group.employeeId]?.status === option
                     ? 'bg-primary text-primary-foreground'
                     : 'hover:bg-accent',
                 )}
                 onClick={() =>
                   setRows((prev) => ({
                     ...prev,
-                    [assignment.id]: { ...prev[assignment.id], status: option },
+                    [group.employeeId]: { ...prev[group.employeeId], status: option },
                   }))
                 }
               >
@@ -138,11 +168,11 @@ export function AttendanceStep({ shiftIds, onSaved }: { shiftIds: string[]; onSa
           <input
             className="border-input h-9 rounded-md border bg-transparent px-3 text-sm outline-none"
             placeholder="הערה (לא חובה)"
-            value={rows[assignment.id]?.note ?? ''}
+            value={rows[group.employeeId]?.note ?? ''}
             onChange={(e) =>
               setRows((prev) => ({
                 ...prev,
-                [assignment.id]: { ...prev[assignment.id], note: e.target.value },
+                [group.employeeId]: { ...prev[group.employeeId], note: e.target.value },
               }))
             }
           />
@@ -152,7 +182,7 @@ export function AttendanceStep({ shiftIds, onSaved }: { shiftIds: string[]; onSa
       {error && <p className="text-destructive text-sm">{error}</p>}
       {saved && <p className="text-sm text-green-600">הנוכחות נשמרה בהצלחה.</p>}
 
-      <Button disabled={saving || assignments.length === 0} onClick={handleSave}>
+      <Button disabled={saving || groups.length === 0} onClick={handleSave}>
         שמירת נוכחות
       </Button>
     </div>

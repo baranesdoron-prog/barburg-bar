@@ -58,10 +58,8 @@ function weekNeedsClosing(shifts: WeekShifts) {
 // Area manager and area supervisor run on their own hours, distinct from
 // the shift's own bartender-facing start/end times shown in ColumnHeader --
 // display only, doesn't change shifts.start_time or any self-assign window.
-const AREA_DUTY_HOURS = { opening: '19:45–22:00', closing: '22:00–00:30' }
-
-// Area supervisor is one continuous shift for the whole night, not two
-// separate opening/closing windows like area manager.
+// Both are whole-evening duties, one continuous window, not split into
+// opening/closing like bartender's real shift-backed hours.
 const AREA_SUPERVISOR_HOURS = '19:45–00:30'
 
 interface Employee {
@@ -103,8 +101,34 @@ function nameWithCount(name: string, shiftCounts: Record<string, ShiftCountInfo>
   return `${name} (${info?.count ?? 0})${info?.senior ? ' ⭐' : ''}`
 }
 
-function hasSenior(assignments: ShiftAssignment[], shiftCounts: Record<string, ShiftCountInfo>, duty: Duty) {
-  return assignments.some((a) => shiftCounts[a.employee_id]?.[duty]?.senior)
+function hasSenior(people: { employee_id: string }[], shiftCounts: Record<string, ShiftCountInfo>, duty: Duty) {
+  return people.some((p) => shiftCounts[p.employee_id]?.[duty]?.senior)
+}
+
+// Bartender and area manager are whole-evening duties now, same mechanism
+// area_supervisor already used: one person's pick is really two
+// shift_assignments rows (opening + closing), always touched together.
+// This merges those two rows-per-shift lists into one list, one entry per
+// distinct employee, carrying every row id that needs to move as a unit
+// (normally 2, but tolerates 1 for data left over from before this
+// became a whole-evening duty -- self-heals to 2 the next time that
+// person is touched, since every add/swap always writes both rows).
+interface DutyPerson {
+  employee_id: string
+  assignmentIds: string[]
+}
+
+function mergeDutyPeople(openingAssignments: ShiftAssignment[], closingAssignments: ShiftAssignment[]): DutyPerson[] {
+  const order: string[] = []
+  const idsByEmployee = new Map<string, string[]>()
+  for (const a of [...openingAssignments, ...closingAssignments]) {
+    if (!idsByEmployee.has(a.employee_id)) {
+      idsByEmployee.set(a.employee_id, [])
+      order.push(a.employee_id)
+    }
+    idsByEmployee.get(a.employee_id)!.push(a.id)
+  }
+  return order.map((employee_id) => ({ employee_id, assignmentIds: idsByEmployee.get(employee_id)! }))
 }
 
 export function Shifts() {
@@ -448,6 +472,25 @@ function WeekCard({
   const openingAreaSupervisors = openingAll.filter((a) => a.assignment_role === 'area_supervisor')
   const closingAreaSupervisors = closingAll.filter((a) => a.assignment_role === 'area_supervisor')
 
+  // Anyone already holding any duty on either of this week's shifts -- a
+  // manager's picker excludes these from "add new" regardless of which
+  // duty they're currently in, since one person can't hold two duties the
+  // same night (the shift_assignments unique constraint would reject it).
+  const weekTakenIds = new Set([...openingAll, ...closingAll].map((a) => a.employee_id))
+
+  // required_staff_count is now one evening-wide number (ShiftForm keeps
+  // both shift rows in sync), so either instance's value works here.
+  const bartenderMax = activeOpening?.required_staff_count ?? activeClosing?.required_staff_count ?? 3
+
+  const bartenderHoursLabel =
+    activeOpening && activeClosing
+      ? `${formatTime(activeOpening.start_time)}–${formatTime(activeClosing.end_time)}`
+      : activeOpening
+        ? `${formatTime(activeOpening.start_time)}–${formatTime(activeOpening.end_time)}`
+        : activeClosing
+          ? `${formatTime(activeClosing.start_time)}–${formatTime(activeClosing.end_time)}`
+          : ''
+
   const dateLabel = shifts.opening?.start_time
     ? weekLabelFormatter.format(new Date(shifts.opening.start_time))
     : shifts.closing?.start_time
@@ -467,11 +510,16 @@ function WeekCard({
     onSaved()
   }
 
-  async function handleAssign(shiftId: string, employeeId: string, role: ShiftAssignmentRole) {
+  // Bartender and area manager are whole-evening duties: a pick always
+  // touches both the week's shift instances at once, same mechanism as
+  // handleSetAreaSupervisor below, generalized to more than one person.
+  async function handleAssignDuty(employeeId: string, role: ShiftAssignmentRole) {
     setError(null)
-    const { error: insertError } = await supabase
-      .from('shift_assignments')
-      .insert({ shift_id: shiftId, employee_id: employeeId, assignment_role: role })
+    const rows = [openingId, closingId]
+      .filter((id): id is string => !!id)
+      .map((shift_id) => ({ shift_id, employee_id: employeeId, assignment_role: role }))
+    if (rows.length === 0) return
+    const { error: insertError } = await supabase.from('shift_assignments').insert(rows)
     if (insertError) {
       setError(friendlyAssignmentError(insertError))
       return
@@ -479,9 +527,10 @@ function WeekCard({
     onSaved()
   }
 
-  async function handleRemove(assignmentId: string) {
+  async function handleRemoveDuty(assignmentIds: string[]) {
+    if (assignmentIds.length === 0) return
     setError(null)
-    const { error: deleteError } = await supabase.from('shift_assignments').delete().eq('id', assignmentId)
+    const { error: deleteError } = await supabase.from('shift_assignments').delete().in('id', assignmentIds)
     if (deleteError) {
       setError(friendlyAssignmentError(deleteError))
       return
@@ -489,19 +538,24 @@ function WeekCard({
     onSaved()
   }
 
-  async function handleSwap(oldAssignmentId: string, shiftId: string, role: ShiftAssignmentRole, newEmployeeId: string) {
+  async function handleSwapDuty(oldAssignmentIds: string[], newEmployeeId: string, role: ShiftAssignmentRole) {
     setError(null)
-    const { error: deleteError } = await supabase.from('shift_assignments').delete().eq('id', oldAssignmentId)
-    if (deleteError) {
-      setError(friendlyAssignmentError(deleteError))
-      return
+    if (oldAssignmentIds.length > 0) {
+      const { error: deleteError } = await supabase.from('shift_assignments').delete().in('id', oldAssignmentIds)
+      if (deleteError) {
+        setError(friendlyAssignmentError(deleteError))
+        return
+      }
     }
-    const { error: insertError } = await supabase
-      .from('shift_assignments')
-      .insert({ shift_id: shiftId, employee_id: newEmployeeId, assignment_role: role })
-    if (insertError) {
-      setError(friendlyAssignmentError(insertError))
-      return
+    const rows = [openingId, closingId]
+      .filter((id): id is string => !!id)
+      .map((shift_id) => ({ shift_id, employee_id: newEmployeeId, assignment_role: role }))
+    if (rows.length > 0) {
+      const { error: insertError } = await supabase.from('shift_assignments').insert(rows)
+      if (insertError) {
+        setError(friendlyAssignmentError(insertError))
+        return
+      }
     }
     onSaved()
   }
@@ -644,46 +698,29 @@ function WeekCard({
             <ColumnHeader shift={shifts.closing} type="closing" />
           </div>
 
-          {viewerCanManage ? (
-            <RoleSection
-              label="ברמנים/יות (עד 3)"
-              role="bartender"
-              max={3}
-              openingShift={activeOpening}
-              closingShift={activeClosing}
-              openingAssignments={openingBartenders}
-              closingAssignments={closingBartenders}
-              openingTaken={new Set(openingAll.map((a) => a.employee_id))}
-              closingTaken={new Set(closingAll.map((a) => a.employee_id))}
-              eligible={dutyEligible}
-              employeeNames={employeeNames}
-              shiftCounts={shiftCounts}
-              myEmployeeId={myEmployeeId}
-              confirmAssign={confirmAssign}
-              onAssign={handleAssign}
-              onSwap={handleSwap}
-              onRemove={handleRemove}
-            />
-          ) : (
-            <SelfServiceRoleSection
-              label="ברמנים/יות (עד 3)"
-              role="bartender"
-              max={3}
-              openingShift={activeOpening}
-              closingShift={activeClosing}
-              openingAssignments={openingBartenders}
-              closingAssignments={closingBartenders}
-              eligible={dutyEligible}
-              employeeNames={employeeNames}
-              shiftCounts={shiftCounts}
-              myEmployeeId={myEmployeeId}
-              canSelfRemove={canSelfRemove}
-              confirmAssign={confirmAssign}
-              showInfo={showInfo}
-              onAssign={handleAssign}
-              onRemove={handleRemove}
-            />
-          )}
+          <DutyRow
+            label={`ברמנים/יות (עד ${bartenderMax})`}
+            role="bartender"
+            max={bartenderMax}
+            openingShift={activeOpening}
+            closingShift={activeClosing}
+            openingAssignments={openingBartenders}
+            closingAssignments={closingBartenders}
+            eligible={dutyEligible}
+            employeeNames={employeeNames}
+            shiftCounts={shiftCounts}
+            myEmployeeId={myEmployeeId}
+            viewerCanManage={viewerCanManage}
+            canSelfRemove={canSelfRemove}
+            takenIds={weekTakenIds}
+            dateLabel={dateLabel}
+            hoursLabel={bartenderHoursLabel}
+            confirmAssign={confirmAssign}
+            showInfo={showInfo}
+            onAssign={(employeeId) => handleAssignDuty(employeeId, 'bartender')}
+            onRemove={handleRemoveDuty}
+            onSwap={(oldIds, newId) => handleSwapDuty(oldIds, newId, 'bartender')}
+          />
         </div>
 
         <div className="bg-muted flex flex-col gap-3 rounded-md p-2">
@@ -703,50 +740,29 @@ function WeekCard({
             onSet={handleSetAreaSupervisor}
           />
 
-          {viewerCanManage ? (
-            <RoleSection
-              label="אחראי/ת מתחם (עד 2)"
-              role="area_manager"
-              max={2}
-              openingShift={activeOpening}
-              closingShift={activeClosing}
-              openingAssignments={openingAreaManagers}
-              closingAssignments={closingAreaManagers}
-              openingTaken={new Set(openingAll.map((a) => a.employee_id))}
-              closingTaken={new Set(closingAll.map((a) => a.employee_id))}
-              eligible={dutyEligible}
-              employeeNames={employeeNames}
-              shiftCounts={shiftCounts}
-              myEmployeeId={myEmployeeId}
-              openingTimeLabel={AREA_DUTY_HOURS.opening}
-              closingTimeLabel={AREA_DUTY_HOURS.closing}
-              confirmAssign={confirmAssign}
-              onAssign={handleAssign}
-              onSwap={handleSwap}
-              onRemove={handleRemove}
-            />
-          ) : (
-            <SelfServiceRoleSection
-              label="אחראי/ת מתחם (עד 2)"
-              role="area_manager"
-              max={2}
-              openingShift={activeOpening}
-              closingShift={activeClosing}
-              openingAssignments={openingAreaManagers}
-              closingAssignments={closingAreaManagers}
-              eligible={dutyEligible}
-              employeeNames={employeeNames}
-              shiftCounts={shiftCounts}
-              myEmployeeId={myEmployeeId}
-              canSelfRemove={canSelfRemove}
-              openingTimeLabel={AREA_DUTY_HOURS.opening}
-              closingTimeLabel={AREA_DUTY_HOURS.closing}
-              confirmAssign={confirmAssign}
-              showInfo={showInfo}
-              onAssign={handleAssign}
-              onRemove={handleRemove}
-            />
-          )}
+          <DutyRow
+            label="אחראי/ת מתחם (עד 2)"
+            role="area_manager"
+            max={2}
+            openingShift={activeOpening}
+            closingShift={activeClosing}
+            openingAssignments={openingAreaManagers}
+            closingAssignments={closingAreaManagers}
+            eligible={dutyEligible}
+            employeeNames={employeeNames}
+            shiftCounts={shiftCounts}
+            myEmployeeId={myEmployeeId}
+            viewerCanManage={viewerCanManage}
+            canSelfRemove={canSelfRemove}
+            takenIds={weekTakenIds}
+            dateLabel={dateLabel}
+            hoursLabel={AREA_SUPERVISOR_HOURS}
+            confirmAssign={confirmAssign}
+            showInfo={showInfo}
+            onAssign={(employeeId) => handleAssignDuty(employeeId, 'area_manager')}
+            onRemove={handleRemoveDuty}
+            onSwap={(oldIds, newId) => handleSwapDuty(oldIds, newId, 'area_manager')}
+          />
         </div>
 
         {viewerCanManage &&
@@ -863,28 +879,32 @@ function CombinedStatus({
 }) {
   const primary = closing ?? opening
 
+  // Bartender and area manager are whole-evening duties now -- the same
+  // people hold both shift instances, so a gap is checked once for the
+  // evening instead of once per shift-type (the old per-instance loop
+  // would otherwise print the same gap twice).
   const gaps: string[] = []
-  for (const [shift, bartenders, areaManagers, label] of [
-    [opening, openingBartenders, openingAreaManagers, 'פתיחה'],
-    [closing, closingBartenders, closingAreaManagers, 'סגירה'],
-  ] as const) {
-    if (!shift || shift.status === 'cancelled') continue
-    const openForStaffing = shift.effective_status === 'published' || shift.effective_status === 'active'
-    if (!openForStaffing) continue
-    if (shift.required_staff_count !== null && shift.assigned_count < shift.required_staff_count) {
-      gaps.push(`תת-איוש ברמנים/יות (${label})`)
+  const openForStaffing =
+    !!primary && primary.status !== 'cancelled' && (primary.effective_status === 'published' || primary.effective_status === 'active')
+
+  if (primary && openForStaffing) {
+    const bartenders = mergeDutyPeople(openingBartenders, closingBartenders)
+    const areaManagers = mergeDutyPeople(openingAreaManagers, closingAreaManagers)
+
+    if (primary.required_staff_count !== null && bartenders.length < primary.required_staff_count) {
+      gaps.push('תת-איוש ברמנים/יות')
     }
     if (areaManagers.length === 0) {
-      gaps.push(`אין אחראי/ת מתחם (${label})`)
+      gaps.push('אין אחראי/ת מתחם')
     }
-    // At least one senior (2+ shifts worked) is expected per duty group on
-    // a shift, not enforced -- same informational-only treatment as every
-    // other gap here.
+    // At least one senior (2+ evenings worked) is expected per duty group,
+    // not enforced -- same informational-only treatment as every other
+    // gap here.
     if (bartenders.length > 0 && !hasSenior(bartenders, shiftCounts, 'bartender')) {
-      gaps.push(`אין ברמן/ית בכיר/ה (${label})`)
+      gaps.push('אין ברמן/ית בכיר/ה')
     }
     if (areaManagers.length > 0 && !hasSenior(areaManagers, shiftCounts, 'area_manager')) {
-      gaps.push(`אין אחראי/ת מתחם בכיר/ה (${label})`)
+      gaps.push('אין אחראי/ת מתחם בכיר/ה')
     }
   }
 
@@ -1256,9 +1276,15 @@ function AreaSupervisorRow({
   )
 }
 
-// Manager mode: full edit rights over every slot (fill, swap to anyone,
-// remove anyone), plus a self-associate convenience per slot/row.
-function RoleSection({
+// Bartender and area manager are whole-evening duties: one list of up to
+// `max` people, each a pick that covers both the week's shift instances
+// at once (same one-row-per-shift-but-one-pick mechanics as
+// AreaSupervisorRow above, generalized past a single slot). One
+// component handles both audiences, same split as AreaSupervisorRow:
+// manager gets full edit rights (fill/swap/remove anyone) via
+// DutySlotCell, self-service gets a read-only list of everyone else plus
+// their own self-associate/remove control.
+function DutyRow({
   label,
   role,
   max,
@@ -1266,153 +1292,20 @@ function RoleSection({
   closingShift,
   openingAssignments,
   closingAssignments,
-  openingTaken,
-  closingTaken,
   eligible,
   employeeNames,
   shiftCounts,
   myEmployeeId,
-  openingTimeLabel,
-  closingTimeLabel,
+  viewerCanManage,
+  canSelfRemove,
+  takenIds,
+  dateLabel,
+  hoursLabel,
   confirmAssign,
+  showInfo,
   onAssign,
+  onRemove,
   onSwap,
-  onRemove,
-}: {
-  label: string
-  role: ShiftAssignmentRole
-  max: number
-  openingShift?: Shift
-  closingShift?: Shift
-  openingAssignments: ShiftAssignment[]
-  closingAssignments: ShiftAssignment[]
-  openingTaken: Set<string>
-  closingTaken: Set<string>
-  eligible: Employee[]
-  employeeNames: Record<string, string>
-  shiftCounts: Record<string, ShiftCountInfo>
-  myEmployeeId: string | null
-  openingTimeLabel?: string
-  closingTimeLabel?: string
-  confirmAssign: (details: ConfirmAssignState) => Promise<boolean>
-  onAssign: (shiftId: string, employeeId: string, role: ShiftAssignmentRole) => void
-  onSwap: (oldAssignmentId: string, shiftId: string, role: ShiftAssignmentRole, newEmployeeId: string) => void
-  onRemove: (assignmentId: string) => void
-}) {
-  const iAmEligible = !!myEmployeeId && eligible.some((e) => e.id === myEmployeeId)
-  const rows = Array.from({ length: max }, (_, i) => i)
-  const openingShiftId = openingShift?.id
-  const closingShiftId = closingShift?.id
-
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="grid grid-cols-[1fr_1fr] gap-1">
-        <span className="text-muted-foreground text-xs">
-          {label}
-          {openingTimeLabel ? ` ${openingTimeLabel}` : ''}
-        </span>
-        <span className="text-muted-foreground text-xs">
-          {label}
-          {closingTimeLabel ? ` ${closingTimeLabel}` : ''}
-        </span>
-      </div>
-      {rows.map((i) => {
-        const openingPerson = openingAssignments[i]
-        const closingPerson = closingAssignments[i]
-        const openingIsNext = !openingPerson && i === openingAssignments.length && !!openingShiftId
-        const closingIsNext = !closingPerson && i === closingAssignments.length && !!closingShiftId
-
-        if (!openingPerson && !openingIsNext && !closingPerson && !closingIsNext) return null
-
-        const openingIAmFree = openingIsNext && iAmEligible && !!myEmployeeId && !openingTaken.has(myEmployeeId)
-        const closingIAmFree = closingIsNext && iAmEligible && !!myEmployeeId && !closingTaken.has(myEmployeeId)
-
-        return (
-          <div key={i} className="grid grid-cols-[1fr_1fr] items-center gap-1">
-            <SlotCell
-              person={openingPerson}
-              isNext={openingIsNext}
-              iAmFree={openingIAmFree}
-              employeeNames={employeeNames}
-              shiftCounts={shiftCounts}
-              duty={role}
-              eligible={eligible}
-              takenIds={openingTaken}
-              onAssociateMe={async () => {
-                if (!openingShiftId || !myEmployeeId || !openingShift) return
-                const ok = await confirmAssign({
-                  title: 'איזה כיף!',
-                  action: 'assign',
-                  dateLabel: weekLabelFormatter.format(new Date(openingShift.start_time)),
-                  typeLabel: shiftTypeLabel(openingShift.shift_type),
-                  hoursLabel: openingTimeLabel ?? `${formatTime(openingShift.start_time)}–${formatTime(openingShift.end_time)}`,
-                  positionLabel: shiftAssignmentRoleLabels[role],
-                })
-                if (!ok) return
-                onAssign(openingShiftId, myEmployeeId, role)
-              }}
-              onPick={(id) => openingShiftId && onAssign(openingShiftId, id, role)}
-              onSwap={(newId) => openingShiftId && openingPerson && onSwap(openingPerson.id, openingShiftId, role, newId)}
-              onRemove={() => openingPerson && onRemove(openingPerson.id)}
-            />
-            <SlotCell
-              person={closingPerson}
-              isNext={closingIsNext}
-              iAmFree={closingIAmFree}
-              employeeNames={employeeNames}
-              shiftCounts={shiftCounts}
-              duty={role}
-              eligible={eligible}
-              takenIds={closingTaken}
-              onAssociateMe={async () => {
-                if (!closingShiftId || !myEmployeeId || !closingShift) return
-                const ok = await confirmAssign({
-                  title: 'איזה כיף!',
-                  action: 'assign',
-                  dateLabel: weekLabelFormatter.format(new Date(closingShift.start_time)),
-                  typeLabel: shiftTypeLabel(closingShift.shift_type),
-                  hoursLabel: closingTimeLabel ?? `${formatTime(closingShift.start_time)}–${formatTime(closingShift.end_time)}`,
-                  positionLabel: shiftAssignmentRoleLabels[role],
-                })
-                if (!ok) return
-                onAssign(closingShiftId, myEmployeeId, role)
-              }}
-              onPick={(id) => closingShiftId && onAssign(closingShiftId, id, role)}
-              onSwap={(newId) => closingShiftId && closingPerson && onSwap(closingPerson.id, closingShiftId, role, newId)}
-              onRemove={() => closingPerson && onRemove(closingPerson.id)}
-            />
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// Self-service mode (bartender/area-manager viewers): one column per
-// shift-type, a plain read-only list of who else is on it, and a single
-// control reflecting the viewer's own status -- "שבץ אותי" if they're not
-// on it (and there's room), or their own remove action if they are (a
-// confirm popup for a future week, an explanatory info popup for the
-// current one). No per-slot picking, no swapping other people.
-function SelfServiceRoleSection({
-  label,
-  role,
-  max,
-  openingShift,
-  closingShift,
-  openingAssignments,
-  closingAssignments,
-  eligible,
-  employeeNames,
-  shiftCounts,
-  myEmployeeId,
-  canSelfRemove,
-  openingTimeLabel,
-  closingTimeLabel,
-  confirmAssign,
-  showInfo,
-  onAssign,
-  onRemove,
 }: {
   label: string
   role: ShiftAssignmentRole
@@ -1425,108 +1318,93 @@ function SelfServiceRoleSection({
   employeeNames: Record<string, string>
   shiftCounts: Record<string, ShiftCountInfo>
   myEmployeeId: string | null
+  viewerCanManage: boolean
   canSelfRemove: boolean
-  openingTimeLabel?: string
-  closingTimeLabel?: string
+  takenIds: Set<string>
+  dateLabel: string
+  hoursLabel: string
   confirmAssign: (details: ConfirmAssignState) => Promise<boolean>
   showInfo: (details: InfoDialogState) => Promise<void>
-  onAssign: (shiftId: string, employeeId: string, role: ShiftAssignmentRole) => void
-  onRemove: (assignmentId: string) => void
+  onAssign: (employeeId: string) => void
+  onRemove: (assignmentIds: string[]) => void
+  onSwap: (oldAssignmentIds: string[], newEmployeeId: string) => void
 }) {
+  const people = mergeDutyPeople(openingAssignments, closingAssignments)
   const iAmEligible = !!myEmployeeId && eligible.some((e) => e.id === myEmployeeId)
+  const anyShiftId = openingShift?.id ?? closingShift?.id
+  const typeLabel = 'משמרת שלמה'
+
+  async function associateMe() {
+    if (!myEmployeeId) return
+    const ok = await confirmAssign({
+      title: 'איזה כיף!',
+      action: 'assign',
+      dateLabel,
+      typeLabel,
+      hoursLabel,
+      positionLabel: shiftAssignmentRoleLabels[role],
+    })
+    if (!ok) return
+    onAssign(myEmployeeId)
+  }
+
+  if (viewerCanManage) {
+    const rows = Array.from({ length: max }, (_, i) => i)
+    return (
+      <div className="flex flex-col gap-1">
+        <span className="text-muted-foreground text-xs">
+          {label} {hoursLabel}
+        </span>
+        {rows.map((i) => {
+          const person = people[i]
+          const isNext = !person && i === people.length && !!anyShiftId
+          if (!person && !isNext) return null
+
+          return (
+            <DutySlotCell
+              key={i}
+              person={person}
+              isNext={isNext}
+              iAmFree={isNext && iAmEligible && !!myEmployeeId && !takenIds.has(myEmployeeId)}
+              employeeNames={employeeNames}
+              shiftCounts={shiftCounts}
+              duty={role}
+              eligible={eligible}
+              takenIds={takenIds}
+              onAssociateMe={associateMe}
+              onPick={(id) => onAssign(id)}
+              onSwap={(newId) => person && onSwap(person.assignmentIds, newId)}
+              onRemove={() => person && onRemove(person.assignmentIds)}
+            />
+          )
+        })}
+      </div>
+    )
+  }
+
+  // Self-service viewer: read-only list of who else is on it, plus a
+  // single control reflecting the viewer's own status -- "שבץ אותי" if
+  // not on it (and there's room), or their own remove action if they are
+  // (a confirm popup for a future week, an explanatory info popup for the
+  // current one). No per-slot picking, no swapping other people.
+  const mine = people.find((p) => p.employee_id === myEmployeeId)
+  const others = people.filter((p) => p.employee_id !== myEmployeeId)
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="grid grid-cols-2 gap-2">
-        <span className="text-muted-foreground text-xs">
-          {label}
-          {openingTimeLabel ? ` ${openingTimeLabel}` : ''}
-        </span>
-        <span className="text-muted-foreground text-xs">
-          {label}
-          {closingTimeLabel ? ` ${closingTimeLabel}` : ''}
-        </span>
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <SelfServiceColumn
-          shift={openingShift}
-          assignments={openingAssignments}
-          max={max}
-          role={role}
-          iAmEligible={iAmEligible}
-          employeeNames={employeeNames}
-          shiftCounts={shiftCounts}
-          myEmployeeId={myEmployeeId}
-          canSelfRemove={canSelfRemove}
-          confirmAssign={confirmAssign}
-          showInfo={showInfo}
-          onAssign={onAssign}
-          onRemove={onRemove}
-        />
-        <SelfServiceColumn
-          shift={closingShift}
-          assignments={closingAssignments}
-          max={max}
-          role={role}
-          iAmEligible={iAmEligible}
-          employeeNames={employeeNames}
-          shiftCounts={shiftCounts}
-          myEmployeeId={myEmployeeId}
-          canSelfRemove={canSelfRemove}
-          confirmAssign={confirmAssign}
-          showInfo={showInfo}
-          onAssign={onAssign}
-          onRemove={onRemove}
-        />
-      </div>
-    </div>
-  )
-}
-
-function SelfServiceColumn({
-  shift,
-  assignments,
-  max,
-  role,
-  iAmEligible,
-  employeeNames,
-  shiftCounts,
-  myEmployeeId,
-  canSelfRemove,
-  confirmAssign,
-  showInfo,
-  onAssign,
-  onRemove,
-}: {
-  shift?: Shift
-  assignments: ShiftAssignment[]
-  max: number
-  role: ShiftAssignmentRole
-  iAmEligible: boolean
-  employeeNames: Record<string, string>
-  shiftCounts: Record<string, ShiftCountInfo>
-  myEmployeeId: string | null
-  canSelfRemove: boolean
-  confirmAssign: (details: ConfirmAssignState) => Promise<boolean>
-  showInfo: (details: InfoDialogState) => Promise<void>
-  onAssign: (shiftId: string, employeeId: string, role: ShiftAssignmentRole) => void
-  onRemove: (assignmentId: string) => void
-}) {
-  if (!shift) return <span className="text-muted-foreground text-xs">—</span>
-
-  const mine = assignments.find((a) => a.employee_id === myEmployeeId)
-  const others = assignments.filter((a) => a.employee_id !== myEmployeeId)
-
-  return (
-    <div className="flex flex-col gap-1">
+      <span className="text-muted-foreground text-xs">
+        {label} {hoursLabel}
+      </span>
       {others.length > 0 && (
         <span className="text-xs">
-          {others.map((a) => nameWithCount(employeeNames[a.employee_id] ?? '—', shiftCounts, a.employee_id, role)).join(', ')}
+          {others
+            .map((p) => nameWithCount(employeeNames[p.employee_id] ?? '—', shiftCounts, p.employee_id, role))
+            .join(', ')}
         </span>
       )}
       {others.length === 0 && !mine && <span className="text-muted-foreground text-xs">אין עדיין</span>}
 
-      {mine && canSelfRemove && (
+      {mine && (
         <div className="flex items-center gap-1">
           <span className="truncate text-xs">
             {nameWithCount(employeeNames[mine.employee_id] ?? '—', shiftCounts, mine.employee_id, role)}
@@ -1534,40 +1412,24 @@ function SelfServiceColumn({
           <button
             type="button"
             onClick={async () => {
-              const ok = await confirmAssign({
-                title: 'איזה באסה! לא מסתדר?',
-                action: 'remove',
-                dateLabel: weekLabelFormatter.format(new Date(shift.start_time)),
-                typeLabel: shiftTypeLabel(shift.shift_type),
-                hoursLabel:
-                  role === 'area_manager'
-                    ? AREA_DUTY_HOURS[shift.shift_type]
-                    : `${formatTime(shift.start_time)}–${formatTime(shift.end_time)}`,
-                positionLabel: shiftAssignmentRoleLabels[role],
-              })
-              if (!ok) return
-              onRemove(mine.id)
+              if (canSelfRemove) {
+                const ok = await confirmAssign({
+                  title: 'איזה באסה! לא מסתדר?',
+                  action: 'remove',
+                  dateLabel,
+                  typeLabel,
+                  hoursLabel,
+                  positionLabel: shiftAssignmentRoleLabels[role],
+                })
+                if (!ok) return
+                onRemove(mine.assignmentIds)
+              } else {
+                showInfo({
+                  title: 'איזה באסה! לא מסתדר?',
+                  body: 'לא ניתן לבטל משמרת בסמיכות למועד המשמרת. אנא צור/י קשר עם מנהל הבר של המשמרת.',
+                })
+              }
             }}
-            className="text-destructive text-[10px] underline-offset-2 hover:underline"
-          >
-            ביטול
-          </button>
-        </div>
-      )}
-
-      {mine && !canSelfRemove && (
-        <div className="flex items-center gap-1">
-          <span className="truncate text-xs">
-            {nameWithCount(employeeNames[mine.employee_id] ?? '—', shiftCounts, mine.employee_id, role)}
-          </span>
-          <button
-            type="button"
-            onClick={() =>
-              showInfo({
-                title: 'איזה באסה! לא מסתדר?',
-                body: 'לא ניתן לבטל משמרת בסמיכות למועד המשמרת. אנא צור/י קשר עם מנהל הבר של המשמרת.',
-              })
-            }
             className="text-destructive text-[10px] underline-offset-2 hover:underline"
           >
             ביטול
@@ -1581,23 +1443,8 @@ function SelfServiceColumn({
           size="sm"
           variant="outline"
           className="h-6 w-fit px-2 text-[11px]"
-          disabled={!iAmEligible || !myEmployeeId || assignments.length >= max}
-          onClick={async () => {
-            if (!myEmployeeId) return
-            const ok = await confirmAssign({
-                  title: 'איזה כיף!',
-                  action: 'assign',
-              dateLabel: weekLabelFormatter.format(new Date(shift.start_time)),
-              typeLabel: shiftTypeLabel(shift.shift_type),
-              hoursLabel:
-                role === 'area_manager'
-                  ? AREA_DUTY_HOURS[shift.shift_type]
-                  : `${formatTime(shift.start_time)}–${formatTime(shift.end_time)}`,
-              positionLabel: shiftAssignmentRoleLabels[role],
-            })
-            if (!ok) return
-            onAssign(shift.id, myEmployeeId, role)
-          }}
+          disabled={!iAmEligible || !myEmployeeId || people.length >= max || !anyShiftId}
+          onClick={associateMe}
         >
           שבץ אותי
         </Button>
@@ -1606,7 +1453,7 @@ function SelfServiceColumn({
   )
 }
 
-function SlotCell({
+function DutySlotCell({
   person,
   isNext,
   iAmFree,
@@ -1620,7 +1467,7 @@ function SlotCell({
   onSwap,
   onRemove,
 }: {
-  person?: ShiftAssignment
+  person?: DutyPerson
   isNext: boolean
   iAmFree: boolean
   employeeNames: Record<string, string>
@@ -1676,7 +1523,7 @@ function SlotCell({
     )
   }
 
-  if (!isNext) return <span />
+  if (!isNext) return null
 
   if (editing) {
     return (

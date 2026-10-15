@@ -139,6 +139,18 @@ export function ShiftForm() {
       ? await supabase.from('shifts').update(payload).eq('id', id).select('id').single()
       : await supabase.from('shifts').insert(payload).select('id').single()
 
+    // Bartender capacity is now one evening-wide number, not set per
+    // shift instance -- keep the week's other shift (opening/closing) in
+    // sync so they never drift apart again.
+    if (!saveError) {
+      const siblingType: ShiftType = shiftType === 'opening' ? 'closing' : 'opening'
+      await supabase
+        .from('shifts')
+        .update({ required_staff_count: payload.required_staff_count })
+        .eq('week_start', weekStart)
+        .eq('shift_type', siblingType)
+    }
+
     if (saveError?.code === '23505') {
       setSubmitting(false)
       setError('כבר קיימת משמרת מסוג זה לשבוע שנבחר')
@@ -246,7 +258,7 @@ export function ShiftForm() {
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="required-staff-count">מספר עובדים נדרש (לא חובה)</Label>
+            <Label htmlFor="required-staff-count">מספר ברמנים/ניות נדרש לערב (לא חובה, חל גם על המשמרת השנייה באותו שבוע)</Label>
             <Input
               id="required-staff-count"
               type="number"
