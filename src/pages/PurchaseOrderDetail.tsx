@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
 import { purchaseOrderStatusLabels, purchaseOrderStatusBadgeClass } from '@/lib/purchaseOrderLabels'
@@ -316,8 +316,8 @@ export function PurchaseOrderDetail() {
       </Card>
 
       <div className="flex justify-center">
-        <Button asChild variant="ghost">
-          <Link to="/purchase-orders">חזרה לרשימת ההזמנות</Link>
+        <Button variant="ghost" onClick={() => navigate(-1)}>
+          חזרה
         </Button>
       </div>
     </div>
