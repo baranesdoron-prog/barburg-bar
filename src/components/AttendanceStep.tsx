@@ -43,6 +43,21 @@ function groupByEmployee(assignments: ShiftAssignment[]): AttendanceGroup[] {
   return order.map((employeeId) => byEmployee.get(employeeId)!)
 }
 
+const ROLE_ORDER: Record<ShiftAssignment['assignment_role'], number> = {
+  bar_manager: 0,
+  bartender: 1,
+  area_supervisor: 2,
+  area_manager: 3,
+}
+
+function sortByRoleThenName(groups: AttendanceGroup[], employeeNames: Map<string, string>): AttendanceGroup[] {
+  return [...groups].sort((a, b) => {
+    const roleDiff = ROLE_ORDER[a.role] - ROLE_ORDER[b.role]
+    if (roleDiff !== 0) return roleDiff
+    return (employeeNames.get(a.employeeId) ?? '').localeCompare(employeeNames.get(b.employeeId) ?? '')
+  })
+}
+
 const statusOptions: AttendanceStatus[] = ['present', 'late', 'absent']
 
 export function AttendanceStep({ shiftIds, onSaved }: { shiftIds: string[]; onSaved?: () => void }) {
@@ -68,9 +83,11 @@ export function AttendanceStep({ shiftIds, onSaved }: { shiftIds: string[]; onSa
       ])
 
       const loadedAssignments = (assignmentsRes.data as ShiftAssignment[]) ?? []
-      const loadedGroups = groupByEmployee(loadedAssignments)
+      const loadedEmployees = (employeesRes.data as Employee[]) ?? []
+      const employeeNames = new Map(loadedEmployees.map((e) => [e.id, e.full_name]))
+      const loadedGroups = sortByRoleThenName(groupByEmployee(loadedAssignments), employeeNames)
       setGroups(loadedGroups)
-      setEmployees((employeesRes.data as Employee[]) ?? [])
+      setEmployees(loadedEmployees)
 
       if (loadedAssignments.length > 0) {
         const { data: existing } = await supabase
