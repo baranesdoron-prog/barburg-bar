@@ -412,6 +412,7 @@ function AllocationsList() {
           myEmployeeId={myEmployeeId}
           viewerCanManage={canManage}
           isAdmin={effectiveRole === 'administrator'}
+          isArchive={false}
           onSaved={reload}
         />
       ))}
@@ -432,6 +433,7 @@ function WeekCard({
   myEmployeeId,
   viewerCanManage,
   isAdmin,
+  isArchive,
   onSaved,
 }: {
   week: string
@@ -446,6 +448,11 @@ function WeekCard({
   myEmployeeId: string | null
   viewerCanManage: boolean
   isAdmin: boolean
+  // Bartender became a whole-evening duty, so the opening/closing time
+  // split header is redundant going forward (the duty row already shows
+  // one combined time) -- only archived weeks, from before that change,
+  // can have genuinely different bartenders per half worth distinguishing.
+  isArchive: boolean
   onSaved: () => void
 }) {
   const [error, setError] = useState<string | null>(null)
@@ -692,11 +699,15 @@ function WeekCard({
             onSet={handleSetShiftManager}
           />
 
-          <div className="grid grid-cols-[auto_1fr_1fr] items-center gap-x-2 gap-y-1 text-xs">
-            <span />
-            <ColumnHeader shift={shifts.opening} type="opening" />
-            <ColumnHeader shift={shifts.closing} type="closing" />
-          </div>
+          {isArchive ? (
+            <div className="grid grid-cols-[auto_1fr_1fr] items-center gap-x-2 gap-y-1 text-xs">
+              <span />
+              <ColumnHeader shift={shifts.opening} type="opening" />
+              <ColumnHeader shift={shifts.closing} type="closing" />
+            </div>
+          ) : (
+            <UnifiedColumnHeader opening={shifts.opening} closing={shifts.closing} />
+          )}
 
           <DutyRow
             label={`ברמנים/יות (עד ${bartenderMax})`}
@@ -849,6 +860,27 @@ function ColumnHeader({ shift, type }: { shift?: Shift; type: ShiftType }) {
   return (
     <span className="font-medium">
       {shiftTypeLabel(type)} {formatTime(shift.start_time)}–{formatTime(shift.end_time)}
+    </span>
+  )
+}
+
+// Bartender is a whole-evening duty now -- one combined time span for
+// the night instead of a separate opening/closing header, spanning
+// whichever instance(s) are actually active.
+function UnifiedColumnHeader({ opening, closing }: { opening?: Shift; closing?: Shift }) {
+  if (!opening && !closing) {
+    return <span className="text-muted-foreground text-xs">לא נפתחה</span>
+  }
+  const openingActive = opening && opening.status !== 'cancelled'
+  const closingActive = closing && closing.status !== 'cancelled'
+  if (!openingActive && !closingActive) {
+    return <span className="text-muted-foreground text-xs">מבוטלת</span>
+  }
+  const start = openingActive ? opening : closing
+  const end = closingActive ? closing : opening
+  return (
+    <span className="text-xs font-medium">
+      {formatTime(start!.start_time)}–{formatTime(end!.end_time)}
     </span>
   )
 }
@@ -1657,6 +1689,7 @@ function ArchiveList() {
           myEmployeeId={myEmployeeId}
           viewerCanManage={canManage}
           isAdmin={effectiveRole === 'administrator'}
+          isArchive={true}
           onSaved={reload}
         />
       ))}
