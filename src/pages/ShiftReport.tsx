@@ -2,53 +2,132 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
+import { useAppUserContext } from '@/lib/outletContext'
 import { attendanceStatusLabels, shiftAssignmentRoleLabels, shiftTypeLabel } from '@/lib/shiftLabels'
 import { journalCategoryLabels } from '@/lib/journalLabels'
 import { purchaseOrderStatusLabels, purchaseOrderStatusBadgeClass } from '@/lib/purchaseOrderLabels'
 import { cn, formatDateTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import type { PurchaseOrder, ShiftReportRow, Supplier } from '@/lib/types'
 
+interface FlaggedOrder {
+  order_number: string
+  supplier_name: string
+  status: string
+}
+
 export function ShiftReport() {
   const { id } = useParams()
+  const { effectiveRole } = useAppUserContext()
   const [report, setReport] = useState<ShiftReportRow | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [relatedOrders, setRelatedOrders] = useState<PurchaseOrder[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [inventoryItemIds, setInventoryItemIds] = useState<Map<string, string>>(new Map())
 
-  useEffect(() => {
-    supabase
+  const [editingInventory, setEditingInventory] = useState(false)
+  const [quantities, setQuantities] = useState<Record<string, string>>({})
+  const [savingInventory, setSavingInventory] = useState(false)
+  const [inventoryError, setInventoryError] = useState<string | null>(null)
+  const [flaggedOrders, setFlaggedOrders] = useState<FlaggedOrder[]>([])
+
+  // Bar manager/admin only -- matches ShiftClosing.tsx's own canClose gate.
+  const canEditInventory = effectiveRole === 'administrator' || effectiveRole === 'shift_manager'
+
+  async function loadReport() {
+    const { data, error: fetchError } = await supabase
       .from('shift_reports')
       .select('*')
       .eq('shift_id', id)
       .single()
-      .then(({ data, error: fetchError }) => {
-        if (fetchError || !data) {
-          setError(fetchError?.message ?? 'הדוח לא נמצא')
-          return
-        }
-        setReport(data as ShiftReportRow)
-      })
+
+    if (fetchError || !data) {
+      setError(fetchError?.message ?? 'הדוח לא נמצא')
+      return
+    }
+    setReport(data as ShiftReportRow)
+  }
+
+  async function loadOrders() {
+    const [ordersRes, suppliersRes] = await Promise.all([
+      supabase.from('purchase_orders').select('*').eq('created_from_shift_id', id),
+      supabase.from('suppliers').select('*'),
+    ])
+    setRelatedOrders((ordersRes.data as PurchaseOrder[]) ?? [])
+    setSuppliers((suppliersRes.data as Supplier[]) ?? [])
+  }
+
+  useEffect(() => {
+    loadReport()
+    loadOrders()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   useEffect(() => {
-    async function load() {
-      const [ordersRes, suppliersRes] = await Promise.all([
-        supabase.from('purchase_orders').select('*').eq('created_from_shift_id', id),
-        supabase.from('suppliers').select('*'),
-      ])
-      setRelatedOrders((ordersRes.data as PurchaseOrder[]) ?? [])
-      setSuppliers((suppliersRes.data as Supplier[]) ?? [])
-    }
-
-    load()
-  }, [id])
+    if (!canEditInventory) return
+    supabase
+      .from('inventory_items')
+      .select('id, name')
+      .then(({ data }) => {
+        setInventoryItemIds(new Map(((data as { id: string; name: string }[]) ?? []).map((i) => [i.name, i.id])))
+      })
+  }, [canEditInventory])
 
   const supplierNames = new Map(suppliers.map((s) => [s.id, s.name]))
 
   if (error) return <p className="text-destructive text-center text-sm">{error}</p>
   if (!report) return null
+
+  function handleStartEdit() {
+    const initial: Record<string, string> = {}
+    for (const c of report!.snapshot.inventory_counts) {
+      initial[c.item_name] = String(c.quantity_counted)
+    }
+    setQuantities(initial)
+    setFlaggedOrders([])
+    setInventoryError(null)
+    setEditingInventory(true)
+  }
+
+  async function handleSaveInventory() {
+    setSavingInventory(true)
+    setInventoryError(null)
+
+    const changed = report!.snapshot.inventory_counts.filter((c) => {
+      const edited = quantities[c.item_name]
+      return edited !== undefined && edited.trim() !== '' && Number(edited) !== c.quantity_counted
+    })
+
+    const allFlagged: FlaggedOrder[] = []
+
+    for (const c of changed) {
+      const itemId = inventoryItemIds.get(c.item_name)
+      if (!itemId) continue
+
+      const { data, error: rpcError } = await supabase.rpc('correct_shift_inventory_count', {
+        p_shift_id: id,
+        p_inventory_item_id: itemId,
+        p_new_quantity: Number(quantities[c.item_name]),
+      })
+
+      if (rpcError) {
+        setInventoryError(rpcError.message)
+        setSavingInventory(false)
+        return
+      }
+
+      const flagged = (data as { flagged_orders?: FlaggedOrder[] } | null)?.flagged_orders ?? []
+      allFlagged.push(...flagged)
+    }
+
+    await Promise.all([loadReport(), loadOrders()])
+
+    setFlaggedOrders(allFlagged)
+    setSavingInventory(false)
+    setEditingInventory(false)
+  }
 
   const { snapshot } = report
 
@@ -128,21 +207,76 @@ export function ShiftReport() {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between gap-2">
           <CardTitle className="text-base">ספירת מלאי</CardTitle>
+          {canEditInventory && !editingInventory && (
+            <Button variant="outline" size="sm" className="print:hidden" onClick={handleStartEdit}>
+              עריכת ספירה
+            </Button>
+          )}
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {snapshot.inventory_counts.length === 0 && (
             <p className="text-muted-foreground text-sm">אין נתוני מלאי.</p>
           )}
-          {snapshot.inventory_counts.map((c, i) => (
-            <div key={i} className="flex items-center justify-between text-sm">
-              <span>{c.item_name}</span>
-              <span className="text-muted-foreground">
-                {c.quantity_counted} {c.unit}
-              </span>
+          {snapshot.inventory_counts.map((c, i) =>
+            editingInventory ? (
+              <div key={i} className="flex items-center justify-between gap-2 text-sm">
+                <span>{c.item_name}</span>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    className="h-8 w-20"
+                    value={quantities[c.item_name] ?? ''}
+                    disabled={!inventoryItemIds.has(c.item_name)}
+                    onChange={(e) =>
+                      setQuantities((prev) => ({ ...prev, [c.item_name]: e.target.value }))
+                    }
+                  />
+                  <span className="text-muted-foreground">{c.unit}</span>
+                </div>
+              </div>
+            ) : (
+              <div key={i} className="flex items-center justify-between text-sm">
+                <span>{c.item_name}</span>
+                <span className="text-muted-foreground">
+                  {c.quantity_counted} {c.unit}
+                </span>
+              </div>
+            ),
+          )}
+
+          {editingInventory && (
+            <div className="mt-2 flex flex-col gap-2 border-t pt-2 print:hidden">
+              {inventoryError && <p className="text-destructive text-sm">{inventoryError}</p>}
+              <div className="flex gap-2">
+                <Button className="flex-1" disabled={savingInventory} onClick={handleSaveInventory}>
+                  שמירה
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="flex-1"
+                  disabled={savingInventory}
+                  onClick={() => setEditingInventory(false)}
+                >
+                  ביטול
+                </Button>
+              </div>
             </div>
-          ))}
+          )}
+
+          {flaggedOrders.length > 0 && (
+            <div className="mt-2 flex flex-col gap-1 rounded-md border border-amber-300 bg-amber-50 p-2 text-sm dark:border-amber-800 dark:bg-amber-950">
+              <p className="font-medium text-amber-800 dark:text-amber-300">
+                השינוי משפיע על הזמנות שכבר יצאו/התקבלו ולא עודכנו אוטומטית — יש לעדכן מול הספק ידנית:
+              </p>
+              {flaggedOrders.map((f, i) => (
+                <p key={i} className="text-amber-800 dark:text-amber-300">
+                  {f.supplier_name} — {f.order_number} ({purchaseOrderStatusLabels[f.status as keyof typeof purchaseOrderStatusLabels]})
+                </p>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
