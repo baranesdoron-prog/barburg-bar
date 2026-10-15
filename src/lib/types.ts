@@ -86,7 +86,10 @@ export interface ShiftManagerAssignment {
   assigned_at: string
 }
 
-export type ShiftAssignmentRole = 'bartender' | 'area_manager' | 'area_supervisor'
+// 'bar_manager' rows are a read-side mirror only (written exclusively by
+// set_weekly_shift_manager()) -- shift_manager_id / shift_manager_assignments
+// remain the real source of truth for who's bar manager each week.
+export type ShiftAssignmentRole = 'bartender' | 'area_manager' | 'area_supervisor' | 'bar_manager'
 
 export interface ShiftAssignment {
   id: string

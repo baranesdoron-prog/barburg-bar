@@ -9,6 +9,7 @@ export const shiftAssignmentRoleLabels: Record<ShiftAssignmentRole, string> = {
   bartender: 'ברמן/ית',
   area_manager: 'אחראי/ת מתחם',
   area_supervisor: 'מנהל/ת מתחם',
+  bar_manager: 'מנהל/ת בר',
 }
 
 // shift_reports.snapshot is a frozen historical dump and can still hold
