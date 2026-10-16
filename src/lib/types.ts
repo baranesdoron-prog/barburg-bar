@@ -198,6 +198,8 @@ export interface ShiftReportRow {
   shift_id: string
   generated_by: string
   generated_at: string
+  updated_at: string | null
+  updated_by: string | null
   snapshot: {
     shift: Shift
     attendance: {

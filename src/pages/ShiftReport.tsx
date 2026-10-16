@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
-import { attendanceStatusLabels, shiftAssignmentRoleLabels, shiftTypeLabel } from '@/lib/shiftLabels'
+import { attendanceStatusLabels, shiftAssignmentRoleLabels } from '@/lib/shiftLabels'
 import { journalCategoryLabels } from '@/lib/journalLabels'
 import { purchaseOrderStatusLabels, purchaseOrderStatusBadgeClass } from '@/lib/purchaseOrderLabels'
 import { cn, formatDateTime } from '@/lib/utils'
@@ -26,6 +26,7 @@ export function ShiftReport() {
   const [relatedOrders, setRelatedOrders] = useState<PurchaseOrder[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [inventoryItemIds, setInventoryItemIds] = useState<Map<string, string>>(new Map())
+  const [userNames, setUserNames] = useState<Map<string, string>>(new Map())
 
   const [editingInventory, setEditingInventory] = useState(false)
   const [quantities, setQuantities] = useState<Record<string, string>>({})
@@ -62,6 +63,14 @@ export function ShiftReport() {
   useEffect(() => {
     loadReport()
     loadOrders()
+    // shift_reports.generated_by/updated_by are app_users ids -- RLS
+    // only lets a non-admin read their own app_users row, so resolving
+    // anyone else's name needs this RPC rather than a plain select.
+    supabase
+      .rpc('list_app_user_names')
+      .then(({ data }) => {
+        setUserNames(new Map(((data as { id: string; full_name: string }[]) ?? []).map((u) => [u.id, u.full_name])))
+      })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
@@ -156,14 +165,19 @@ export function ShiftReport() {
 
       <Card>
         <CardHeader>
-          <CardTitle>דוח סגירת משמרת — {shiftTypeLabel(snapshot.shift.shift_type)}</CardTitle>
+          <CardTitle>דוח סגירת משמרת</CardTitle>
           <CardDescription>
-            {formatDateTime(snapshot.shift.start_time)} – {formatDateTime(snapshot.shift.end_time)}
+            בוצע ע&quot;י {userNames.get(report.generated_by) ?? '—'} בתאריך {formatDateTime(report.generated_at)}
           </CardDescription>
         </CardHeader>
-        <CardContent className="text-muted-foreground text-sm">
-          <p>נוצר: {formatDateTime(report.generated_at)}</p>
-        </CardContent>
+        {report.updated_at && (
+          <CardContent className="text-muted-foreground text-sm">
+            <p>
+              עודכן לאחרונה בתאריך {formatDateTime(report.updated_at)} על ידי{' '}
+              {(report.updated_by && userNames.get(report.updated_by)) ?? '—'}
+            </p>
+          </CardContent>
+        )}
       </Card>
 
       {relatedOrders.length > 0 && (
