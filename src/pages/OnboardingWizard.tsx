@@ -559,18 +559,19 @@ function OnboardingWizardInner() {
               )}
             >
               <div className="flex w-full items-center justify-between">
-                <span className="text-base font-semibold">{slot.typeLabel}</span>
+                <span className="text-base font-semibold">
+                  {slot.typeLabel} <span className="text-muted-foreground font-normal">{slot.hoursLabel}</span>
+                </span>
                 <span className="text-muted-foreground text-sm">{slot.dateLabel}</span>
               </div>
-              <span className="text-muted-foreground text-sm">{slot.hoursLabel}</span>
               {slot.barManagerName && (
-                <span className="text-muted-foreground text-xs">מנהל/ת בר: {slot.barManagerName}</span>
+                <span className="text-muted-foreground text-sm">מנהל/ת בר: {slot.barManagerName}</span>
               )}
               {slot.peerNames.length > 0 && (
-                <span className="text-muted-foreground text-xs">גם: {slot.peerNames.join(', ')}</span>
+                <span className="text-muted-foreground text-sm">גם: {slot.peerNames.join(', ')}</span>
               )}
               {slot.status === 'mine' && (
-                <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                <span className="rounded-full bg-green-100 px-2 py-0.5 text-sm font-medium text-green-700">
                   ✓ משובץ
                 </span>
               )}
