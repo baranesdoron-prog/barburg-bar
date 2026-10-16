@@ -363,7 +363,7 @@ function OnboardingWizardInner() {
         slots.push({
           key: week,
           dateLabel,
-          typeLabel: 'משמרת שלמה',
+          typeLabel: shiftAssignmentRoleLabels[duty],
           hoursLabel,
           barManagerName,
           peerNames: [],
@@ -402,7 +402,7 @@ function OnboardingWizardInner() {
       slots.push({
         key: week,
         dateLabel,
-        typeLabel: 'משמרת שלמה',
+        typeLabel: shiftAssignmentRoleLabels[duty],
         hoursLabel,
         barManagerName,
         peerNames,
@@ -460,7 +460,7 @@ function OnboardingWizardInner() {
         slots.push({
           key: week,
           dateLabel,
-          typeLabel: 'משמרת שלמה',
+          typeLabel: shiftAssignmentRoleLabels.bar_manager,
           hoursLabel: AREA_SUPERVISOR_HOURS,
           peerNames: [],
           status: 'cancelled',
@@ -483,7 +483,7 @@ function OnboardingWizardInner() {
       slots.push({
         key: week,
         dateLabel,
-        typeLabel: 'משמרת שלמה',
+        typeLabel: shiftAssignmentRoleLabels.bar_manager,
         hoursLabel,
         peerNames: !mine && name ? [name] : [],
         status: mine ? 'mine' : taken ? 'full' : 'open',
@@ -535,7 +535,7 @@ function OnboardingWizardInner() {
       )}
 
       {loadedShifts && slots.length > 0 && (
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="flex flex-col gap-2.5">
           {slots.map((slot) => (
             <button
               key={slot.key}
@@ -544,7 +544,7 @@ function OnboardingWizardInner() {
               onClick={slot.onClick}
               title={slot.namesTitle}
               className={cn(
-                'relative flex flex-col items-start gap-1 overflow-hidden rounded-xl border p-3 text-right transition-colors',
+                'relative flex flex-col items-start gap-1.5 overflow-hidden rounded-xl border p-4 text-right transition-colors',
                 slot.status === 'open' && slot.onClick && 'hover:border-primary hover:bg-accent cursor-pointer',
                 slot.status === 'mine' && 'border-green-200 bg-green-50',
                 slot.status === 'mine' &&
@@ -559,31 +559,31 @@ function OnboardingWizardInner() {
               )}
             >
               <div className="flex w-full items-center justify-between">
-                <span className="text-sm font-semibold">{slot.typeLabel}</span>
-                <span className="text-muted-foreground text-[11px]">{slot.dateLabel}</span>
+                <span className="text-base font-semibold">{slot.typeLabel}</span>
+                <span className="text-muted-foreground text-sm">{slot.dateLabel}</span>
               </div>
-              <span className="text-muted-foreground text-[11px]">{slot.hoursLabel}</span>
+              <span className="text-muted-foreground text-sm">{slot.hoursLabel}</span>
               {slot.barManagerName && (
-                <span className="text-muted-foreground text-[10px]">מנהל/ת בר: {slot.barManagerName}</span>
+                <span className="text-muted-foreground text-xs">מנהל/ת בר: {slot.barManagerName}</span>
               )}
               {slot.peerNames.length > 0 && (
-                <span className="text-muted-foreground text-[10px]">גם: {slot.peerNames.join(', ')}</span>
+                <span className="text-muted-foreground text-xs">גם: {slot.peerNames.join(', ')}</span>
               )}
               {slot.status === 'mine' && (
-                <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700">
+                <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
                   ✓ משובץ
                 </span>
               )}
               {slot.status === 'full' && (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <span className="-rotate-12 rounded-md border-2 border-red-600/70 px-2 py-0.5 text-[11px] font-bold text-red-600/70">
+                  <span className="-rotate-12 rounded-md border-2 border-red-600/70 px-2 py-0.5 text-sm font-bold text-red-600/70">
                     משמרת מלאה
                   </span>
                 </div>
               )}
               {slot.status === 'cancelled' && (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <span className="-rotate-12 rounded-md border-2 border-slate-500/70 px-2 py-0.5 text-[11px] font-bold text-slate-600/70">
+                  <span className="-rotate-12 rounded-md border-2 border-slate-500/70 px-2 py-0.5 text-sm font-bold text-slate-600/70">
                     משמרת מבוטלת
                   </span>
                 </div>
