@@ -166,6 +166,36 @@ export function ShiftReport() {
         </CardContent>
       </Card>
 
+      {relatedOrders.length > 0 && (
+        <Card className="print:hidden">
+          <CardHeader>
+            <CardTitle className="text-base">הזמנות רכש שנוצרו בעקבות משמרת זו</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2">
+            {relatedOrders.map((order) => (
+              <Link
+                key={order.id}
+                to={`/purchase-orders/${order.id}`}
+                className="hover:bg-accent flex items-center justify-between rounded-md border p-2 text-sm transition-colors"
+              >
+                <div>
+                  <p className="font-medium">{supplierNames.get(order.supplier_id) ?? '—'}</p>
+                  <p className="text-muted-foreground text-xs">{order.order_number}</p>
+                </div>
+                <span
+                  className={cn(
+                    'rounded-full px-2 py-1 text-xs font-medium',
+                    purchaseOrderStatusBadgeClass[order.status],
+                  )}
+                >
+                  {purchaseOrderStatusLabels[order.status]}
+                </span>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">נוכחות</CardTitle>
@@ -300,36 +330,6 @@ export function ShiftReport() {
                 </div>
               )
             })}
-          </CardContent>
-        </Card>
-      )}
-
-      {relatedOrders.length > 0 && (
-        <Card className="print:hidden">
-          <CardHeader>
-            <CardTitle className="text-base">הזמנות רכש שנוצרו בעקבות משמרת זו</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            {relatedOrders.map((order) => (
-              <Link
-                key={order.id}
-                to={`/purchase-orders/${order.id}`}
-                className="hover:bg-accent flex items-center justify-between rounded-md border p-2 text-sm transition-colors"
-              >
-                <div>
-                  <p className="font-medium">{supplierNames.get(order.supplier_id) ?? '—'}</p>
-                  <p className="text-muted-foreground text-xs">{order.order_number}</p>
-                </div>
-                <span
-                  className={cn(
-                    'rounded-full px-2 py-1 text-xs font-medium',
-                    purchaseOrderStatusBadgeClass[order.status],
-                  )}
-                >
-                  {purchaseOrderStatusLabels[order.status]}
-                </span>
-              </Link>
-            ))}
           </CardContent>
         </Card>
       )}
