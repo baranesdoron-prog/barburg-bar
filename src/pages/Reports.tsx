@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
-import { shiftTypeLabel } from '@/lib/shiftLabels'
 import { formatDateTime } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,6 +13,7 @@ export function Reports() {
   const [search, setSearch] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [userNames, setUserNames] = useState<Map<string, string>>(new Map())
 
   useEffect(() => {
     supabase
@@ -21,6 +21,15 @@ export function Reports() {
       .select('*')
       .order('generated_at', { ascending: false })
       .then(({ data }) => setReports((data as ShiftReportRow[]) ?? []))
+
+    // shift_reports.generated_by is an app_users id -- RLS only lets a
+    // non-admin read their own app_users row, so resolving everyone
+    // else's name needs this RPC rather than a plain select.
+    supabase
+      .rpc('list_app_user_names')
+      .then(({ data }) => {
+        setUserNames(new Map(((data as { id: string; full_name: string }[]) ?? []).map((u) => [u.id, u.full_name])))
+      })
   }, [])
 
   if (reports === null) return null
@@ -75,7 +84,9 @@ export function Reports() {
               to={`/shifts/${report.shift_id}/report`}
               className="hover:bg-accent flex flex-col rounded-md border p-3 text-sm transition-colors"
             >
-              <span className="font-medium">{shiftTypeLabel(report.snapshot.shift.shift_type)}</span>
+              <span className="font-medium">
+                דוח סגירת משמרת, בוצע ע&quot;י {userNames.get(report.generated_by) ?? '—'}
+              </span>
               <span className="text-muted-foreground">
                 {formatDateTime(report.snapshot.shift.start_time)}
               </span>
