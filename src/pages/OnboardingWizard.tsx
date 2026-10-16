@@ -559,32 +559,32 @@ function OnboardingWizardInner() {
               )}
             >
               <div className="flex w-full items-center justify-between">
-                <span className="text-base font-semibold">
+                <span className="text-lg font-semibold">
                   {slot.typeLabel} <span className="text-muted-foreground font-normal">{slot.hoursLabel}</span>
                 </span>
-                <span className="text-muted-foreground text-sm">{slot.dateLabel}</span>
+                <span className="text-muted-foreground text-base">{slot.dateLabel}</span>
               </div>
               {slot.barManagerName && (
-                <span className="text-muted-foreground text-sm">מנהל/ת בר: {slot.barManagerName}</span>
+                <span className="text-muted-foreground text-base">מנהל/ת בר: {slot.barManagerName}</span>
               )}
               {slot.peerNames.length > 0 && (
-                <span className="text-muted-foreground text-sm">גם: {slot.peerNames.join(', ')}</span>
+                <span className="text-muted-foreground text-base">גם: {slot.peerNames.join(', ')}</span>
               )}
               {slot.status === 'mine' && (
-                <span className="rounded-full bg-green-100 px-2 py-0.5 text-sm font-medium text-green-700">
+                <span className="rounded-full bg-green-100 px-2 py-0.5 text-base font-medium text-green-700">
                   ✓ משובץ
                 </span>
               )}
               {slot.status === 'full' && (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <span className="-rotate-12 rounded-md border-2 border-red-600/70 px-2 py-0.5 text-sm font-bold text-red-600/70">
+                  <span className="-rotate-12 rounded-md border-2 border-red-600/70 px-2 py-0.5 text-base font-bold text-red-600/70">
                     משמרת מלאה
                   </span>
                 </div>
               )}
               {slot.status === 'cancelled' && (
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <span className="-rotate-12 rounded-md border-2 border-slate-500/70 px-2 py-0.5 text-sm font-bold text-slate-600/70">
+                  <span className="-rotate-12 rounded-md border-2 border-slate-500/70 px-2 py-0.5 text-base font-bold text-slate-600/70">
                     משמרת מבוטלת
                   </span>
                 </div>
