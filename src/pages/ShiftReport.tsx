@@ -33,6 +33,7 @@ export function ShiftReport() {
   const [savingInventory, setSavingInventory] = useState(false)
   const [inventoryError, setInventoryError] = useState<string | null>(null)
   const [flaggedOrders, setFlaggedOrders] = useState<FlaggedOrder[]>([])
+  const [historicalCorrections, setHistoricalCorrections] = useState<string[]>([])
 
   // Bar manager/admin only -- matches ShiftClosing.tsx's own canClose gate.
   const canEditInventory = effectiveRole === 'administrator' || effectiveRole === 'shift_manager'
@@ -96,6 +97,7 @@ export function ShiftReport() {
     }
     setQuantities(initial)
     setFlaggedOrders([])
+    setHistoricalCorrections([])
     setInventoryError(null)
     setEditingInventory(true)
   }
@@ -110,6 +112,7 @@ export function ShiftReport() {
     })
 
     const allFlagged: FlaggedOrder[] = []
+    const allHistorical: string[] = []
 
     for (const c of changed) {
       const itemId = inventoryItemIds.get(c.item_name)
@@ -122,6 +125,26 @@ export function ShiftReport() {
       })
 
       if (rpcError) {
+        // This count has already been superseded by a newer one -- a
+        // plain correction would roll live current_stock back to a
+        // stale value, so it's refused server-side. Fall back to the
+        // history-only correction instead, which fixes the recorded
+        // number for reporting without touching live stock.
+        if (rpcError.message.includes('more recent count already exists')) {
+          const { error: historicalError } = await supabase.rpc('correct_historical_inventory_count', {
+            p_shift_id: id,
+            p_inventory_item_id: itemId,
+            p_new_quantity: Number(quantities[c.item_name]),
+          })
+          if (historicalError) {
+            setInventoryError(historicalError.message)
+            setSavingInventory(false)
+            return
+          }
+          allHistorical.push(c.item_name)
+          continue
+        }
+
         setInventoryError(rpcError.message)
         setSavingInventory(false)
         return
@@ -134,6 +157,7 @@ export function ShiftReport() {
     await Promise.all([loadReport(), loadOrders()])
 
     setFlaggedOrders(allFlagged)
+    setHistoricalCorrections(allHistorical)
     setSavingInventory(false)
     setEditingInventory(false)
   }
@@ -319,6 +343,16 @@ export function ShiftReport() {
                   {f.supplier_name} — {f.order_number} ({purchaseOrderStatusLabels[f.status as keyof typeof purchaseOrderStatusLabels]})
                 </p>
               ))}
+            </div>
+          )}
+
+          {historicalCorrections.length > 0 && (
+            <div className="mt-2 flex flex-col gap-1 rounded-md border p-2 text-sm">
+              <p className="font-medium">
+                ספירה זו כבר הוחלפה בספירה מאוחרת יותר — התיקון חל רק על הרישום ההיסטורי (כולל הדוח הבא שהשתמש בה
+                כ&quot;לפני המשמרת&quot;), ולא שינה את המלאי הנוכחי בפועל:
+              </p>
+              <p className="text-muted-foreground">{historicalCorrections.join(', ')}</p>
             </div>
           )}
         </CardContent>
