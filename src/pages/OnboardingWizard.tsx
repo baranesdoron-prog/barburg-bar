@@ -367,9 +367,10 @@ function OnboardingWizardInner() {
       const closingActive = shifts.closing && shifts.closing.status !== 'cancelled'
 
       // Bartender hours follow the shift's own real start/end times
-      // (spanning the whole evening); area manager/supervisor use the
-      // same fixed display-only window as Shifts.tsx.
-      const hoursLabel =
+      // (spanning the whole evening, unless only one side is actually
+      // relevant -- see below); area manager/supervisor use the same
+      // fixed display-only window as Shifts.tsx.
+      const fullEveningHoursLabel =
         duty === 'bartender'
           ? shifts.opening && shifts.closing
             ? `${formatTime(shifts.opening.start_time)}–${formatTime(shifts.closing.end_time)}`
@@ -385,7 +386,7 @@ function OnboardingWizardInner() {
           key: week,
           dateLabel,
           typeLabel: shiftAssignmentRoleLabels[duty],
-          hoursLabel,
+          hoursLabel: fullEveningHoursLabel,
           barManagerName,
           peerNames: [],
           status: 'cancelled',
@@ -426,6 +427,27 @@ function OnboardingWizardInner() {
             ? 'פנוי לפתיחה בלבד'
             : 'פנוי לסגירה בלבד'
           : undefined
+      // When only one side is actually relevant -- the viewer's own
+      // partial assignment, or only one side still has room to join --
+      // the title shows that side's own type + real hours instead of the
+      // full-evening span, which would otherwise read as if the whole
+      // evening were in play.
+      const relevantSide: 'opening' | 'closing' | null =
+        mine.length === 1
+          ? mine[0].shift_id === shifts.opening?.id
+            ? 'opening'
+            : 'closing'
+          : mine.length === 0 && !isFull && (!openingHasRoom || !closingHasRoom)
+            ? openingHasRoom
+              ? 'opening'
+              : 'closing'
+            : null
+      const hoursLabel =
+        duty === 'bartender' && relevantSide === 'opening' && shifts.opening
+          ? `פתיחה ${formatTime(shifts.opening.start_time)}–${formatTime(shifts.opening.end_time)}`
+          : duty === 'bartender' && relevantSide === 'closing' && shifts.closing
+            ? `סגירה ${formatTime(shifts.closing.start_time)}–${formatTime(shifts.closing.end_time)}`
+            : fullEveningHoursLabel
       const peerNames = [
         ...new Set(
           allAssignments
