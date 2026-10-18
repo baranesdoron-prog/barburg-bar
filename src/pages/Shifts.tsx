@@ -587,21 +587,9 @@ function WeekCard({
     onSaved()
   }
 
-  // A split bartender leaves one shift instance's slot open while staying
-  // on the other -- these two mirror handleAssignDuty/handleSwapDuty but
-  // touch a single shift_id instead of always pairing both.
-  async function handleAssignSingleDuty(employeeId: string, role: ShiftAssignmentRole, shiftId: string) {
-    setError(null)
-    const { error: insertError } = await supabase
-      .from('shift_assignments')
-      .insert({ shift_id: shiftId, employee_id: employeeId, assignment_role: role })
-    if (insertError) {
-      setError(friendlyAssignmentError(insertError))
-      return
-    }
-    onSaved()
-  }
-
+  // A split bartender keeps only one shift instance's row -- this mirrors
+  // handleSwapDuty but touches that single shift_id instead of pairing
+  // both, for swapping who holds their one remaining side.
   async function handleSwapSingleDuty(
     oldAssignmentId: string,
     newEmployeeId: string,
@@ -788,7 +776,6 @@ function WeekCard({
             onSwap={(oldIds, newId) => handleSwapDuty(oldIds, newId, 'bartender')}
             allowSplit
             onSplit={(closingAssignmentId) => handleRemoveDuty([closingAssignmentId])}
-            onAssignSingle={(employeeId, shiftId) => handleAssignSingleDuty(employeeId, 'bartender', shiftId)}
             onSwapSingle={(oldId, newId, shiftId) => handleSwapSingleDuty(oldId, newId, 'bartender', shiftId)}
           />
         </div>
@@ -1378,7 +1365,6 @@ function DutyRow({
   onSwap,
   allowSplit,
   onSplit,
-  onAssignSingle,
   onSwapSingle,
 }: {
   label: string
@@ -1408,7 +1394,6 @@ function DutyRow({
   // bartender DutyRow call site.
   allowSplit?: boolean
   onSplit?: (closingAssignmentId: string) => void
-  onAssignSingle?: (employeeId: string, shiftId: string) => void
   onSwapSingle?: (oldAssignmentId: string, newEmployeeId: string, shiftId: string) => void
 }) {
   const people = mergeDutyPeople(openingAssignments, closingAssignments)
@@ -1451,22 +1436,18 @@ function DutyRow({
             bothShiftsActive && person && (!person.openingAssignmentId || !person.closingAssignmentId)
 
           if (person && isPartial) {
+            // Just the one real shift they're actually on -- no companion
+            // "open slot" picker here, since that read as if every such
+            // person had been deliberately split (most weren't -- this is
+            // also how any pre-existing, never-paired real data shows up).
             const occupiedSide: 'opening' | 'closing' = person.openingAssignmentId ? 'opening' : 'closing'
             const occupiedId = (person.openingAssignmentId ?? person.closingAssignmentId)!
             const occupiedShift = occupiedSide === 'opening' ? openingShift! : closingShift!
-            const missingShift = occupiedSide === 'opening' ? closingShift! : openingShift!
             const occupiedPerson: DutyPerson = { employee_id: person.employee_id, assignmentIds: [occupiedId] }
-            // The occupied person is in weekTakenIds (they hold the other
-            // side of this same duty), which would otherwise hide them
-            // from their own missing side's picker -- that's the normal
-            // "re-merge" path (pick the same person back), not a
-            // double-booking, so let them reappear here specifically.
-            const takenIdsForMissingSlot = new Set(takenIds)
-            takenIdsForMissingSlot.delete(person.employee_id)
 
             return (
-              <div key={i} className="flex flex-col gap-0.5 rounded-md border border-dashed p-1">
-                <span className="text-muted-foreground text-[10px]">
+              <div key={i} className="flex items-center gap-1">
+                <span className="text-muted-foreground shrink-0 text-[10px]">
                   {occupiedSide === 'opening' ? 'פתיחה' : 'סגירה'} {formatTime(occupiedShift.start_time)}–
                   {formatTime(occupiedShift.end_time)}
                 </span>
@@ -1483,24 +1464,6 @@ function DutyRow({
                   onPick={() => {}}
                   onSwap={(newId) => onSwapSingle?.(occupiedId, newId, occupiedShift.id)}
                   onRemove={() => onRemove([occupiedId])}
-                />
-                <span className="text-muted-foreground text-[10px]">
-                  {occupiedSide === 'opening' ? 'סגירה' : 'פתיחה'} {formatTime(missingShift.start_time)}–
-                  {formatTime(missingShift.end_time)}
-                </span>
-                <DutySlotCell
-                  person={undefined}
-                  isNext={true}
-                  iAmFree={false}
-                  employeeNames={employeeNames}
-                  shiftCounts={shiftCounts}
-                  duty={role}
-                  eligible={eligible}
-                  takenIds={takenIdsForMissingSlot}
-                  onAssociateMe={associateMe}
-                  onPick={(id) => onAssignSingle?.(id, missingShift.id)}
-                  onSwap={() => {}}
-                  onRemove={() => {}}
                 />
               </div>
             )
@@ -1525,13 +1488,15 @@ function DutyRow({
                 onRemove={() => person && onRemove(person.assignmentIds)}
               />
               {canSplitPerson && (
-                <button
+                <Button
                   type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-6 shrink-0 px-2 text-[11px]"
                   onClick={() => onSplit?.(person!.closingAssignmentId!)}
-                  className="text-muted-foreground shrink-0 text-[10px] underline-offset-2 hover:underline"
                 >
                   פיצול
-                </button>
+                </Button>
               )}
             </div>
           )
