@@ -448,14 +448,27 @@ function OnboardingWizardInner() {
           : duty === 'bartender' && relevantSide === 'closing' && shifts.closing
             ? `${formatTime(shifts.closing.start_time)}–${formatTime(shifts.closing.end_time)}`
             : fullEveningHoursLabel
-      const peerNames = [
-        ...new Set(
-          allAssignments
-            .filter((a) => a.employee_id !== myEmployeeId)
-            .map((a) => employeeNames.get(a.employee_id))
-            .filter((n): n is string => !!n),
-        ),
-      ]
+      // Which side(s) each peer actually holds -- "(פתיחה)"/"(סגירה)" for a
+      // split person, "(שלמה)" for someone paired to the full evening.
+      const peerSides = new Map<string, Set<'opening' | 'closing'>>()
+      for (const [side, list] of [
+        ['opening', openingAssignments],
+        ['closing', closingAssignments],
+      ] as const) {
+        for (const a of list) {
+          if (a.employee_id === myEmployeeId) continue
+          if (!peerSides.has(a.employee_id)) peerSides.set(a.employee_id, new Set())
+          peerSides.get(a.employee_id)!.add(side)
+        }
+      }
+      const peerNames = [...peerSides.entries()]
+        .map(([empId, sides]) => {
+          const name = employeeNames.get(empId)
+          if (!name) return null
+          const sideLabel = sides.size === 2 ? 'שלמה' : sides.has('opening') ? 'פתיחה' : 'סגירה'
+          return `${name} (${sideLabel})`
+        })
+        .filter((n): n is string => !!n)
 
       slots.push({
         key: week,
