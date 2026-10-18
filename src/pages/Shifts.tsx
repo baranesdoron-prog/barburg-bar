@@ -1439,7 +1439,12 @@ function DutyRow({
   }
 
   if (viewerCanManage) {
-    const rows = Array.from({ length: max }, (_, i) => i)
+    // Real assignments can outnumber max (e.g. real pre-existing bookings,
+    // or a manager/self-assign landing on a side that still had room even
+    // while the week's distinct headcount was already at max) -- every
+    // actually-assigned person always gets a row; only cap how many
+    // *extra* empty slots are offered beyond that.
+    const rows = Array.from({ length: Math.max(max, people.length) }, (_, i) => i)
     // Both halves of the evening have to actually exist for "partial" to
     // mean a split -- if one side is simply absent this week, everyone
     // only ever has an id for the side that exists, which isn't a split.
