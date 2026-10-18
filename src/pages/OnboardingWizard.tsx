@@ -343,10 +343,10 @@ function OnboardingWizardInner() {
     // (a bar manager split their pairing in Shifts.tsx) -- "פתיחה בלבד" /
     // "סגירה בלבד", shown next to the "✓ משובץ" badge.
     partialLabel?: string
-    // Set when the slot isn't full but only one side actually has room
-    // (the other is already at capacity) -- so joining lands on just
-    // that side, not the whole evening. Shown instead of peer names.
-    openSideLabel?: string
+    // Set when only one side is actually relevant (a lone open slot, or
+    // the viewer's own partial assignment) -- "משמרת פתיחה"/"משמרת סגירה",
+    // shown in orange right in the title, next to the hours.
+    sideTypeLabel?: string
     onClick?: () => void
   }
 
@@ -421,17 +421,11 @@ function OnboardingWizardInner() {
       const isFull = !openingHasRoom && !closingHasRoom
       const partialLabel =
         mine.length === 1 ? (mine[0].shift_id === shifts.opening?.id ? 'פתיחה בלבד' : 'סגירה בלבד') : undefined
-      const openSideLabel =
-        mine.length === 0 && !isFull && (!openingHasRoom || !closingHasRoom)
-          ? openingHasRoom
-            ? 'פנוי לפתיחה בלבד'
-            : 'פנוי לסגירה בלבד'
-          : undefined
       // When only one side is actually relevant -- the viewer's own
       // partial assignment, or only one side still has room to join --
-      // the title shows that side's own type + real hours instead of the
-      // full-evening span, which would otherwise read as if the whole
-      // evening were in play.
+      // the title shows that side's own type (in orange) + real hours
+      // instead of the full-evening span, which would otherwise read as
+      // if the whole evening were in play.
       const relevantSide: 'opening' | 'closing' | null =
         mine.length === 1
           ? mine[0].shift_id === shifts.opening?.id
@@ -442,11 +436,17 @@ function OnboardingWizardInner() {
               ? 'opening'
               : 'closing'
             : null
+      const sideTypeLabel =
+        duty === 'bartender' && relevantSide === 'opening'
+          ? 'משמרת פתיחה'
+          : duty === 'bartender' && relevantSide === 'closing'
+            ? 'משמרת סגירה'
+            : undefined
       const hoursLabel =
         duty === 'bartender' && relevantSide === 'opening' && shifts.opening
-          ? `פתיחה ${formatTime(shifts.opening.start_time)}–${formatTime(shifts.opening.end_time)}`
+          ? `${formatTime(shifts.opening.start_time)}–${formatTime(shifts.opening.end_time)}`
           : duty === 'bartender' && relevantSide === 'closing' && shifts.closing
-            ? `סגירה ${formatTime(shifts.closing.start_time)}–${formatTime(shifts.closing.end_time)}`
+            ? `${formatTime(shifts.closing.start_time)}–${formatTime(shifts.closing.end_time)}`
             : fullEveningHoursLabel
       const peerNames = [
         ...new Set(
@@ -466,7 +466,7 @@ function OnboardingWizardInner() {
         peerNames,
         status: mine.length > 0 ? 'mine' : isFull ? 'full' : 'open',
         partialLabel,
-        openSideLabel,
+        sideTypeLabel,
         namesTitle:
           mine.length > 0
             ? canRevert
@@ -620,7 +620,11 @@ function OnboardingWizardInner() {
             >
               <div className="flex w-full items-center justify-between">
                 <span className="text-lg font-semibold">
-                  {slot.typeLabel} <span className="text-muted-foreground font-normal">{slot.hoursLabel}</span>
+                  {slot.typeLabel}{' '}
+                  {slot.sideTypeLabel && (
+                    <span className="text-amber-600 dark:text-amber-400">{slot.sideTypeLabel} </span>
+                  )}
+                  <span className="text-muted-foreground font-normal">{slot.hoursLabel}</span>
                 </span>
                 <span className="text-muted-foreground text-base">{slot.dateLabel}</span>
               </div>
@@ -629,11 +633,6 @@ function OnboardingWizardInner() {
               )}
               {slot.peerNames.length > 0 && (
                 <span className="text-muted-foreground text-base">גם: {slot.peerNames.join(', ')}</span>
-              )}
-              {slot.status === 'open' && slot.openSideLabel && (
-                <span className="text-amber-600 text-base font-medium dark:text-amber-400">
-                  {slot.openSideLabel}
-                </span>
               )}
               {slot.status === 'mine' && (
                 <span className="rounded-full bg-green-100 px-2 py-0.5 text-base font-medium text-green-700">
