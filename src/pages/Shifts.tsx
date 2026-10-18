@@ -792,6 +792,7 @@ function WeekCard({
             onSplit={(closingAssignmentId) => handleRemoveDuty([closingAssignmentId])}
             onSwapSingle={(oldId, newId, shiftId) => handleSwapSingleDuty(oldId, newId, 'bartender', shiftId)}
             onUnify={(employeeId, shiftId) => handleUnifyDuty(employeeId, 'bartender', shiftId)}
+            onAssignSingle={(employeeId, shiftId) => handleUnifyDuty(employeeId, 'bartender', shiftId)}
           />
         </div>
 
@@ -836,6 +837,7 @@ function WeekCard({
             onSwap={(oldIds, newId) => handleSwapDuty(oldIds, newId, 'area_manager')}
             onSwapSingle={(oldId, newId, shiftId) => handleSwapSingleDuty(oldId, newId, 'area_manager', shiftId)}
             onUnify={(employeeId, shiftId) => handleUnifyDuty(employeeId, 'area_manager', shiftId)}
+            onAssignSingle={(employeeId, shiftId) => handleUnifyDuty(employeeId, 'area_manager', shiftId)}
           />
         </div>
 
@@ -1384,6 +1386,7 @@ function DutyRow({
   onSplit,
   onSwapSingle,
   onUnify,
+  onAssignSingle,
 }: {
   label: string
   role: ShiftAssignmentRole
@@ -1414,6 +1417,7 @@ function DutyRow({
   onSplit?: (closingAssignmentId: string) => void
   onSwapSingle?: (oldAssignmentId: string, newEmployeeId: string, shiftId: string) => void
   onUnify?: (employeeId: string, shiftId: string) => void
+  onAssignSingle?: (employeeId: string, shiftId: string) => void
 }) {
   const people = mergeDutyPeople(openingAssignments, closingAssignments)
   const iAmEligible = !!myEmployeeId && eligible.some((e) => e.id === myEmployeeId)
@@ -1455,18 +1459,29 @@ function DutyRow({
             bothShiftsActive && person && (!person.openingAssignmentId || !person.closingAssignmentId)
 
           if (person && isPartial) {
-            // Just the one real shift they're actually on -- no companion
-            // "open slot" picker here, since that read as if every such
-            // person had been deliberately split (most weren't -- this is
-            // also how any pre-existing, never-paired real data shows up).
+            // A deliberately split person: their one occupied shift, plus
+            // the vacated side shown as its own open, directly pickable
+            // slot (for anyone -- including re-picking the same person,
+            // which re-pairs/unifies them).
             const occupiedSide: 'opening' | 'closing' = person.openingAssignmentId ? 'opening' : 'closing'
             const occupiedId = (person.openingAssignmentId ?? person.closingAssignmentId)!
             const occupiedShift = occupiedSide === 'opening' ? openingShift! : closingShift!
             const missingShift = occupiedSide === 'opening' ? closingShift! : openingShift!
             const occupiedPerson: DutyPerson = { employee_id: person.employee_id, assignmentIds: [occupiedId] }
+            // The occupied person is in weekTakenIds (they hold the other
+            // side of this same duty), which would otherwise hide them
+            // from their own missing side's picker -- that's the normal
+            // "unify" path (pick the same person back), not a double
+            // booking, so let them reappear here specifically.
+            const takenIdsForMissingSlot = new Set(takenIds)
+            takenIdsForMissingSlot.delete(person.employee_id)
 
             return (
-              <div key={i} className="flex items-center gap-1">
+              <div key={i} className="flex flex-col gap-0.5 rounded-md border border-dashed p-1">
+                <span className="text-muted-foreground text-[10px]">
+                  {occupiedSide === 'opening' ? 'פתיחה' : 'סגירה'} {formatTime(occupiedShift.start_time)}–
+                  {formatTime(occupiedShift.end_time)}
+                </span>
                 <DutySlotCell
                   person={occupiedPerson}
                   isNext={false}
@@ -1480,7 +1495,25 @@ function DutyRow({
                   onPick={() => {}}
                   onSwap={(newId) => onSwapSingle?.(occupiedId, newId, occupiedShift.id)}
                   onRemove={() => onRemove([occupiedId])}
-                  onUnify={missingShift ? () => onUnify?.(person.employee_id, missingShift.id) : undefined}
+                  onUnify={() => onUnify?.(person.employee_id, missingShift.id)}
+                />
+                <span className="text-muted-foreground text-[10px]">
+                  {occupiedSide === 'opening' ? 'סגירה' : 'פתיחה'} {formatTime(missingShift.start_time)}–
+                  {formatTime(missingShift.end_time)}
+                </span>
+                <DutySlotCell
+                  person={undefined}
+                  isNext={true}
+                  iAmFree={false}
+                  employeeNames={employeeNames}
+                  shiftCounts={shiftCounts}
+                  duty={role}
+                  eligible={eligible}
+                  takenIds={takenIdsForMissingSlot}
+                  onAssociateMe={associateMe}
+                  onPick={(id) => onAssignSingle?.(id, missingShift.id)}
+                  onSwap={() => {}}
+                  onRemove={() => {}}
                 />
               </div>
             )

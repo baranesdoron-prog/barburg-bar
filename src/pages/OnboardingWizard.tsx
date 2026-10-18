@@ -343,6 +343,10 @@ function OnboardingWizardInner() {
     // (a bar manager split their pairing in Shifts.tsx) -- "פתיחה בלבד" /
     // "סגירה בלבד", shown next to the "✓ משובץ" badge.
     partialLabel?: string
+    // Set when the slot isn't full but only one side actually has room
+    // (the other is already at capacity) -- so joining lands on just
+    // that side, not the whole evening. Shown instead of peer names.
+    openSideLabel?: string
     onClick?: () => void
   }
 
@@ -416,6 +420,12 @@ function OnboardingWizardInner() {
       const isFull = !openingHasRoom && !closingHasRoom
       const partialLabel =
         mine.length === 1 ? (mine[0].shift_id === shifts.opening?.id ? 'פתיחה בלבד' : 'סגירה בלבד') : undefined
+      const openSideLabel =
+        mine.length === 0 && !isFull && (!openingHasRoom || !closingHasRoom)
+          ? openingHasRoom
+            ? 'פנוי לפתיחה בלבד'
+            : 'פנוי לסגירה בלבד'
+          : undefined
       const peerNames = [
         ...new Set(
           allAssignments
@@ -434,6 +444,7 @@ function OnboardingWizardInner() {
         peerNames,
         status: mine.length > 0 ? 'mine' : isFull ? 'full' : 'open',
         partialLabel,
+        openSideLabel,
         namesTitle:
           mine.length > 0
             ? canRevert
@@ -596,6 +607,11 @@ function OnboardingWizardInner() {
               )}
               {slot.peerNames.length > 0 && (
                 <span className="text-muted-foreground text-base">גם: {slot.peerNames.join(', ')}</span>
+              )}
+              {slot.status === 'open' && slot.openSideLabel && (
+                <span className="text-amber-600 text-base font-medium dark:text-amber-400">
+                  {slot.openSideLabel}
+                </span>
               )}
               {slot.status === 'mine' && (
                 <span className="rounded-full bg-green-100 px-2 py-0.5 text-base font-medium text-green-700">
