@@ -490,6 +490,9 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
         const orderA = a.item.category_id ? (categorySortOrder.get(a.item.category_id) ?? Infinity) : Infinity
         const orderB = b.item.category_id ? (categorySortOrder.get(b.item.category_id) ?? Infinity) : Infinity
         if (orderA !== orderB) return orderA - orderB
+        const displayA = a.item.display_order ?? Infinity
+        const displayB = b.item.display_order ?? Infinity
+        if (displayA !== displayB) return displayA - displayB
         return a.item.name.localeCompare(b.item.name)
       })
   }

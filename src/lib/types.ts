@@ -174,6 +174,7 @@ export interface InventoryItem {
   active: boolean
   created_at: string
   updated_at: string
+  display_order: number | null
 }
 
 export interface InventoryItemWithStock extends InventoryItem {
