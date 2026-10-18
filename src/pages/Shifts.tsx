@@ -834,6 +834,8 @@ function WeekCard({
             onAssign={(employeeId) => handleAssignDuty(employeeId, 'area_manager')}
             onRemove={handleRemoveDuty}
             onSwap={(oldIds, newId) => handleSwapDuty(oldIds, newId, 'area_manager')}
+            onSwapSingle={(oldId, newId, shiftId) => handleSwapSingleDuty(oldId, newId, 'area_manager', shiftId)}
+            onUnify={(employeeId, shiftId) => handleUnifyDuty(employeeId, 'area_manager', shiftId)}
           />
         </div>
 
@@ -1480,6 +1482,17 @@ function DutyRow({
                   onRemove={() => onRemove([occupiedId])}
                   onUnify={missingShift ? () => onUnify?.(person.employee_id, missingShift.id) : undefined}
                 />
+                {onUnify && missingShift && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-6 shrink-0 px-2 text-[11px]"
+                    onClick={() => onUnify(person.employee_id, missingShift.id)}
+                  >
+                    איחוד
+                  </Button>
+                )}
               </div>
             )
           }
