@@ -495,7 +495,7 @@ function OnboardingWizardInner() {
                     title: 'איזה באסה! לא מסתדר?',
                     action: 'remove',
                     dateLabel,
-                    typeLabel: 'משמרת שלמה',
+                    typeLabel: sideTypeLabel ?? 'משמרת שלמה',
                     hoursLabel,
                     positionLabel: shiftAssignmentRoleLabels[duty],
                   })
@@ -513,7 +513,7 @@ function OnboardingWizardInner() {
                     title: 'איזה כיף!',
                     action: 'assign',
                     dateLabel,
-                    typeLabel: 'משמרת שלמה',
+                    typeLabel: sideTypeLabel ?? 'משמרת שלמה',
                     hoursLabel,
                     positionLabel: shiftAssignmentRoleLabels[duty],
                   })
