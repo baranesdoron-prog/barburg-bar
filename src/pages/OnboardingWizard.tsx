@@ -180,12 +180,25 @@ function OnboardingWizardInner() {
   }
 
   // Bartender, area manager and area supervisor are all whole-evening
-  // duties: one self-associate click covers both the week's shift
-  // instances at once (one shift_assignments row each), same mechanism
-  // area_supervisor already used, now shared by all three.
+  // duties: a self-associate click normally covers both the week's shift
+  // instances at once (one shift_assignments row each). A bar manager can
+  // split a bartender's pairing in two from Shifts.tsx though, leaving
+  // only one side open -- only insert into the side(s) that actually
+  // have room, so picking up a lone vacated side (instead of always
+  // requiring both) works too.
   async function handleAssignDuty(week: WeekShifts, role: ShiftAssignmentRole) {
     if (!myEmployeeId) return
-    const shiftIds = [week.opening?.id, week.closing?.id].filter((v): v is string => !!v)
+    const openingAssignments = (assignmentsByShift.get(week.opening?.id ?? '') ?? []).filter(
+      (a) => a.assignment_role === role,
+    )
+    const closingAssignments = (assignmentsByShift.get(week.closing?.id ?? '') ?? []).filter(
+      (a) => a.assignment_role === role,
+    )
+    const max = role === 'bartender' ? (week.opening?.required_staff_count ?? week.closing?.required_staff_count ?? 3) : role === 'area_manager' ? 2 : 1
+    const shiftIds = [
+      week.opening && week.opening.status !== 'cancelled' && openingAssignments.length < max ? week.opening.id : null,
+      week.closing && week.closing.status !== 'cancelled' && closingAssignments.length < max ? week.closing.id : null,
+    ].filter((v): v is string => !!v)
     if (shiftIds.length === 0) return
     setError(null)
     const rows = shiftIds.map((shift_id) => ({ shift_id, employee_id: myEmployeeId, assignment_role: role }))
@@ -326,6 +339,10 @@ function OnboardingWizardInner() {
     status: 'open' | 'mine' | 'full' | 'cancelled'
     namesTitle?: string
     revertible?: boolean
+    // Set when the viewer is only on one half of a whole-evening duty
+    // (a bar manager split their pairing in Shifts.tsx) -- "פתיחה בלבד" /
+    // "סגירה בלבד", shown next to the "✓ משובץ" badge.
+    partialLabel?: string
     onClick?: () => void
   }
 
@@ -389,7 +406,16 @@ function OnboardingWizardInner() {
             ? 2
             : 1
       const mine = allAssignments.filter((a) => a.employee_id === myEmployeeId)
-      const isFull = allAssignments.length >= max
+      // Per-side room, not a combined row count -- a bar manager can split
+      // a bartender's pairing in Shifts.tsx, leaving one side at capacity
+      // while the other still has a free slot (a plain sum here would
+      // double-count every fully-paired person against a single-instance
+      // max and show "full" too early).
+      const openingHasRoom = !!openingActive && openingAssignments.length < max
+      const closingHasRoom = !!closingActive && closingAssignments.length < max
+      const isFull = !openingHasRoom && !closingHasRoom
+      const partialLabel =
+        mine.length === 1 ? (mine[0].shift_id === shifts.opening?.id ? 'פתיחה בלבד' : 'סגירה בלבד') : undefined
       const peerNames = [
         ...new Set(
           allAssignments
@@ -407,6 +433,7 @@ function OnboardingWizardInner() {
         barManagerName,
         peerNames,
         status: mine.length > 0 ? 'mine' : isFull ? 'full' : 'open',
+        partialLabel,
         namesTitle:
           mine.length > 0
             ? canRevert
@@ -572,7 +599,7 @@ function OnboardingWizardInner() {
               )}
               {slot.status === 'mine' && (
                 <span className="rounded-full bg-green-100 px-2 py-0.5 text-base font-medium text-green-700">
-                  ✓ משובץ
+                  ✓ משובץ{slot.partialLabel ? ` (${slot.partialLabel})` : ''}
                 </span>
               )}
               {slot.status === 'full' && (

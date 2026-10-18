@@ -271,19 +271,40 @@ function BartenderDuty({
 
   const isFutureWeek = anyShift.week_start > currentWeekStart
 
-  const byEmployee = new Map<string, { name: string; assignmentIds: string[] }>()
-  for (const item of [weekShifts.opening, weekShifts.closing]) {
+  interface Bartender {
+    name: string
+    assignmentIds: string[]
+    openingAssignmentId?: string
+    closingAssignmentId?: string
+  }
+  const byEmployee = new Map<string, Bartender>()
+  for (const [side, item] of [
+    ['opening', weekShifts.opening],
+    ['closing', weekShifts.closing],
+  ] as const) {
     if (!item) continue
     for (const s of item.assignedStaff) {
       const existing = byEmployee.get(s.employeeId)
-      if (existing) existing.assignmentIds.push(s.assignmentId)
-      else byEmployee.set(s.employeeId, { name: s.name, assignmentIds: [s.assignmentId] })
+      const entry = existing ?? { name: s.name, assignmentIds: [] }
+      entry.assignmentIds.push(s.assignmentId)
+      if (side === 'opening') entry.openingAssignmentId = s.assignmentId
+      else entry.closingAssignmentId = s.assignmentId
+      byEmployee.set(s.employeeId, entry)
     }
   }
   const bartenders = [...byEmployee.entries()].map(([id, v]) => ({ employeeId: id, ...v }))
   const mine = bartenders.find((b) => b.employeeId === employeeId)
   const max = openingShift?.required_staff_count ?? closingShift?.required_staff_count ?? null
-  const isFull = max !== null && bartenders.length >= max
+  // Per-side room, not a combined count -- a bar manager can split a
+  // bartender's pairing in Shifts.tsx, leaving one side open while the
+  // other is already full.
+  const openingCount = weekShifts.opening?.assignedStaff.length ?? 0
+  const closingCount = weekShifts.closing?.assignedStaff.length ?? 0
+  const openingHasRoom = !!openingShift && (max === null || openingCount < max)
+  const closingHasRoom = !!closingShift && (max === null || closingCount < max)
+  const isFull = !openingHasRoom && !closingHasRoom
+  const partialLabel =
+    mine && mine.assignmentIds.length === 1 ? (mine.openingAssignmentId ? 'פתיחה בלבד' : 'סגירה בלבד') : null
 
   const hoursLabel =
     openingShift && closingShift
@@ -298,7 +319,10 @@ function BartenderDuty({
     setSubmitting(true)
     setError(null)
 
-    const rows = [openingShift?.id, closingShift?.id]
+    const rows = [
+      openingHasRoom ? openingShift!.id : null,
+      closingHasRoom ? closingShift!.id : null,
+    ]
       .filter((id): id is string => !!id)
       .map((shift_id) => ({ shift_id, employee_id: employeeId, assignment_role: 'bartender' as const }))
 
@@ -333,6 +357,8 @@ function BartenderDuty({
         <span className="text-muted-foreground">ברמנים/יות: </span>
         {bartenders.length > 0 ? bartenders.map((b) => b.name).join(', ') : 'אין עדיין משובצים'}
       </p>
+
+      {partialLabel && <p className="text-muted-foreground text-xs">את/ה משובץ/ת — {partialLabel}</p>}
 
       {!mine && (
         <Button disabled={isFull || submitting} onClick={handleJoin}>
