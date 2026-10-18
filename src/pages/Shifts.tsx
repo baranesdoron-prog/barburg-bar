@@ -587,6 +587,20 @@ function WeekCard({
     onSaved()
   }
 
+  // Re-pairs a split bartender by inserting the row for their missing
+  // side -- picking "themselves" back from their own row's edit select.
+  async function handleUnifyDuty(employeeId: string, role: ShiftAssignmentRole, shiftId: string) {
+    setError(null)
+    const { error: insertError } = await supabase
+      .from('shift_assignments')
+      .insert({ shift_id: shiftId, employee_id: employeeId, assignment_role: role })
+    if (insertError) {
+      setError(friendlyAssignmentError(insertError))
+      return
+    }
+    onSaved()
+  }
+
   // A split bartender keeps only one shift instance's row -- this mirrors
   // handleSwapDuty but touches that single shift_id instead of pairing
   // both, for swapping who holds their one remaining side.
@@ -777,6 +791,7 @@ function WeekCard({
             allowSplit
             onSplit={(closingAssignmentId) => handleRemoveDuty([closingAssignmentId])}
             onSwapSingle={(oldId, newId, shiftId) => handleSwapSingleDuty(oldId, newId, 'bartender', shiftId)}
+            onUnify={(employeeId, shiftId) => handleUnifyDuty(employeeId, 'bartender', shiftId)}
           />
         </div>
 
@@ -1366,6 +1381,7 @@ function DutyRow({
   allowSplit,
   onSplit,
   onSwapSingle,
+  onUnify,
 }: {
   label: string
   role: ShiftAssignmentRole
@@ -1395,6 +1411,7 @@ function DutyRow({
   allowSplit?: boolean
   onSplit?: (closingAssignmentId: string) => void
   onSwapSingle?: (oldAssignmentId: string, newEmployeeId: string, shiftId: string) => void
+  onUnify?: (employeeId: string, shiftId: string) => void
 }) {
   const people = mergeDutyPeople(openingAssignments, closingAssignments)
   const iAmEligible = !!myEmployeeId && eligible.some((e) => e.id === myEmployeeId)
@@ -1443,14 +1460,11 @@ function DutyRow({
             const occupiedSide: 'opening' | 'closing' = person.openingAssignmentId ? 'opening' : 'closing'
             const occupiedId = (person.openingAssignmentId ?? person.closingAssignmentId)!
             const occupiedShift = occupiedSide === 'opening' ? openingShift! : closingShift!
+            const missingShift = occupiedSide === 'opening' ? closingShift! : openingShift!
             const occupiedPerson: DutyPerson = { employee_id: person.employee_id, assignmentIds: [occupiedId] }
 
             return (
               <div key={i} className="flex items-center gap-1">
-                <span className="text-muted-foreground shrink-0 text-[10px]">
-                  {occupiedSide === 'opening' ? 'פתיחה' : 'סגירה'} {formatTime(occupiedShift.start_time)}–
-                  {formatTime(occupiedShift.end_time)}
-                </span>
                 <DutySlotCell
                   person={occupiedPerson}
                   isNext={false}
@@ -1464,6 +1478,7 @@ function DutyRow({
                   onPick={() => {}}
                   onSwap={(newId) => onSwapSingle?.(occupiedId, newId, occupiedShift.id)}
                   onRemove={() => onRemove([occupiedId])}
+                  onUnify={missingShift ? () => onUnify?.(person.employee_id, missingShift.id) : undefined}
                 />
               </div>
             )
@@ -1589,6 +1604,7 @@ function DutySlotCell({
   onPick,
   onSwap,
   onRemove,
+  onUnify,
 }: {
   person?: DutyPerson
   isNext: boolean
@@ -1602,6 +1618,10 @@ function DutySlotCell({
   onPick: (employeeId: string) => void
   onSwap: (newEmployeeId: string) => void
   onRemove: () => void
+  // When set, this cell represents a split person's one remaining side --
+  // re-selecting their own name re-pairs them (inserts the missing side)
+  // instead of being a disabled placeholder.
+  onUnify?: () => void
 }) {
   const [editing, setEditing] = useState(false)
 
@@ -1617,10 +1637,11 @@ function DutySlotCell({
             const v = e.target.value
             setEditing(false)
             if (v === '__remove__') onRemove()
+            else if (v === '__unify__') onUnify?.()
             else if (v) onSwap(v)
           }}
         >
-          <option value="" disabled>
+          <option value={onUnify ? '__unify__' : ''} disabled={!onUnify}>
             {nameWithCount(employeeNames[person.employee_id] ?? '—', shiftCounts, person.employee_id, duty)}
           </option>
           <option value="__remove__">— הסרה —</option>
