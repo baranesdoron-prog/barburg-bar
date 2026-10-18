@@ -1656,7 +1656,7 @@ function PartialDutyCellPair({
   onUnify?: (employeeId: string, shiftId: string) => void
   onRemove: (assignmentIds: string[]) => void
 }) {
-  function cell(person: DutyPerson | undefined, shift: Shift, otherShift: Shift) {
+  function cell(person: DutyPerson | undefined, shift: Shift, otherShift: Shift, pairedWith?: DutyPerson) {
     if (person) {
       const occupiedId = (person.openingAssignmentId ?? person.closingAssignmentId)!
       return (
@@ -1677,6 +1677,11 @@ function PartialDutyCellPair({
         />
       )
     }
+    // This row's other column already holds someone -- let them be picked
+    // for this empty side too (re-pairing/unifying them), not just via
+    // their own cell's edit menu. Anyone ELSE stays excluded as usual.
+    const cellTakenIds = pairedWith ? new Set(takenIds) : takenIds
+    if (pairedWith) cellTakenIds.delete(pairedWith.employee_id)
     return (
       <DutySlotCell
         person={undefined}
@@ -1686,7 +1691,7 @@ function PartialDutyCellPair({
         shiftCounts={shiftCounts}
         duty={duty}
         eligible={eligible}
-        takenIds={takenIds}
+        takenIds={cellTakenIds}
         onAssociateMe={onAssociateMe}
         onPick={(id) => onAssignSingle?.(id, shift.id)}
         onSwap={() => {}}
@@ -1697,8 +1702,8 @@ function PartialDutyCellPair({
 
   return (
     <>
-      {cell(openingPerson, openingShift, closingShift)}
-      {cell(closingPerson, closingShift, openingShift)}
+      {cell(openingPerson, openingShift, closingShift, closingPerson)}
+      {cell(closingPerson, closingShift, openingShift, openingPerson)}
     </>
   )
 }
