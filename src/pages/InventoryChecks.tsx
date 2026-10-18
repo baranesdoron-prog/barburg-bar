@@ -21,6 +21,8 @@ interface InventoryItemNameRow {
   id: string
   name: string
   unit: string | null
+  category_id: string | null
+  display_order: number | null
 }
 
 interface ShiftCheck {
@@ -51,9 +53,10 @@ export function InventoryChecks() {
       const shiftIds = [...new Set(counts.map((c) => c.shift_id))]
       const itemIds = [...new Set(counts.map((c) => c.inventory_item_id))]
 
-      const [shiftsRes, itemsRes] = await Promise.all([
+      const [shiftsRes, itemsRes, categoriesRes] = await Promise.all([
         supabase.from('shifts').select('id, start_time, shift_manager_id').in('id', shiftIds),
-        supabase.from('inventory_items').select('id, name, unit').in('id', itemIds),
+        supabase.from('inventory_items').select('id, name, unit, category_id, display_order').in('id', itemIds),
+        supabase.from('product_categories').select('id, sort_order'),
       ])
 
       const shifts = (shiftsRes.data as ShiftRow[]) ?? []
@@ -66,13 +69,33 @@ export function InventoryChecks() {
 
       const employeeNames = new Map(((employeesData as EmployeeNameRow[]) ?? []).map((e) => [e.id, e.full_name]))
       const shiftsById = new Map(shifts.map((s) => [s.id, s]))
-      setItemNames(new Map(((itemsRes.data as InventoryItemNameRow[]) ?? []).map((i) => [i.id, i])))
+      const itemsById = new Map(((itemsRes.data as InventoryItemNameRow[]) ?? []).map((i) => [i.id, i]))
+      setItemNames(itemsById)
+
+      const categorySortOrder = new Map(
+        ((categoriesRes.data as { id: string; sort_order: number }[]) ?? []).map((c) => [c.id, c.sort_order])
+      )
+      function sortKey(itemId: string) {
+        const item = itemsById.get(itemId)
+        const categoryOrder = item?.category_id ? (categorySortOrder.get(item.category_id) ?? Infinity) : Infinity
+        const displayOrder = item?.display_order ?? Infinity
+        return [categoryOrder, displayOrder, item?.name ?? ''] as const
+      }
 
       const countsByShift = new Map<string, InventoryCount[]>()
       for (const count of counts) {
         const list = countsByShift.get(count.shift_id) ?? []
         list.push(count)
         countsByShift.set(count.shift_id, list)
+      }
+      for (const list of countsByShift.values()) {
+        list.sort((a, b) => {
+          const [catA, orderA, nameA] = sortKey(a.inventory_item_id)
+          const [catB, orderB, nameB] = sortKey(b.inventory_item_id)
+          if (catA !== catB) return catA - catB
+          if (orderA !== orderB) return orderA - orderB
+          return nameA.localeCompare(nameB)
+        })
       }
 
       const shiftChecks: ShiftCheck[] = [...countsByShift.entries()]

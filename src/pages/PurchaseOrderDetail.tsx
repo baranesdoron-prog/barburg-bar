@@ -7,7 +7,7 @@ import { cn, formatDateTime } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import type { InventoryItem, PurchaseOrder, PurchaseOrderItem, Supplier } from '@/lib/types'
+import type { InventoryItem, ProductCategory, PurchaseOrder, PurchaseOrderItem, Supplier } from '@/lib/types'
 
 const selectClass =
   'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
@@ -42,16 +42,29 @@ export function PurchaseOrderDetail() {
     const loadedOrder = data as PurchaseOrder
     setOrder(loadedOrder)
 
-    const [supplierRes, itemsRes, catalogRes] = await Promise.all([
+    const [supplierRes, itemsRes, catalogRes, categoriesRes] = await Promise.all([
       supabase.from('suppliers').select('*').eq('id', loadedOrder.supplier_id).single(),
       supabase.from('purchase_order_items').select('*').eq('purchase_order_id', id),
       supabase.from('inventory_items').select('*').eq('active', true).order('name'),
+      supabase.from('product_categories').select('*'),
     ])
+
+    const categories = (categoriesRes.data as ProductCategory[]) ?? []
+    const categorySortOrder = new Map(categories.map((c) => [c.id, c.sort_order]))
+    const sortedCatalog = ((catalogRes.data as InventoryItem[]) ?? []).sort((a, b) => {
+      const orderA = a.category_id ? (categorySortOrder.get(a.category_id) ?? Infinity) : Infinity
+      const orderB = b.category_id ? (categorySortOrder.get(b.category_id) ?? Infinity) : Infinity
+      if (orderA !== orderB) return orderA - orderB
+      const displayA = a.display_order ?? Infinity
+      const displayB = b.display_order ?? Infinity
+      if (displayA !== displayB) return displayA - displayB
+      return a.name.localeCompare(b.name)
+    })
 
     const loadedItems = (itemsRes.data as PurchaseOrderItem[]) ?? []
     setSupplier(supplierRes.data as Supplier)
     setItems(loadedItems)
-    setCatalog((catalogRes.data as InventoryItem[]) ?? [])
+    setCatalog(sortedCatalog)
     setQuantities(Object.fromEntries(loadedItems.map((item) => [item.id, String(item.quantity)])))
   }
 

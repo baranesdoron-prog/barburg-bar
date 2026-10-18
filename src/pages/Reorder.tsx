@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import type { InventoryItemWithStock, Supplier } from '@/lib/types'
+import type { InventoryItemWithStock, ProductCategory, Supplier } from '@/lib/types'
 
 const selectClass =
   'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
@@ -16,11 +16,23 @@ export function Reorder() {
 
   useEffect(() => {
     async function load() {
-      const [itemsRes, suppliersRes] = await Promise.all([
+      const [itemsRes, suppliersRes, categoriesRes] = await Promise.all([
         supabase.from('inventory_items_with_latest_count').select('*').eq('active', true).order('name'),
         supabase.from('suppliers').select('*').order('name'),
+        supabase.from('product_categories').select('*'),
       ])
-      setItems((itemsRes.data as InventoryItemWithStock[]) ?? [])
+      const categories = (categoriesRes.data as ProductCategory[]) ?? []
+      const categorySortOrder = new Map(categories.map((c) => [c.id, c.sort_order]))
+      const sortedItems = ((itemsRes.data as InventoryItemWithStock[]) ?? []).sort((a, b) => {
+        const orderA = a.category_id ? (categorySortOrder.get(a.category_id) ?? Infinity) : Infinity
+        const orderB = b.category_id ? (categorySortOrder.get(b.category_id) ?? Infinity) : Infinity
+        if (orderA !== orderB) return orderA - orderB
+        const displayA = a.display_order ?? Infinity
+        const displayB = b.display_order ?? Infinity
+        if (displayA !== displayB) return displayA - displayB
+        return a.name.localeCompare(b.name)
+      })
+      setItems(sortedItems)
       setSuppliers((suppliersRes.data as Supplier[]) ?? [])
     }
 
