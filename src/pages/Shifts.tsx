@@ -1657,6 +1657,14 @@ function PartialDutyCellPair({
   onRemove: (assignmentIds: string[]) => void
 }) {
   function cell(person: DutyPerson | undefined, shift: Shift, otherShift: Shift, pairedWith?: DutyPerson) {
+    // This row's other column already holds someone -- let them be picked
+    // (or swapped in) here too, whether that's re-pairing/unifying them
+    // via their own cell or directly replacing whoever's on this side,
+    // in one action instead of remove-then-pick. Anyone ELSE stays
+    // excluded as usual.
+    const cellTakenIds = pairedWith ? new Set(takenIds) : takenIds
+    if (pairedWith) cellTakenIds.delete(pairedWith.employee_id)
+
     if (person) {
       const occupiedId = (person.openingAssignmentId ?? person.closingAssignmentId)!
       return (
@@ -1668,7 +1676,7 @@ function PartialDutyCellPair({
           shiftCounts={shiftCounts}
           duty={duty}
           eligible={eligible}
-          takenIds={takenIds}
+          takenIds={cellTakenIds}
           onAssociateMe={onAssociateMe}
           onPick={() => {}}
           onSwap={(newId) => onSwapSingle?.(occupiedId, newId, shift.id)}
@@ -1677,11 +1685,6 @@ function PartialDutyCellPair({
         />
       )
     }
-    // This row's other column already holds someone -- let them be picked
-    // for this empty side too (re-pairing/unifying them), not just via
-    // their own cell's edit menu. Anyone ELSE stays excluded as usual.
-    const cellTakenIds = pairedWith ? new Set(takenIds) : takenIds
-    if (pairedWith) cellTakenIds.delete(pairedWith.employee_id)
     return (
       <DutySlotCell
         person={undefined}
