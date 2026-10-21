@@ -730,7 +730,7 @@ function WeekCard({
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {viewerCanManage && (
-          <div className="bg-muted rounded-md p-2">
+          <div className="rounded-md bg-green-50 p-3 dark:bg-green-950/30">
             <CombinedStatus
               opening={shifts.opening}
               closing={shifts.closing}
@@ -743,7 +743,7 @@ function WeekCard({
           </div>
         )}
 
-        <div className="bg-muted flex flex-col gap-3 rounded-md p-2">
+        <div className="flex flex-col gap-3 rounded-md bg-green-50 p-3 dark:bg-green-950/30">
           <BarManagerRow
             employeeId={shiftManagerId}
             employeeNames={employeeNames}
@@ -796,7 +796,7 @@ function WeekCard({
           />
         </div>
 
-        <div className="bg-muted flex flex-col gap-3 rounded-md p-2">
+        <div className="flex flex-col gap-3 rounded-md bg-green-50 p-3 dark:bg-green-950/30">
           <AreaSupervisorRow
             openingAssignment={openingAreaSupervisors[0]}
             closingAssignment={closingAreaSupervisors[0]}
