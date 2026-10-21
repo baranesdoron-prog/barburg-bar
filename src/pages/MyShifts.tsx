@@ -83,13 +83,17 @@ function MyShiftsView({ assignedOnly }: { assignedOnly: boolean }) {
 
     const grouped = new Map<string, WeekShifts>()
     for (const shift of shifts) {
-      // This page is bartender self-service only (handleJoin always
-      // inserts that role) -- scope everything shown here to bartender
-      // rows, not every assignment on the shift regardless of duty.
+      // The peer list and join/leave actions below are bartender
+      // self-service only (handleJoin always inserts that role), so the
+      // roster stays scoped to bartender rows -- but "is it my shift"
+      // can't be: a bartender-role account can still be given another
+      // duty (area_supervisor, area_manager) by a manager, and they need
+      // to see and check in to that too, not just a bartender booking.
       const shiftAssignments = assignments.filter(
         (a) => a.shift_id === shift.id && a.assignment_role === 'bartender',
       )
-      const ownAssignment = shiftAssignments.find((a) => a.employee_id === appUser.employee_id) ?? null
+      const ownAssignment =
+        assignments.find((a) => a.shift_id === shift.id && a.employee_id === appUser.employee_id) ?? null
 
       const item: UpcomingShift = {
         shift,
@@ -239,6 +243,11 @@ function ShiftStatusLine({ item }: { item: UpcomingShift }) {
       <p className="text-muted-foreground text-xs">
         {formatDateTime(shift.start_time)} – {formatDateTime(shift.end_time)}
       </p>
+      {ownAssignment && ownAssignment.assignment_role !== 'bartender' && (
+        <p className="text-xs font-medium text-green-700">
+          את/ה משובץ/ת כ{shiftAssignmentRoleLabels[ownAssignment.assignment_role]}
+        </p>
+      )}
       {(shift.effective_status === 'active' || shift.effective_status === 'waiting_for_closure') &&
         ownAssignment && <SelfCheckIn shiftAssignmentId={ownAssignment.id} />}
     </div>
