@@ -112,6 +112,7 @@ export function SignUp() {
                 type="tel"
                 required
                 autoComplete="tel"
+                placeholder="058-1234567"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
               />

@@ -307,7 +307,13 @@ function InviteForm({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="invite-phone">טלפון</Label>
-            <Input id="invite-phone" required value={phone} onChange={(e) => setPhone(e.target.value)} />
+            <Input
+              id="invite-phone"
+              required
+              placeholder="058-1234567"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
           </div>
 
           <div className="flex flex-col gap-2">
