@@ -106,6 +106,10 @@ function nameWithStar(name: string, shiftCounts: Record<string, ShiftCountInfo>,
   return senior ? `${name} ⭐` : name
 }
 
+function hasSenior(people: { employee_id: string }[], shiftCounts: Record<string, ShiftCountInfo>, duty: Duty) {
+  return people.some((p) => shiftCounts[p.employee_id]?.[duty]?.senior)
+}
+
 function statusTone(status: EffectiveShiftStatus): { bg: string; fg: string } {
   if (status === 'cancelled') return { bg: C.errorBg, fg: C.error }
   if (status === 'waiting_for_closure' || status === 'reopened') return { bg: C.warningBg, fg: C.warning }
@@ -329,6 +333,8 @@ function WeekSection({
   shiftCounts,
   employeePhones,
   compact,
+  canManage,
+  isAdmin,
   onPreviewAction,
 }: {
   week: string
@@ -339,8 +345,12 @@ function WeekSection({
   shiftCounts: Record<string, ShiftCountInfo>
   employeePhones: Record<string, string>
   compact: boolean
+  canManage: boolean
+  isAdmin: boolean
   onPreviewAction: () => void
 }) {
+  const [showCancelForm, setShowCancelForm] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
   const activeOpening = shifts.opening && shifts.opening.status !== 'cancelled' ? shifts.opening : undefined
   const activeClosing = shifts.closing && shifts.closing.status !== 'cancelled' ? shifts.closing : undefined
   const weekFullyCancelled = !activeOpening && !activeClosing && !!(shifts.opening || shifts.closing)
@@ -369,6 +379,38 @@ function WeekSection({
   const bartenderPeople = mergeDutyPeople(bartenders.opening, bartenders.closing)
   const areaManagerPeople = mergeDutyPeople(areaManagers.opening, areaManagers.closing)
   const areaSupervisorId = areaSupervisors.opening[0]?.employee_id ?? areaSupervisors.closing[0]?.employee_id ?? null
+
+  // Same evening-wide gap checks as the real page's CombinedStatus -- a
+  // manager-only informational summary line, not shown to anyone else.
+  const primaryShift = shifts.closing ?? shifts.opening
+  const openForStaffing =
+    !!primaryShift &&
+    primaryShift.status !== 'cancelled' &&
+    (primaryShift.effective_status === 'published' || primaryShift.effective_status === 'active')
+  const gaps: string[] = []
+  if (primaryShift && openForStaffing) {
+    if (primaryShift.required_staff_count !== null && bartenderPeople.length < primaryShift.required_staff_count) {
+      gaps.push('תת-איוש ברמנים/יות')
+    }
+    if (areaManagerPeople.length === 0) {
+      gaps.push('אין אחראי/ת מתחם')
+    }
+    if (bartenderPeople.length > 0 && !hasSenior(bartenderPeople, shiftCounts, 'bartender')) {
+      gaps.push('אין ברמן/ית בכיר/ה')
+    }
+    if (areaManagerPeople.length > 0 && !hasSenior(areaManagerPeople, shiftCounts, 'area_manager')) {
+      gaps.push('אין אחראי/ת מתחם בכיר/ה')
+    }
+  }
+
+  const cancellableShiftIds = [
+    shifts.opening && shifts.opening.status !== 'cancelled' ? shifts.opening.id : null,
+    shifts.closing && shifts.closing.status !== 'cancelled' ? shifts.closing.id : null,
+  ].filter((v): v is string => !!v)
+  const cancelledShiftIds = [
+    shifts.opening?.status === 'cancelled' ? shifts.opening.id : null,
+    shifts.closing?.status === 'cancelled' ? shifts.closing.id : null,
+  ].filter((v): v is string => !!v)
 
   const duties: DutySummary[] = [
     {
@@ -436,9 +478,10 @@ function WeekSection({
       icon: Users,
       iconBg: '#3F8F6B',
       hoursLabel: AREA_SUPERVISOR_HOURS,
-      // Plain name, no (count) suffix -- unlike the other duties, per
-      // explicit request.
-      people: areaManagerPeople.map((p) => ({ id: p.employee_id, name: employeeNames[p.employee_id] ?? '—' })),
+      people: areaManagerPeople.map((p) => ({
+        id: p.employee_id,
+        name: nameWithStar(employeeNames[p.employee_id] ?? '—', shiftCounts, p.employee_id, 'area_manager'),
+      })),
       isGap: areaManagerPeople.length === 0,
     },
   ]
@@ -464,6 +507,31 @@ function WeekSection({
         </p>
       </div>
 
+      {canManage && (
+        <div className="flex flex-wrap items-center gap-2 px-1 text-xs">
+          <span style={{ color: C.textMuted }}>סטטוס</span>
+          {primaryShift ? (
+            <Link
+              to={`/shifts/${primaryShift.id}`}
+              className="rounded-full px-2 py-0.5 font-semibold hover:underline"
+              style={{
+                background: statusTone(primaryShift.effective_status).bg,
+                color: statusTone(primaryShift.effective_status).fg,
+              }}
+            >
+              {effectiveStatusLabels[primaryShift.effective_status]}
+            </Link>
+          ) : (
+            <span style={{ color: C.textMuted }}>—</span>
+          )}
+          {gaps.map((g) => (
+            <span key={g} className="font-medium" style={{ color: C.warning }}>
+              {g}
+            </span>
+          ))}
+        </div>
+      )}
+
       {weekFullyCancelled ? (
         <div className="rounded-2xl border p-3.5 text-center font-medium" style={{ background: C.errorBg, borderColor: C.border, color: C.error }}>
           השבוע הזה בוטל
@@ -481,6 +549,82 @@ function WeekSection({
             />
           ))}
         </div>
+      )}
+
+      {canManage &&
+        shifts.closing &&
+        (shifts.closing.effective_status === 'active' ||
+          shifts.closing.effective_status === 'waiting_for_closure' ||
+          shifts.closing.effective_status === 'reopened') && (
+          <Link
+            to={`/shifts/${shifts.closing.id}/close`}
+            className="flex items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-white"
+            style={{ background: C.primary }}
+          >
+            סגירת משמרת
+          </Link>
+        )}
+
+      {canManage && cancellableShiftIds.length > 0 && cancelledShiftIds.length === 0 && !showCancelForm && (
+        <button
+          type="button"
+          onClick={() => setShowCancelForm(true)}
+          className="rounded-xl py-2.5 text-sm font-semibold"
+          style={{ background: C.errorBg, color: C.error }}
+        >
+          ביטול משמרת
+        </button>
+      )}
+
+      {canManage && cancellableShiftIds.length > 0 && cancelledShiftIds.length === 0 && showCancelForm && (
+        <div className="flex flex-col gap-2">
+          <textarea
+            className="min-h-16 rounded-xl border p-2 text-xs"
+            style={{ borderColor: C.border, background: C.card }}
+            placeholder="סיבת הביטול (חובה)"
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setShowCancelForm(false)
+                setCancelReason('')
+              }}
+              className="flex-1 rounded-xl py-2 text-sm font-semibold"
+              style={{ background: C.subtleBg, color: C.textMuted }}
+            >
+              חזרה
+            </button>
+            <button
+              type="button"
+              disabled={!cancelReason.trim()}
+              onClick={() => {
+                onPreviewAction()
+                setShowCancelForm(false)
+                setCancelReason('')
+              }}
+              className="flex-1 rounded-xl py-2 text-sm font-semibold text-white disabled:opacity-50"
+              style={{ background: C.error }}
+            >
+              אישור ביטול
+            </button>
+          </div>
+        </div>
+      )}
+
+      {canManage && cancelledShiftIds.length > 0 && (
+        <button
+          type="button"
+          disabled={!isAdmin}
+          title={isAdmin ? undefined : 'רק מנהל/ת מערכת יכול/ה לשחזר משמרת מבוטלת'}
+          onClick={onPreviewAction}
+          className="rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+          style={{ background: C.success }}
+        >
+          שחזור משמרת
+        </button>
       )}
     </div>
   )
@@ -501,6 +645,7 @@ export function ShiftsPreview() {
   const [employeePhones, setEmployeePhones] = useState<Record<string, string>>({})
 
   const canManage = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
+  const isAdmin = effectiveRole === 'administrator'
   const weeks = sundaysInYear(year)
     .map(toDateStr)
     .filter((w) => w >= EARLIEST_WEEK_START && w >= FETCH_FROM)
@@ -578,6 +723,25 @@ export function ShiftsPreview() {
           </div>
         </div>
 
+        {canManage && (
+          <div className="flex items-center gap-2">
+            <Link
+              to="/shifts/archive"
+              className="flex-1 rounded-xl border py-2 text-center text-sm font-semibold"
+              style={{ borderColor: C.border, color: C.textSecondary }}
+            >
+              ארכיון
+            </Link>
+            <Link
+              to="/shifts/new"
+              className="flex-1 rounded-xl py-2 text-center text-sm font-semibold text-white"
+              style={{ background: C.primary }}
+            >
+              משמרת חדשה
+            </Link>
+          </div>
+        )}
+
         <div className="flex items-center justify-between gap-2">
           <select
             className="h-10 rounded-xl border px-3 text-base font-medium"
@@ -627,6 +791,8 @@ export function ShiftsPreview() {
             shiftCounts={shiftCounts}
             employeePhones={employeePhones}
             compact={compact}
+            canManage={canManage}
+            isAdmin={isAdmin}
             onPreviewAction={previewOnly}
           />
         ))}
