@@ -1279,42 +1279,31 @@ function AreaSupervisorRow({
       <div className="flex flex-1 items-center justify-center gap-2">
         {employeeId && !isMine && <span className="truncate">{name}</span>}
 
-        {isMine && canSelfRemove && (
-          <div className="flex items-center gap-1">
-            <span className="truncate">{name}</span>
+        {isMine && (
+          <div className="flex items-center gap-2 rounded-md bg-green-50 px-2 py-1 dark:bg-green-950/40">
+            <span className="truncate text-sm font-medium text-green-800 dark:text-green-300">{name}</span>
             <button
               type="button"
               onClick={async () => {
-                const ok = await confirmAssign({
-                  title: 'איזה באסה! לא מסתדר?',
-                  action: 'remove',
-                  dateLabel,
-                  typeLabel: 'משמרת שלמה',
-                  hoursLabel: AREA_SUPERVISOR_HOURS,
-                  positionLabel: 'מנהל/ת מתחם',
-                })
-                if (!ok) return
-                onSet(null)
+                if (canSelfRemove) {
+                  const ok = await confirmAssign({
+                    title: 'איזה באסה! לא מסתדר?',
+                    action: 'remove',
+                    dateLabel,
+                    typeLabel: 'משמרת שלמה',
+                    hoursLabel: AREA_SUPERVISOR_HOURS,
+                    positionLabel: 'מנהל/ת מתחם',
+                  })
+                  if (!ok) return
+                  onSet(null)
+                } else {
+                  showInfo({
+                    title: 'איזה באסה! לא מסתדר?',
+                    body: 'לא ניתן לבטל משמרת בסמיכות למועד המשמרת. אנא צור/י קשר עם מנהל הבר של המשמרת.',
+                  })
+                }
               }}
-              className="text-destructive text-[10px] underline-offset-2 hover:underline"
-            >
-              ביטול
-            </button>
-          </div>
-        )}
-
-        {isMine && !canSelfRemove && (
-          <div className="flex items-center gap-1">
-            <span className="truncate">{name}</span>
-            <button
-              type="button"
-              onClick={() =>
-                showInfo({
-                  title: 'איזה באסה! לא מסתדר?',
-                  body: 'לא ניתן לבטל משמרת בסמיכות למועד המשמרת. אנא צור/י קשר עם מנהל הבר של המשמרת.',
-                })
-              }
-              className="text-destructive text-[10px] underline-offset-2 hover:underline"
+              className="text-destructive text-xs underline-offset-2 hover:underline"
             >
               ביטול
             </button>
@@ -1573,8 +1562,8 @@ function DutyRow({
       {others.length === 0 && !mine && <span className="text-muted-foreground text-xs">אין עדיין</span>}
 
       {mine && (
-        <div className="flex items-center gap-1">
-          <span className="truncate text-xs">
+        <div className="flex items-center gap-2 rounded-md bg-green-50 px-2 py-1 dark:bg-green-950/40">
+          <span className="truncate text-sm font-medium text-green-800 dark:text-green-300">
             {nameWithCount(employeeNames[mine.employee_id] ?? '—', shiftCounts, mine.employee_id, role)}
           </span>
           <button
@@ -1598,7 +1587,7 @@ function DutyRow({
                 })
               }
             }}
-            className="text-destructive text-[10px] underline-offset-2 hover:underline"
+            className="text-destructive text-xs underline-offset-2 hover:underline"
           >
             ביטול
           </button>
