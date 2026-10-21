@@ -33,7 +33,7 @@ import { formatTime, cn } from '@/lib/utils'
 import {
   useShiftWeeksData,
   mergeDutyPeople,
-  nameWithCount,
+  type Duty,
   weekNeedsClosing,
   ARCHIVE_CUTOFF,
   FETCH_FROM,
@@ -96,6 +96,14 @@ interface DutySummary {
     openingLabel: string
     closingLabel: string
   }
+}
+
+// Unlike the real /shifts page, this preview shows the senior ⭐ marker
+// without the "(shift count)" number next to it -- just the name, plus a
+// star for whoever's already senior in that duty.
+function nameWithStar(name: string, shiftCounts: Record<string, ShiftCountInfo>, employeeId: string, duty: Duty) {
+  const senior = shiftCounts[employeeId]?.[duty]?.senior
+  return senior ? `${name} ⭐` : name
 }
 
 function statusTone(status: EffectiveShiftStatus): { bg: string; fg: string } {
@@ -370,7 +378,7 @@ function WeekSection({
       iconBg: C.primary,
       hoursLabel: eveningHours,
       people: barManagerId
-        ? [{ id: barManagerId, name: nameWithCount(employeeNames[barManagerId] ?? '—', shiftCounts, barManagerId, 'bar_manager') }]
+        ? [{ id: barManagerId, name: nameWithStar(employeeNames[barManagerId] ?? '—', shiftCounts, barManagerId, 'bar_manager') }]
         : [],
       isGap: !barManagerId,
     },
@@ -382,7 +390,7 @@ function WeekSection({
       hoursLabel: eveningHours,
       people: bartenderPeople.map((p) => ({
         id: p.employee_id,
-        name: nameWithCount(employeeNames[p.employee_id] ?? '—', shiftCounts, p.employee_id, 'bartender'),
+        name: nameWithStar(employeeNames[p.employee_id] ?? '—', shiftCounts, p.employee_id, 'bartender'),
       })),
       isGap: bartenderPeople.length === 0,
       // Bartender is the only duty that can be split in the real app --
@@ -394,7 +402,7 @@ function WeekSection({
               names: Object.fromEntries(
                 bartenderPeople.map((p) => [
                   p.employee_id,
-                  nameWithCount(employeeNames[p.employee_id] ?? '—', shiftCounts, p.employee_id, 'bartender'),
+                  nameWithStar(employeeNames[p.employee_id] ?? '—', shiftCounts, p.employee_id, 'bartender'),
                 ]),
               ),
               openingLabel: activeOpening
@@ -416,7 +424,7 @@ function WeekSection({
         ? [
             {
               id: areaSupervisorId,
-              name: nameWithCount(employeeNames[areaSupervisorId] ?? '—', shiftCounts, areaSupervisorId, 'area_supervisor'),
+              name: nameWithStar(employeeNames[areaSupervisorId] ?? '—', shiftCounts, areaSupervisorId, 'area_supervisor'),
             },
           ]
         : [],
