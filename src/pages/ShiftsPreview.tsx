@@ -78,6 +78,16 @@ interface DutySummary {
   hoursLabel: string
   names: string[]
   isGap: boolean
+  // Only set for bartender duty -- the one duty that supports splitting a
+  // whole-evening pairing in the real app. When set, DutyCard renders each
+  // person's own row (with a פיצול button once paired, or a split
+  // opening/closing mini-card while partial) instead of a plain name list.
+  splitAware?: {
+    people: DutyPerson[]
+    names: Record<string, string>
+    openingLabel: string
+    closingLabel: string
+  }
 }
 
 function statusTone(status: EffectiveShiftStatus): { bg: string; fg: string } {
@@ -86,6 +96,76 @@ function statusTone(status: EffectiveShiftStatus): { bg: string; fg: string } {
   if (status === 'active') return { bg: C.infoBg, fg: C.info }
   if (status === 'completed' || status === 'draft') return { bg: C.subtleBg, fg: C.textMuted }
   return { bg: C.successBg, fg: C.success } // published
+}
+
+// One bartender's row inside a split-aware duty card -- mirrors the real
+// /shifts manager view: fully paired gets a name + פיצול button, a partial
+// person gets a small two-line "which side, and the other side's still
+// open" card instead of just a bare name.
+function BartenderPersonRow({
+  person,
+  name,
+  openingLabel,
+  closingLabel,
+  compact,
+  onPreviewAction,
+}: {
+  person: DutyPerson
+  name: string
+  openingLabel: string
+  closingLabel: string
+  compact: boolean
+  onPreviewAction: () => void
+}) {
+  const isFull = !!person.openingAssignmentId && !!person.closingAssignmentId
+
+  if (isFull) {
+    return (
+      <div className="flex items-center justify-between gap-2">
+        <p className={cn('truncate font-medium', compact ? 'text-sm' : 'text-base')} style={{ color: C.text }}>
+          {name}
+        </p>
+        <button
+          type="button"
+          onClick={onPreviewAction}
+          className={cn('shrink-0 rounded-lg border px-2.5 font-semibold', compact ? 'h-6 text-[11px]' : 'h-7 text-xs')}
+          style={{ borderColor: C.primary, color: C.primary, background: 'transparent' }}
+        >
+          פיצול
+        </button>
+      </div>
+    )
+  }
+
+  const onOpening = !!person.openingAssignmentId
+  return (
+    <div
+      className="flex flex-col gap-1.5 rounded-xl border border-dashed px-2.5 py-2"
+      style={{ borderColor: C.border }}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className={cn('truncate font-medium', compact ? 'text-sm' : 'text-base')} style={{ color: C.text }}>
+          {name}
+        </span>
+        <span className="shrink-0 text-xs font-semibold" style={{ color: C.textMuted }}>
+          {onOpening ? openingLabel : closingLabel}
+        </span>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs" style={{ color: C.textMuted }}>
+          פנוי ל{onOpening ? closingLabel : openingLabel}
+        </span>
+        <button
+          type="button"
+          onClick={onPreviewAction}
+          className="h-6 shrink-0 rounded-lg px-2.5 text-[11px] font-semibold"
+          style={{ background: C.primaryLight, color: C.primary }}
+        >
+          שבץ אותי
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function DutyCard({ duty, status, compact, onPreviewAction }: { duty: DutySummary; status: EffectiveShiftStatus; compact: boolean; onPreviewAction: () => void }) {
@@ -109,10 +189,11 @@ function DutyCard({ duty, status, compact, onPreviewAction }: { duty: DutySummar
         paddingLeft: compact ? 20 : 24,
       }}
     >
-      {/* Status badge straddles the top-left edge of the card's own border. */}
+      {/* Status badge sits just inside the card, below its top border (not
+          straddling the line itself -- only the icon does that). */}
       <span
         className="absolute rounded-full px-2.5 py-1 text-xs font-semibold"
-        style={{ background: tone.bg, color: tone.fg, top: -12, left: 12 }}
+        style={{ background: tone.bg, color: tone.fg, top: 10, left: 12 }}
       >
         {duty.isGap ? 'חסר שיבוץ' : effectiveStatusLabels[status]}
       </span>
@@ -125,7 +206,7 @@ function DutyCard({ duty, status, compact, onPreviewAction }: { duty: DutySummar
         <Icon className={cn('text-white', compact ? 'size-5' : 'size-6')} />
       </div>
 
-      <div className={cn('flex flex-col gap-2 pr-1', compact ? 'pt-2' : 'pt-3')}>
+      <div className={cn('flex flex-col gap-2 pr-1', compact ? 'pt-9' : 'pt-10')}>
         <div>
           <p className={cn('font-semibold', compact ? 'text-base' : 'text-lg')} style={{ color: C.text }}>
             {duty.label}
@@ -137,15 +218,30 @@ function DutyCard({ duty, status, compact, onPreviewAction }: { duty: DutySummar
         </div>
 
         {/* Each assigned person on their own line, same as the real /shifts
-            page -- not merged into a list -- so split/unify can eventually
-            target one specific row, not a whole duty at once. */}
-        <div className="flex flex-col gap-1">
+            page -- not merged into a list -- so split/unify can target one
+            specific row, not a whole duty at once. Bartender rows also get
+            the real page's own split/partial behaviour (see splitAware). */}
+        <div className="flex flex-col gap-2">
           {occupied ? (
-            duty.names.map((name) => (
-              <p key={name} className={cn('truncate font-medium', compact ? 'text-sm' : 'text-base')} style={{ color: C.text }}>
-                {name}
-              </p>
-            ))
+            duty.splitAware ? (
+              duty.splitAware.people.map((person) => (
+                <BartenderPersonRow
+                  key={person.employee_id}
+                  person={person}
+                  name={duty.splitAware!.names[person.employee_id] ?? '—'}
+                  openingLabel={duty.splitAware!.openingLabel}
+                  closingLabel={duty.splitAware!.closingLabel}
+                  compact={compact}
+                  onPreviewAction={onPreviewAction}
+                />
+              ))
+            ) : (
+              duty.names.map((name) => (
+                <p key={name} className={cn('truncate font-medium', compact ? 'text-sm' : 'text-base')} style={{ color: C.text }}>
+                  {name}
+                </p>
+              ))
+            )
           ) : (
             <p className={cn(compact ? 'text-sm' : 'text-base')} style={{ color: C.textMuted }}>
               עדיין לא שובץ
@@ -163,7 +259,7 @@ function DutyCard({ duty, status, compact, onPreviewAction }: { duty: DutySummar
           )}
           style={occupied ? { background: C.subtleBg, color: C.textMuted } : { background: C.primary }}
         >
-          שבץ אותי
+          {occupied ? 'הוספת שיבוץ נוסף' : 'שבץ אותי'}
         </button>
       </div>
     </div>
@@ -240,6 +336,24 @@ function WeekSection({
       hoursLabel: eveningHours,
       names: toNames(bartenderPeople, 'bartender'),
       isGap: bartenderPeople.length === 0,
+      splitAware:
+        bartenderPeople.length > 0
+          ? {
+              people: bartenderPeople,
+              names: Object.fromEntries(
+                bartenderPeople.map((p) => [
+                  p.employee_id,
+                  nameWithCount(employeeNames[p.employee_id] ?? '—', shiftCounts, p.employee_id, 'bartender'),
+                ]),
+              ),
+              openingLabel: activeOpening
+                ? `פתיחה ${formatTime(activeOpening.start_time)}–${formatTime(activeOpening.end_time)}`
+                : 'פתיחה',
+              closingLabel: activeClosing
+                ? `סגירה ${formatTime(activeClosing.start_time)}–${formatTime(activeClosing.end_time)}`
+                : 'סגירה',
+            }
+          : undefined,
     },
     {
       key: 'area_supervisor',
