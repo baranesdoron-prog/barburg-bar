@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Calendar,
@@ -7,6 +7,7 @@ import {
   Beer,
   ShieldCheck,
   Users,
+  Phone,
   LayoutDashboard,
   CalendarClock,
   FileText,
@@ -16,6 +17,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 
+import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
 import { ROLES_MANAGING_SHIFTS } from '@/lib/roleLabels'
 import { effectiveStatusLabels } from '@/lib/shiftLabels'
@@ -70,18 +72,24 @@ const C = {
   infoBg: '#EAF2FF',
 }
 
+interface SimplePerson {
+  id: string
+  name: string
+}
+
 interface DutySummary {
   key: string
   label: string
   icon: LucideIcon
   iconBg: string
   hoursLabel: string
-  names: string[]
+  people: SimplePerson[]
   isGap: boolean
   // Only set for bartender duty -- the one duty that supports splitting a
-  // whole-evening pairing in the real app. When set, DutyCard renders each
-  // person's own row (with a פיצול button once paired, or a split
-  // opening/closing mini-card while partial) instead of a plain name list.
+  // whole-evening pairing in the real app (never area manager). When set,
+  // DutyCard renders each person's own row (with a פיצול button once
+  // paired, or a split opening/closing mini-card while partial) instead of
+  // a plain name list.
   splitAware?: {
     people: DutyPerson[]
     names: Record<string, string>
@@ -102,9 +110,22 @@ function statusTone(status: EffectiveShiftStatus): { bg: string; fg: string } {
 // /shifts manager view: fully paired gets a name + פיצול button, a partial
 // person gets a small two-line "which side, and the other side's still
 // open" card instead of just a bare name.
+function PhoneLine({ phone, compact }: { phone: string | undefined; compact: boolean }) {
+  if (!phone) return null
+  return (
+    <div className="flex items-center gap-1" style={{ color: C.textSecondary }}>
+      <Phone className="size-3.5 shrink-0" />
+      <span className={compact ? 'text-xs' : 'text-sm'} dir="ltr">
+        {phone}
+      </span>
+    </div>
+  )
+}
+
 function BartenderPersonRow({
   person,
   name,
+  phone,
   openingLabel,
   closingLabel,
   compact,
@@ -112,6 +133,7 @@ function BartenderPersonRow({
 }: {
   person: DutyPerson
   name: string
+  phone: string | undefined
   openingLabel: string
   closingLabel: string
   compact: boolean
@@ -121,15 +143,20 @@ function BartenderPersonRow({
 
   if (isFull) {
     return (
-      <div className="flex items-center justify-between gap-2">
-        <p className={cn('truncate font-medium', compact ? 'text-sm' : 'text-base')} style={{ color: C.text }}>
-          {name}
-        </p>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className={cn('truncate font-medium', compact ? 'text-sm' : 'text-base')} style={{ color: C.text }}>
+            {name}
+          </p>
+          <PhoneLine phone={phone} compact={compact} />
+        </div>
+        {/* Same filled style as the "add another" button below -- this is
+            also just an action on an existing allocation, not a primary CTA. */}
         <button
           type="button"
           onClick={onPreviewAction}
-          className={cn('shrink-0 rounded-lg border px-2.5 font-semibold', compact ? 'h-6 text-[11px]' : 'h-7 text-xs')}
-          style={{ borderColor: C.primary, color: C.primary, background: 'transparent' }}
+          className={cn('w-fit shrink-0 rounded-xl px-3 font-semibold', compact ? 'h-8 text-xs' : 'h-9 text-sm')}
+          style={{ background: C.subtleBg, color: C.textMuted }}
         >
           פיצול
         </button>
@@ -143,10 +170,13 @@ function BartenderPersonRow({
       className="flex flex-col gap-1.5 rounded-xl border border-dashed px-2.5 py-2"
       style={{ borderColor: C.border }}
     >
-      <div className="flex items-center justify-between gap-2">
-        <span className={cn('truncate font-medium', compact ? 'text-sm' : 'text-base')} style={{ color: C.text }}>
-          {name}
-        </span>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <span className={cn('truncate font-medium', compact ? 'text-sm' : 'text-base')} style={{ color: C.text }}>
+            {name}
+          </span>
+          <PhoneLine phone={phone} compact={compact} />
+        </div>
         <span className="shrink-0 text-xs font-semibold" style={{ color: C.textMuted }}>
           {onOpening ? openingLabel : closingLabel}
         </span>
@@ -168,10 +198,22 @@ function BartenderPersonRow({
   )
 }
 
-function DutyCard({ duty, status, compact, onPreviewAction }: { duty: DutySummary; status: EffectiveShiftStatus; compact: boolean; onPreviewAction: () => void }) {
+function DutyCard({
+  duty,
+  status,
+  compact,
+  employeePhones,
+  onPreviewAction,
+}: {
+  duty: DutySummary
+  status: EffectiveShiftStatus
+  compact: boolean
+  employeePhones: Record<string, string>
+  onPreviewAction: () => void
+}) {
   const tone = duty.isGap ? { bg: C.warningBg, fg: C.warning } : statusTone(status)
   const Icon = duty.icon
-  const occupied = duty.names.length > 0
+  const occupied = duty.people.length > 0
   const iconSize = compact ? 'size-11' : 'size-14'
 
   return (
@@ -229,6 +271,7 @@ function DutyCard({ duty, status, compact, onPreviewAction }: { duty: DutySummar
                   key={person.employee_id}
                   person={person}
                   name={duty.splitAware!.names[person.employee_id] ?? '—'}
+                  phone={employeePhones[person.employee_id]}
                   openingLabel={duty.splitAware!.openingLabel}
                   closingLabel={duty.splitAware!.closingLabel}
                   compact={compact}
@@ -236,10 +279,13 @@ function DutyCard({ duty, status, compact, onPreviewAction }: { duty: DutySummar
                 />
               ))
             ) : (
-              duty.names.map((name) => (
-                <p key={name} className={cn('truncate font-medium', compact ? 'text-sm' : 'text-base')} style={{ color: C.text }}>
-                  {name}
-                </p>
+              duty.people.map((person) => (
+                <div key={person.id}>
+                  <p className={cn('truncate font-medium', compact ? 'text-sm' : 'text-base')} style={{ color: C.text }}>
+                    {person.name}
+                  </p>
+                  <PhoneLine phone={employeePhones[person.id]} compact={compact} />
+                </div>
               ))
             )
           ) : (
@@ -273,6 +319,7 @@ function WeekSection({
   teamByWeek,
   employeeNames,
   shiftCounts,
+  employeePhones,
   compact,
   onPreviewAction,
 }: {
@@ -282,6 +329,7 @@ function WeekSection({
   teamByWeek: Map<string, string>
   employeeNames: Record<string, string>
   shiftCounts: Record<string, ShiftCountInfo>
+  employeePhones: Record<string, string>
   compact: boolean
   onPreviewAction: () => void
 }) {
@@ -309,10 +357,6 @@ function WeekSection({
           ? `${formatTime(activeClosing.start_time)}–${formatTime(activeClosing.end_time)}`
           : ''
 
-  function toNames(people: DutyPerson[], role: 'bartender' | 'area_manager' | 'area_supervisor') {
-    return people.map((p) => nameWithCount(employeeNames[p.employee_id] ?? '—', shiftCounts, p.employee_id, role))
-  }
-
   const barManagerId = teamByWeek.get(week) ?? null
   const bartenderPeople = mergeDutyPeople(bartenders.opening, bartenders.closing)
   const areaManagerPeople = mergeDutyPeople(areaManagers.opening, areaManagers.closing)
@@ -325,7 +369,9 @@ function WeekSection({
       icon: Martini,
       iconBg: C.primary,
       hoursLabel: eveningHours,
-      names: barManagerId ? [nameWithCount(employeeNames[barManagerId] ?? '—', shiftCounts, barManagerId, 'bar_manager')] : [],
+      people: barManagerId
+        ? [{ id: barManagerId, name: nameWithCount(employeeNames[barManagerId] ?? '—', shiftCounts, barManagerId, 'bar_manager') }]
+        : [],
       isGap: !barManagerId,
     },
     {
@@ -334,8 +380,13 @@ function WeekSection({
       icon: Beer,
       iconBg: C.accent,
       hoursLabel: eveningHours,
-      names: toNames(bartenderPeople, 'bartender'),
+      people: bartenderPeople.map((p) => ({
+        id: p.employee_id,
+        name: nameWithCount(employeeNames[p.employee_id] ?? '—', shiftCounts, p.employee_id, 'bartender'),
+      })),
       isGap: bartenderPeople.length === 0,
+      // Bartender is the only duty that can be split in the real app --
+      // never area manager.
       splitAware:
         bartenderPeople.length > 0
           ? {
@@ -361,8 +412,13 @@ function WeekSection({
       icon: ShieldCheck,
       iconBg: C.info,
       hoursLabel: AREA_SUPERVISOR_HOURS,
-      names: areaSupervisorId
-        ? [nameWithCount(employeeNames[areaSupervisorId] ?? '—', shiftCounts, areaSupervisorId, 'area_supervisor')]
+      people: areaSupervisorId
+        ? [
+            {
+              id: areaSupervisorId,
+              name: nameWithCount(employeeNames[areaSupervisorId] ?? '—', shiftCounts, areaSupervisorId, 'area_supervisor'),
+            },
+          ]
         : [],
       isGap: !areaSupervisorId,
     },
@@ -372,7 +428,9 @@ function WeekSection({
       icon: Users,
       iconBg: '#3F8F6B',
       hoursLabel: AREA_SUPERVISOR_HOURS,
-      names: toNames(areaManagerPeople, 'area_manager'),
+      // Plain name, no (count) suffix -- unlike the other duties, per
+      // explicit request.
+      people: areaManagerPeople.map((p) => ({ id: p.employee_id, name: employeeNames[p.employee_id] ?? '—' })),
       isGap: areaManagerPeople.length === 0,
     },
   ]
@@ -410,6 +468,7 @@ function WeekSection({
               duty={duty}
               status={activeOpening?.effective_status ?? activeClosing?.effective_status ?? 'published'}
               compact={compact}
+              employeePhones={employeePhones}
               onPreviewAction={onPreviewAction}
             />
           ))}
@@ -431,6 +490,7 @@ export function ShiftsPreview() {
   const [year, setYear] = useState(currentYear)
   const [compact, setCompact] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  const [employeePhones, setEmployeePhones] = useState<Record<string, string>>({})
 
   const canManage = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
   const weeks = sundaysInYear(year)
@@ -445,6 +505,28 @@ export function ShiftsPreview() {
     canManage,
     callEnsureUpcoming: false,
   })
+
+  // Separate, preview-only fetch (not part of the shared hook, which the
+  // real page also uses and doesn't need phone numbers for).
+  useEffect(() => {
+    let isMounted = true
+    supabase
+      .from('employees')
+      .select('id, phone')
+      .then(({ data }) => {
+        if (!isMounted || !data) return
+        setEmployeePhones(
+          Object.fromEntries(
+            (data as { id: string; phone: string | null }[])
+              .filter((e) => !!e.phone)
+              .map((e) => [e.id, e.phone as string]),
+          ),
+        )
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   const visibleWeeks = weeks.filter((w) => w >= ARCHIVE_CUTOFF || weekNeedsClosing(shiftsByWeek.get(w) ?? {}))
 
@@ -535,6 +617,7 @@ export function ShiftsPreview() {
             teamByWeek={teamByWeek}
             employeeNames={employeeNames}
             shiftCounts={shiftCounts}
+            employeePhones={employeePhones}
             compact={compact}
             onPreviewAction={previewOnly}
           />
