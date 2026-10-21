@@ -7,7 +7,6 @@ import {
   Beer,
   ShieldCheck,
   Users,
-  UsersRound,
   LayoutDashboard,
   CalendarClock,
   FileText,
@@ -92,62 +91,77 @@ function statusTone(status: EffectiveShiftStatus): { bg: string; fg: string } {
 function DutyCard({ duty, status, compact, onPreviewAction }: { duty: DutySummary; status: EffectiveShiftStatus; compact: boolean; onPreviewAction: () => void }) {
   const tone = duty.isGap ? { bg: C.warningBg, fg: C.warning } : statusTone(status)
   const Icon = duty.icon
+  const occupied = duty.names.length > 0
+  const iconSize = compact ? 'size-11' : 'size-14'
 
   return (
     <div
-      className={cn('flex items-start gap-3 rounded-2xl border', compact ? 'p-2.5' : 'p-3.5')}
-      style={{ background: C.card, borderColor: C.border }}
+      className="relative rounded-2xl border"
+      style={{
+        background: C.card,
+        borderColor: C.border,
+        paddingTop: compact ? 12 : 16,
+        paddingBottom: compact ? 10 : 14,
+        // Explicit physical sides via inline style, not Tailwind's pr-*/pl-*
+        // utilities -- those (and left-*/right-*) resolve as RTL-logical
+        // in this setup, which silently swaps sides under dir="rtl".
+        paddingRight: compact ? 10 : 14,
+        paddingLeft: compact ? 20 : 24,
+      }}
     >
-      <div
-        className={cn('flex shrink-0 items-center justify-center rounded-full', compact ? 'size-9' : 'size-12')}
-        style={{ background: duty.iconBg }}
+      {/* Status badge straddles the top-left edge of the card's own border. */}
+      <span
+        className="absolute rounded-full px-2.5 py-1 text-xs font-semibold"
+        style={{ background: tone.bg, color: tone.fg, top: -12, left: 12 }}
       >
-        <Icon className={cn('text-white', compact ? 'size-4' : 'size-6')} />
+        {duty.isGap ? 'חסר שיבוץ' : effectiveStatusLabels[status]}
+      </span>
+
+      {/* Duty icon straddles the top-right edge, same idea. */}
+      <div
+        className={cn('absolute flex items-center justify-center rounded-full ring-4', iconSize)}
+        style={{ background: duty.iconBg, ['--tw-ring-color' as string]: C.subtleBg, top: -16, right: 12 }}
+      >
+        <Icon className={cn('text-white', compact ? 'size-5' : 'size-6')} />
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className={cn('truncate font-semibold', compact ? 'text-base' : 'text-lg')} style={{ color: C.text }}>
-              {duty.names.length > 0 ? duty.names[0] : 'עדיין לא שובץ'}
-            </p>
-            <p className={cn(compact ? 'text-xs' : 'text-sm')} style={{ color: C.textSecondary }}>
-              {duty.label}
-            </p>
+      <div className={cn('flex flex-col gap-2 pr-1', compact ? 'pt-2' : 'pt-3')}>
+        <div>
+          <p className={cn('font-semibold', compact ? 'text-base' : 'text-lg')} style={{ color: C.text }}>
+            {duty.label}
+          </p>
+          <div className="mt-0.5 flex items-center gap-1" style={{ color: C.textSecondary }}>
+            <Clock className="size-4 shrink-0" />
+            <span className={compact ? 'text-xs' : 'text-sm'}>{duty.hoursLabel}</span>
           </div>
-          <span
-            className="shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold"
-            style={{ background: tone.bg, color: tone.fg }}
-          >
-            {duty.isGap ? 'חסר שיבוץ' : effectiveStatusLabels[status]}
-          </span>
         </div>
 
-        <div className="flex items-center gap-1" style={{ color: C.textSecondary }}>
-          <Clock className="size-4 shrink-0" />
-          <span className={compact ? 'text-xs' : 'text-sm'}>{duty.hoursLabel}</span>
+        {/* Each assigned person on their own line, same as the real /shifts
+            page -- not merged into a list -- so split/unify can eventually
+            target one specific row, not a whole duty at once. */}
+        <div className="flex flex-col gap-1">
+          {occupied ? (
+            duty.names.map((name) => (
+              <p key={name} className={cn('truncate font-medium', compact ? 'text-sm' : 'text-base')} style={{ color: C.text }}>
+                {name}
+              </p>
+            ))
+          ) : (
+            <p className={cn(compact ? 'text-sm' : 'text-base')} style={{ color: C.textMuted }}>
+              עדיין לא שובץ
+            </p>
+          )}
         </div>
-
-        {duty.names.length > 1 && (
-          <div
-            className="flex items-center gap-2 rounded-xl px-2.5 py-1.5"
-            style={{ background: C.subtleBg }}
-          >
-            <UsersRound className="size-4 shrink-0" style={{ color: C.textMuted }} />
-            <span className={cn('truncate', compact ? 'text-xs' : 'text-sm')} style={{ color: C.text }}>
-              {duty.names.slice(1).join(', ')}
-            </span>
-          </div>
-        )}
 
         <button
           type="button"
           onClick={onPreviewAction}
           className={cn(
-            'mt-1 w-fit rounded-xl px-3 font-semibold text-white',
+            'w-fit rounded-xl px-3 font-semibold',
             compact ? 'h-8 text-xs' : 'h-9 text-sm',
+            occupied ? '' : 'text-white',
           )}
-          style={{ background: C.primary }}
+          style={occupied ? { background: C.subtleBg, color: C.textMuted } : { background: C.primary }}
         >
           שבץ אותי
         </button>
@@ -255,25 +269,19 @@ function WeekSection({
       ? weekLabelFormatter.format(new Date(shifts.closing.start_time))
       : weekLabelFormatter.format(shiftDateOfWeek(week))
   const weekdayLabel = new Intl.DateTimeFormat('he-IL', { weekday: 'long' }).format(shiftDateOfWeek(week))
-  const filledCount = duties.filter((d) => !d.isGap).length
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between px-1">
-        <div>
-          <h2 className={cn('font-bold', compact ? 'text-lg' : 'text-xl')} style={{ color: C.text }}>
-            {dateLabel}
-          </h2>
-          <p className="text-sm" style={{ color: C.textMuted }}>
-            {weekdayLabel}
-          </p>
-        </div>
-        <span
-          className="shrink-0 rounded-full px-3 py-1 text-sm font-semibold"
-          style={{ background: C.infoBg, color: C.info }}
-        >
-          {filledCount} משמרות
-        </span>
+    <div
+      className={cn('flex flex-col rounded-3xl border', compact ? 'gap-5 p-3 pt-4' : 'gap-6 p-4 pt-5')}
+      style={{ background: C.subtleBg, borderColor: C.border }}
+    >
+      <div className="px-1">
+        <h2 className={cn('font-bold', compact ? 'text-lg' : 'text-xl')} style={{ color: C.text }}>
+          {dateLabel}
+        </h2>
+        <p className="text-sm" style={{ color: C.textMuted }}>
+          {weekdayLabel}
+        </p>
       </div>
 
       {weekFullyCancelled ? (
@@ -281,7 +289,7 @@ function WeekSection({
           השבוע הזה בוטל
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className={cn('flex flex-col', compact ? 'gap-5' : 'gap-6')}>
           {duties.map((duty) => (
             <DutyCard
               key={duty.key}
