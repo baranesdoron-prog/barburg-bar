@@ -34,19 +34,19 @@ const currentYear = new Date().getFullYear()
 // Weeks starting before this are "old" and live in the archive instead of
 // the main list -- once a week's shift is no longer the current/next one,
 // it moves to the archive right away.
-const ARCHIVE_CUTOFF = toDateStr(activeWeekStart())
+export const ARCHIVE_CUTOFF = toDateStr(activeWeekStart())
 
 // activeWeekStart() rolls to next week the moment it's Friday/Saturday --
 // but the just-finished Thursday closing shift ends at 00:30 Friday, so it
 // becomes waiting_for_closure at essentially the same moment its week
 // would otherwise vanish from this list. Always fetch one extra week back
 // so that week's shift data is available to check.
-const FETCH_FROM = toDateStr(addDays(activeWeekStart(), -7))
+export const FETCH_FROM = toDateStr(addDays(activeWeekStart(), -7))
 
 // A week still needs to be shown even after rolling past ARCHIVE_CUTOFF if
 // it has a shift still waiting to be closed -- otherwise the "סגירת
 // משמרת" button becomes unreachable right when it's needed.
-function weekNeedsClosing(shifts: WeekShifts) {
+export function weekNeedsClosing(shifts: WeekShifts) {
   return (
     shifts.opening?.effective_status === 'waiting_for_closure' ||
     shifts.opening?.effective_status === 'reopened' ||
@@ -60,9 +60,9 @@ function weekNeedsClosing(shifts: WeekShifts) {
 // display only, doesn't change shifts.start_time or any self-assign window.
 // Both are whole-evening duties, one continuous window, not split into
 // opening/closing like bartender's real shift-backed hours.
-const AREA_SUPERVISOR_HOURS = '19:45–00:30'
+export const AREA_SUPERVISOR_HOURS = '19:45–00:30'
 
-interface Employee {
+export interface Employee {
   id: string
   full_name: string
 }
@@ -72,16 +72,16 @@ interface Employee {
 // own count and its own senior flag (2+ lifetime shifts in that specific
 // duty, OR the matching employees.is_senior_* manual override for staff
 // whose history predates this app's shift history).
-type Duty = 'bartender' | 'area_manager' | 'area_supervisor' | 'bar_manager'
+export type Duty = 'bartender' | 'area_manager' | 'area_supervisor' | 'bar_manager'
 
-interface ShiftCountInfo {
+export interface ShiftCountInfo {
   bartender: { count: number; senior: boolean }
   area_manager: { count: number; senior: boolean }
   area_supervisor: { count: number; senior: boolean }
   bar_manager: { count: number; senior: boolean }
 }
 
-interface WeekShifts {
+export interface WeekShifts {
   opening?: Shift
   closing?: Shift
 }
@@ -96,7 +96,7 @@ const SENIOR_SHIFT_THRESHOLD = 2
 // Shown next to a name everywhere it's assigned: how many shifts this
 // person has actually worked in this specific duty, with a star once
 // they're senior for it.
-function nameWithCount(name: string, shiftCounts: Record<string, ShiftCountInfo>, employeeId: string, duty: Duty) {
+export function nameWithCount(name: string, shiftCounts: Record<string, ShiftCountInfo>, employeeId: string, duty: Duty) {
   const info = shiftCounts[employeeId]?.[duty]
   return `${name} (${info?.count ?? 0})${info?.senior ? ' ⭐' : ''}`
 }
@@ -113,7 +113,7 @@ function hasSenior(people: { employee_id: string }[], shiftCounts: Record<string
 // (normally 2, but tolerates 1 for data left over from before this
 // became a whole-evening duty -- self-heals to 2 the next time that
 // person is touched, since every add/swap always writes both rows).
-interface DutyPerson {
+export interface DutyPerson {
   employee_id: string
   assignmentIds: string[]
   // Which specific row is the opening one and which is the closing one --
@@ -123,7 +123,7 @@ interface DutyPerson {
   closingAssignmentId?: string
 }
 
-function mergeDutyPeople(openingAssignments: ShiftAssignment[], closingAssignments: ShiftAssignment[]): DutyPerson[] {
+export function mergeDutyPeople(openingAssignments: ShiftAssignment[], closingAssignments: ShiftAssignment[]): DutyPerson[] {
   const order: string[] = []
   const byEmployee = new Map<string, DutyPerson>()
   function add(a: ShiftAssignment, side: 'opening' | 'closing') {
@@ -155,7 +155,7 @@ export function ShiftsArchive() {
 // weeks, so they share one loader instead of drifting apart.
 // ---------------------------------------------------------------------
 
-function useShiftWeeksData({
+export function useShiftWeeksData({
   weeks,
   canManage,
   callEnsureUpcoming,

@@ -14,11 +14,13 @@ import {
   User,
   Users,
   Wand2,
+  Sparkles,
   type LucideIcon,
 } from 'lucide-react'
 
 import type { AppRole } from '@/lib/types'
 import { ROLES_MANAGING_SHIFTS, ROLES_REQUIRING_EMPLOYEE, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
+import { SHIFTS_PREVIEW_ALLOWED_USER_IDS } from '@/lib/shiftsPreviewAccess'
 
 export interface NavItem {
   to?: string
@@ -27,7 +29,7 @@ export interface NavItem {
   children?: NavItem[]
 }
 
-export function getNavItems(role: AppRole): NavItem[] {
+export function getNavItems(role: AppRole, appUserId?: string): NavItem[] {
   const items: NavItem[] = []
 
   if (role !== 'bartender') {
@@ -87,6 +89,11 @@ export function getNavItems(role: AppRole): NavItem[] {
 
   if (role === 'administrator') {
     items.push({ to: '/admin/users', label: 'משתמשים', icon: Users })
+  }
+
+  // Temporary -- see shiftsPreviewAccess.ts.
+  if (appUserId && SHIFTS_PREVIEW_ALLOWED_USER_IDS.includes(appUserId)) {
+    items.push({ to: '/shifts-preview', label: 'משמרות - עיצוב חדש 🧪', icon: Sparkles })
   }
 
   return items
