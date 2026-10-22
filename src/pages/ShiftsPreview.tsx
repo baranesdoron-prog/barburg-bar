@@ -1,22 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  Calendar,
-  Clock,
-  Martini,
-  Beer,
-  ShieldCheck,
-  Users,
-  Phone,
-  LayoutDashboard,
-  CalendarClock,
-  FileText,
-  User,
-  ChevronLeft,
-  type LucideIcon,
-} from 'lucide-react'
+import { Calendar, Clock, Martini, Beer, ShieldCheck, Users, Phone, ChevronLeft, type LucideIcon } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
+import { C } from '@/lib/designTokens'
+import { BottomNav } from '@/components/BottomNav'
 import { useAppUserContext } from '@/lib/outletContext'
 import { ROLES_MANAGING_SHIFTS } from '@/lib/roleLabels'
 import { effectiveStatusLabels, shiftAssignmentRoleLabels } from '@/lib/shiftLabels'
@@ -52,30 +40,6 @@ import { SHIFTS_LEGACY_ACCESS_USER_IDS } from '@/lib/shiftsLegacyAccess'
 import type { Shift, ShiftAssignment, ShiftAssignmentRole, EffectiveShiftStatus } from '@/lib/types'
 
 const currentYear = new Date().getFullYear()
-
-// Design tokens from the approved mockup -- kept local to this one page.
-const C = {
-  primary: '#174D3B',
-  primaryHover: '#23664F',
-  primaryLight: '#E8F3EC',
-  accent: '#E9A23B',
-  accentLight: '#FFF3DF',
-  appBg: '#FAF8F5',
-  card: '#FFFFFF',
-  subtleBg: '#F3F5F1',
-  text: '#202A26',
-  textSecondary: '#647067',
-  textMuted: '#737D76',
-  border: '#E5E8E2',
-  success: '#16835D',
-  successBg: '#E6F6ED',
-  warning: '#B76A00',
-  warningBg: '#FFF2DB',
-  error: '#C83F3F',
-  errorBg: '#FDECEC',
-  info: '#2563EB',
-  infoBg: '#EAF2FF',
-}
 
 const pickerSelectClass = 'h-8 max-w-[65%] rounded-lg border px-2 text-xs font-semibold outline-none'
 const pickerSelectStyle = { borderColor: C.border, background: C.card, color: C.text }
@@ -1464,13 +1428,6 @@ function WeekSection({
   )
 }
 
-const BOTTOM_NAV: { label: string; icon: LucideIcon; to: string }[] = [
-  { label: 'דשבורד', icon: LayoutDashboard, to: '/dashboard' },
-  { label: 'משמרות', icon: CalendarClock, to: '/shifts' },
-  { label: 'דוחות', icon: FileText, to: '/reports' },
-  { label: 'הפרופיל שלי', icon: User, to: '/profile' },
-]
-
 export function ShiftsPreview() {
   const { appUser, effectiveRole } = useAppUserContext()
   const [year, setYear] = useState(currentYear)
@@ -1626,25 +1583,7 @@ export function ShiftsPreview() {
         ))}
       </div>
 
-      <nav
-        className="fixed inset-x-0 bottom-0 z-10 flex items-center justify-around border-t py-2"
-        style={{ background: C.card, borderColor: C.border, paddingBottom: 'max(8px, env(safe-area-inset-bottom, 0px))' }}
-      >
-        {BOTTOM_NAV.map((item) => {
-          const active = item.to === '/shifts'
-          return (
-            <Link
-              key={item.label}
-              to={item.to}
-              className="flex flex-col items-center gap-0.5 px-3 py-1 text-xs font-medium"
-              style={{ color: active ? C.primary : C.textMuted }}
-            >
-              <item.icon className="size-5" />
-              {item.label}
-            </Link>
-          )
-        })}
-      </nav>
+      <BottomNav active="/shifts" />
     </div>
   )
 }
