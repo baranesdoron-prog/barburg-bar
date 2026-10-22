@@ -101,13 +101,23 @@ function statusTone(status: EffectiveShiftStatus): { bg: string; fg: string } {
 
 function PhoneLine({ phone, compact }: { phone: string | undefined; compact: boolean }) {
   if (!phone) return null
+  // Phones are stored as +972XXYYYYYYY (see the phone-normalization
+  // migration) -- wa.me wants just the digits, no leading +.
+  const whatsappHref = `https://wa.me/${phone.replace(/\D/g, '')}`
   return (
-    <div className="flex items-center gap-1" style={{ color: C.textSecondary }}>
+    <a
+      href={whatsappHref}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className="flex items-center gap-1 underline-offset-2 hover:underline"
+      style={{ color: C.textSecondary }}
+    >
       <Phone className="size-3.5 shrink-0" />
       <span className={compact ? 'text-xs' : 'text-sm'} dir="ltr">
         {phone}
       </span>
-    </div>
+    </a>
   )
 }
 
