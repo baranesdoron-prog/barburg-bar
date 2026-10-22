@@ -98,32 +98,48 @@ export function Reports() {
         </div>
 
         <div className="flex gap-2">
-          <label className="flex flex-1 flex-col gap-1">
-            <span className="px-1 text-xs font-medium" style={{ color: C.textMuted }}>
-              מתאריך
-            </span>
+          <div className="relative h-10 flex-1">
             <input
               type="date"
               lang="en-GB"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
               className="h-10 w-full rounded-xl border px-3 text-sm"
-              style={{ borderColor: C.border, background: C.card, color: dateFrom ? C.text : C.textMuted }}
+              style={{ borderColor: C.border, background: C.card, color: dateFrom ? C.text : 'transparent' }}
             />
-          </label>
-          <label className="flex flex-1 flex-col gap-1">
-            <span className="px-1 text-xs font-medium" style={{ color: C.textMuted }}>
-              עד תאריך
-            </span>
+            {/* Native type="date" ignores a placeholder attribute and its
+                own empty-state text renders in whatever locale the
+                browser/OS picks (Safari ignores lang entirely) -- so the
+                real value's text is hidden until set, and this sits over
+                it instead. pointer-events-none lets taps reach the input
+                underneath to open the native picker. */}
+            {!dateFrom && (
+              <span
+                className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm"
+                style={{ color: C.textMuted }}
+              >
+                מתאריך
+              </span>
+            )}
+          </div>
+          <div className="relative h-10 flex-1">
             <input
               type="date"
               lang="en-GB"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
               className="h-10 w-full rounded-xl border px-3 text-sm"
-              style={{ borderColor: C.border, background: C.card, color: dateTo ? C.text : C.textMuted }}
+              style={{ borderColor: C.border, background: C.card, color: dateTo ? C.text : 'transparent' }}
             />
-          </label>
+            {!dateTo && (
+              <span
+                className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm"
+                style={{ color: C.textMuted }}
+              >
+                עד תאריך
+              </span>
+            )}
+          </div>
         </div>
 
         {reports !== null && groups.length === 0 && (
