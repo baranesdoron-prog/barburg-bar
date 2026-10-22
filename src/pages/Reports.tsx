@@ -100,6 +100,7 @@ export function Reports() {
         <div className="flex gap-2">
           <input
             type="date"
+            lang="en-GB"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
             className="h-10 flex-1 rounded-xl border px-3 text-sm"
@@ -107,6 +108,7 @@ export function Reports() {
           />
           <input
             type="date"
+            lang="en-GB"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
             className="h-10 flex-1 rounded-xl border px-3 text-sm"
