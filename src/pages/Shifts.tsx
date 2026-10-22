@@ -86,7 +86,7 @@ export interface WeekShifts {
   closing?: Shift
 }
 
-function friendlyAssignmentError(error: { code?: string; message: string }) {
+export function friendlyAssignmentError(error: { code?: string; message: string }) {
   if (error.code === '23503') return 'לא ניתן להסיר — כבר נרשמה נוכחות למשמרת זו'
   return error.message
 }

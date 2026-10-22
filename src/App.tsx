@@ -43,7 +43,7 @@ import { Users } from '@/pages/Users'
 import { WeeklyChecklist } from '@/pages/WeeklyChecklist'
 import { Procedures } from '@/pages/Procedures'
 import { ShiftsPreview } from '@/pages/ShiftsPreview'
-import { SHIFTS_PREVIEW_ALLOWED_USER_IDS } from '@/lib/shiftsPreviewAccess'
+import { SHIFTS_LEGACY_ACCESS_USER_IDS } from '@/lib/shiftsLegacyAccess'
 
 function RequireApproved() {
   const { loading, session, appUser, activeRole } = useAppUser()
@@ -66,18 +66,18 @@ function RequireRole({ roles }: { roles: AppRole[] }) {
   return <Outlet context={{ appUser, session, effectiveRole } satisfies AppOutletContext} />
 }
 
-// Temporary, named-user access for evaluating the /shifts-preview redesign
-// -- not a role, just two specific app_users.id values (see
-// shiftsPreviewAccess.ts). Checked on the real appUser.id, never the
-// client-only impersonated/previewed role, so switching role preview can't
-// be used to reach this. Enforced here regardless of how the route is
-// reached (hidden nav link or a typed-in URL) -- the underlying data itself
-// stays exactly as RLS-scoped as it already is on the real /shifts page.
-function RequireShiftsPreviewAccess() {
+// Named-user access for the hidden /shifts-legacy rollback page -- not a
+// role, just two specific app_users.id values (see shiftsLegacyAccess.ts).
+// Checked on the real appUser.id, never the client-only
+// impersonated/previewed role, so switching role preview can't be used to
+// reach this. Enforced here regardless of how the route is reached (no nav
+// link, or a typed-in URL) -- the underlying data itself stays exactly as
+// RLS-scoped as it already is on the real /shifts page.
+function RequireShiftsLegacyAccess() {
   const { appUser, session } = useAppUserContext()
   const { effectiveRole } = useImpersonation()
 
-  if (!SHIFTS_PREVIEW_ALLOWED_USER_IDS.includes(appUser.id)) return <Navigate to="/shifts" replace />
+  if (!SHIFTS_LEGACY_ACCESS_USER_IDS.includes(appUser.id)) return <Navigate to="/shifts" replace />
   return <Outlet context={{ appUser, session, effectiveRole } satisfies AppOutletContext} />
 }
 
@@ -116,10 +116,10 @@ export function App() {
           <Route path="/my-shifts/assigned" element={<MyAssignedShifts />} />
         </Route>
         <Route element={<RequireRole roles={ROLES_VIEWING_ALLOCATIONS} />}>
-          <Route path="/shifts" element={<Shifts />} />
+          <Route path="/shifts" element={<ShiftsPreview />} />
         </Route>
-        <Route element={<RequireShiftsPreviewAccess />}>
-          <Route path="/shifts-preview" element={<ShiftsPreview />} />
+        <Route element={<RequireShiftsLegacyAccess />}>
+          <Route path="/shifts-legacy" element={<Shifts />} />
         </Route>
         <Route element={<RequireRole roles={ROLES_VIEWING_SHIFTS} />}>
           <Route path="/shifts/archive" element={<ShiftsArchive />} />

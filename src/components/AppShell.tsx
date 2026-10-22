@@ -16,16 +16,14 @@ const PREVIEWABLE_ROLES: AppRole[] = ['bartender', 'shift_manager']
 
 function SidebarContent({
   greetingName,
-  appUserId,
   onNavigate,
 }: {
   greetingName: string | null
-  appUserId: string
   onNavigate?: () => void
 }) {
   const { realRole, effectiveRole, isPreviewing, startPreview, stopPreview } = useImpersonation()
 
-  const navItems = getNavItems(effectiveRole, appUserId)
+  const navItems = getNavItems(effectiveRole)
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -163,7 +161,7 @@ export function AppShell({ appUser, session }: { appUser: AppUser; session: Sess
   return (
     <div className="flex min-h-svh">
       <aside className="hidden w-64 shrink-0 overflow-y-auto border-e p-4 md:flex print:hidden">
-        <SidebarContent greetingName={greetingName} appUserId={appUser.id} />
+        <SidebarContent greetingName={greetingName} />
       </aside>
 
       {drawerOpen && (
@@ -181,11 +179,7 @@ export function AppShell({ appUser, session }: { appUser: AppUser; session: Sess
             >
               <X className="size-5" />
             </Button>
-            <SidebarContent
-              greetingName={greetingName}
-              appUserId={appUser.id}
-              onNavigate={() => setDrawerOpen(false)}
-            />
+            <SidebarContent greetingName={greetingName} onNavigate={() => setDrawerOpen(false)} />
           </aside>
         </div>
       )}
