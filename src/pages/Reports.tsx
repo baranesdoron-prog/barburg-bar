@@ -98,22 +98,32 @@ export function Reports() {
         </div>
 
         <div className="flex gap-2">
-          <input
-            type="date"
-            lang="en-GB"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="h-10 flex-1 rounded-xl border px-3 text-sm"
-            style={{ borderColor: C.border, background: C.card, color: dateFrom ? C.text : C.textMuted }}
-          />
-          <input
-            type="date"
-            lang="en-GB"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="h-10 flex-1 rounded-xl border px-3 text-sm"
-            style={{ borderColor: C.border, background: C.card, color: dateTo ? C.text : C.textMuted }}
-          />
+          <label className="flex flex-1 flex-col gap-1">
+            <span className="px-1 text-xs font-medium" style={{ color: C.textMuted }}>
+              מתאריך
+            </span>
+            <input
+              type="date"
+              lang="en-GB"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="h-10 w-full rounded-xl border px-3 text-sm"
+              style={{ borderColor: C.border, background: C.card, color: dateFrom ? C.text : C.textMuted }}
+            />
+          </label>
+          <label className="flex flex-1 flex-col gap-1">
+            <span className="px-1 text-xs font-medium" style={{ color: C.textMuted }}>
+              עד תאריך
+            </span>
+            <input
+              type="date"
+              lang="en-GB"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="h-10 w-full rounded-xl border px-3 text-sm"
+              style={{ borderColor: C.border, background: C.card, color: dateTo ? C.text : C.textMuted }}
+            />
+          </label>
         </div>
 
         {reports !== null && groups.length === 0 && (
