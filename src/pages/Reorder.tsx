@@ -5,7 +5,6 @@ import { CheckCircle2, Minus, PackagePlus, Plus, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { formatMoney } from '@/lib/purchaseOrderLabels'
 import { C } from '@/lib/designTokens'
-import { BottomNav } from '@/components/BottomNav'
 import type { InventoryItemWithStock, ProductCategory, Supplier } from '@/lib/types'
 
 
@@ -121,8 +120,6 @@ export function Reorder() {
           </div>
         )}
       </div>
-
-      <BottomNav active="/purchase-orders/reorder" />
     </div>
   )
 }

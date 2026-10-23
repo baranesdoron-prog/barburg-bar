@@ -9,7 +9,6 @@ import { journalCategoryLabels } from '@/lib/journalLabels'
 import { purchaseOrderStatusLabels, purchaseOrderStatusBadgeClass } from '@/lib/purchaseOrderLabels'
 import { cn, formatDateTime } from '@/lib/utils'
 import { C } from '@/lib/designTokens'
-import { BottomNav } from '@/components/BottomNav'
 import type { AttendanceStatus, PurchaseOrder, ShiftReportRow, Supplier } from '@/lib/types'
 
 interface FlaggedOrder {
@@ -463,10 +462,6 @@ export function ShiftReport() {
         >
           חזרה לדוחות
         </Link>
-      </div>
-
-      <div className="print:hidden">
-        <BottomNav active="/reports" />
       </div>
     </div>
   )

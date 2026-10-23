@@ -6,7 +6,6 @@ import { supabase } from '@/lib/supabase'
 import { formatMoney, purchaseOrderStatusLabels, purchaseOrderStatusTone } from '@/lib/purchaseOrderLabels'
 import { formatDateTime } from '@/lib/utils'
 import { C } from '@/lib/designTokens'
-import { BottomNav } from '@/components/BottomNav'
 import type { InventoryItem, ProductCategory, PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus, Supplier } from '@/lib/types'
 
 const STEPS: PurchaseOrderStatus[] = ['draft', 'ordered', 'received']
@@ -500,8 +499,6 @@ export function PurchaseOrderDetail() {
           )}
         </div>
       </div>
-
-      <BottomNav active="/purchase-orders" />
     </div>
   )
 }

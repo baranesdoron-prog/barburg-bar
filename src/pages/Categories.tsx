@@ -3,7 +3,6 @@ import { Pencil, Plus, Tags } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import { C, CATEGORY_COLORS } from '@/lib/designTokens'
-import { BottomNav } from '@/components/BottomNav'
 import type { ProductCategory, Supplier } from '@/lib/types'
 
 const fieldClass = 'h-10 w-full min-w-0 rounded-xl border px-3 text-sm outline-none'
@@ -155,8 +154,6 @@ export function Categories() {
           </button>
         </form>
       </div>
-
-      <BottomNav active="/inventory/items" />
     </div>
   )
 }

@@ -5,7 +5,6 @@ import { supabase } from '@/lib/supabase'
 import { formatDateTime } from '@/lib/utils'
 import { weekLabelFormatter } from '@/lib/weeklyChecklist'
 import { C } from '@/lib/designTokens'
-import { BottomNav } from '@/components/BottomNav'
 import type { InventoryCount } from '@/lib/types'
 
 const monthLabelFormatter = new Intl.DateTimeFormat('he-IL', {
@@ -248,8 +247,6 @@ export function InventoryChecks() {
           </div>
         )}
       </div>
-
-      <BottomNav active="/inventory/items" />
     </div>
   )
 }

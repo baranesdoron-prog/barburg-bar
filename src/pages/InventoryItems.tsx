@@ -5,7 +5,6 @@ import { ChevronDown, Download, MoreVertical, Package, Plus, Search, Upload } fr
 import { supabase } from '@/lib/supabase'
 import { parseCsv, toCsv } from '@/lib/csv'
 import { C, CATEGORY_COLORS } from '@/lib/designTokens'
-import { BottomNav } from '@/components/BottomNav'
 import type { InventoryItem, InventoryItemWithStock, InventoryUnitType, ProductCategory, Supplier } from '@/lib/types'
 
 type StatusFilter = 'all' | 'low' | 'inactive'
@@ -488,8 +487,6 @@ export function InventoryItems() {
         <Plus className="size-4" />
         הוספת מוצר
       </Link>
-
-      <BottomNav active="/inventory/items" />
     </div>
   )
 }

@@ -4,7 +4,6 @@ import { Calendar, Clock, Martini, Beer, ShieldCheck, Users, Phone, ChevronLeft,
 
 import { supabase } from '@/lib/supabase'
 import { C } from '@/lib/designTokens'
-import { BottomNav } from '@/components/BottomNav'
 import { useAppUserContext } from '@/lib/outletContext'
 import { ROLES_MANAGING_SHIFTS } from '@/lib/roleLabels'
 import { effectiveStatusLabels, shiftAssignmentRoleLabels } from '@/lib/shiftLabels'
@@ -1582,8 +1581,6 @@ export function ShiftsPreview() {
           />
         ))}
       </div>
-
-      <BottomNav active="/shifts" />
     </div>
   )
 }

@@ -7,7 +7,6 @@ import { formatDateTime } from '@/lib/utils'
 import { weekLabelFormatter } from '@/lib/weeklyChecklist'
 import { shiftTypeLabels } from '@/lib/shiftLabels'
 import { C } from '@/lib/designTokens'
-import { BottomNav } from '@/components/BottomNav'
 import type { ShiftReportRow } from '@/lib/types'
 
 const monthLabelFormatter = new Intl.DateTimeFormat('he-IL', {
@@ -193,8 +192,6 @@ export function Reports() {
           </div>
         )}
       </div>
-
-      <BottomNav active="/reports" />
     </div>
   )
 }

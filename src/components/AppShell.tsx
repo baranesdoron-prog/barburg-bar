@@ -10,6 +10,7 @@ import { useImpersonation } from '@/lib/impersonation'
 import type { AppOutletContext } from '@/lib/outletContext'
 import type { AppRole, AppUser } from '@/lib/types'
 import { Button } from '@/components/ui/button'
+import { BottomNav } from '@/components/BottomNav'
 import { cn } from '@/lib/utils'
 
 const PREVIEWABLE_ROLES: AppRole[] = ['bartender', 'shift_manager']
@@ -193,11 +194,14 @@ export function AppShell({ appUser, session }: { appUser: AppUser; session: Sess
           <span className="font-semibold">ברבורג</span>
         </header>
 
-        <main className="flex-1 p-4">
+        {/* Bottom padding keeps the last content clear of the fixed BottomNav. */}
+        <main className="flex-1 p-4 pb-24 print:pb-4">
           <ImpersonationBanner />
           <Outlet context={{ appUser, session, effectiveRole } satisfies AppOutletContext} />
         </main>
       </div>
+
+      <BottomNav />
     </div>
   )
 }

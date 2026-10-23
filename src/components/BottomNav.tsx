@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { LayoutDashboard, CalendarClock, FileText, Package, User, type LucideIcon } from 'lucide-react'
 
 import { C } from '@/lib/designTokens'
@@ -15,14 +15,29 @@ const ITEMS: { label: string; icon: LucideIcon; to: string; managersOnly?: boole
   { label: 'הפרופיל שלי', icon: User, to: '/profile' },
 ]
 
-export function BottomNav({ active }: { active: string }) {
+// Which tab a path belongs to. A shift's closing report lives under
+// /shifts/:id/report but is reached from the reports list, so it lights
+// up reports rather than shifts.
+function activeTab(pathname: string): string | null {
+  if (pathname === '/' || pathname.startsWith('/dashboard')) return '/dashboard'
+  if (pathname === '/reports' || /^\/shifts\/[^/]+\/report$/.test(pathname)) return '/reports'
+  if (pathname.startsWith('/shifts') || pathname.startsWith('/my-shifts')) return '/shifts'
+  if (pathname.startsWith('/inventory')) return '/inventory/items'
+  if (pathname.startsWith('/profile')) return '/profile'
+  return null
+}
+
+// Rendered once by AppShell, so it shows on every signed-in page.
+export function BottomNav() {
+  const { pathname } = useLocation()
+  const active = activeTab(pathname)
   const { effectiveRole } = useImpersonation()
   const isManager = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
   const items = ITEMS.filter((item) => !item.managersOnly || isManager)
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-10 flex items-center justify-around border-t py-2"
+      className="fixed inset-x-0 bottom-0 z-10 flex items-center justify-around border-t py-2 print:hidden"
       style={{ background: C.card, borderColor: C.border, paddingBottom: 'max(8px, env(safe-area-inset-bottom, 0px))' }}
     >
       {items.map((item) => {

@@ -8,7 +8,6 @@ import { roleLabels } from '@/lib/roleLabels'
 import { shiftTypeLabel } from '@/lib/shiftLabels'
 import { weekLabelFormatter } from '@/lib/weeklyChecklist'
 import { C } from '@/lib/designTokens'
-import { BottomNav } from '@/components/BottomNav'
 import type { AppRole, PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus, Shift, Supplier } from '@/lib/types'
 
 const monthLabelFormatter = new Intl.DateTimeFormat('he-IL', {
@@ -307,8 +306,6 @@ export function PurchaseOrders() {
           הזמנה חדשה
         </button>
       )}
-
-      <BottomNav active="/purchase-orders" />
     </div>
   )
 }
