@@ -173,27 +173,21 @@ function SlotCard({ slot, duty }: { slot: Slot; duty: Duty }) {
   )
 }
 
-function WizardHeader({ back }: { back?: { label: string; onClick: () => void } }) {
+function WizardHeader({ back }: { back: { label: string; onClick: () => void } }) {
   return (
     <header
-      className="sticky top-0 z-10 flex items-center justify-between border-b px-4 py-3"
+      className="sticky top-0 z-10 flex items-center justify-end border-b px-4 py-3"
       style={{ background: C.card, borderColor: C.border }}
     >
-      <div className="flex items-center gap-2">
-        <img src="/logo.png" alt="ברבורג" className="size-9 shrink-0 rounded-full object-cover" />
-        <span className="text-lg font-bold">ברבורג</span>
-      </div>
-      {back && (
-        <button
-          type="button"
-          onClick={back.onClick}
-          className="flex items-center gap-1 text-sm font-semibold"
-          style={{ color: C.textSecondary }}
-        >
-          <ChevronLeft className="size-4" />
-          {back.label}
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={back.onClick}
+        className="flex items-center gap-1 text-sm font-semibold"
+        style={{ color: C.textSecondary }}
+      >
+        <ChevronLeft className="size-4" />
+        {back.label}
+      </button>
     </header>
   )
 }
@@ -424,7 +418,6 @@ function OnboardingWizardInner() {
   if (!myEmployeeId) {
     return (
       <WizardShell>
-        <WizardHeader />
         <div className="mx-auto flex max-w-xl flex-col items-center gap-4 px-4 py-16 text-center">
           <p className="text-sm" style={{ color: C.textMuted }}>
             החשבון שלך אינו משויך לעובד/ת, ולכן לא ניתן לשבץ אותך למשמרת.
@@ -446,7 +439,6 @@ function OnboardingWizardInner() {
   if (step === 'pick') {
     return (
       <WizardShell>
-        <WizardHeader />
         <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 pt-5">
           <div
             className="flex flex-col gap-1 rounded-2xl p-4 text-center"
