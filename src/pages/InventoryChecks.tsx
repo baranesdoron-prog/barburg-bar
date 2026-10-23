@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react'
+import { ChevronDown, ClipboardList, Search } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
-import { formatDate, formatDateTime } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { formatDateTime } from '@/lib/utils'
+import { weekLabelFormatter } from '@/lib/weeklyChecklist'
+import { C } from '@/lib/designTokens'
+import { BottomNav } from '@/components/BottomNav'
 import type { InventoryCount } from '@/lib/types'
+
+const monthLabelFormatter = new Intl.DateTimeFormat('he-IL', {
+  month: 'long',
+  year: 'numeric',
+  timeZone: 'Asia/Jerusalem',
+})
 
 interface ShiftRow {
   id: string
@@ -36,6 +44,7 @@ export function InventoryChecks() {
   const [checks, setChecks] = useState<ShiftCheck[] | null>(null)
   const [itemNames, setItemNames] = useState<Map<string, InventoryItemNameRow>>(new Map())
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -127,51 +136,120 @@ export function InventoryChecks() {
 
   if (checks === null) return null
 
-  return (
-    <div className="mx-auto flex max-w-md flex-col gap-4">
-      <h1 className="text-xl font-semibold">בדיקות מלאי</h1>
+  const term = search.trim()
+  const filtered = term ? checks.filter((check) => check.managerName.includes(term)) : checks
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">כל בדיקות המלאי לפי משמרת</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          {checks.length === 0 && <p className="text-muted-foreground text-sm">אין עדיין בדיקות מלאי.</p>}
-          {checks.map((check) => {
-            const isOpen = expanded.has(check.shiftId)
-            return (
-              <div key={check.shiftId} className="rounded-md border p-2 text-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="font-medium">{formatDate(check.shiftDate)}</p>
-                    <p className="text-muted-foreground text-xs">
-                      מנהל/ת בר: {check.managerName} · {check.counts.length} פריטים נספרו
-                    </p>
-                  </div>
-                  <Button variant="ghost" size="sm" onClick={() => toggleExpanded(check.shiftId)}>
-                    {isOpen ? 'הסתרה' : 'פירוט'}
-                  </Button>
-                </div>
-                {isOpen && (
-                  <div className="mt-2 flex flex-col gap-1 border-t pt-2">
-                    {check.counts.map((count) => {
-                      const item = itemNames.get(count.inventory_item_id)
-                      return (
-                        <div key={count.id} className="flex items-center justify-between text-xs">
-                          <span>{item?.name ?? '—'}</span>
-                          <span className="text-muted-foreground">
-                            {count.quantity_counted} {item?.unit ?? ''} · {formatDateTime(count.created_at)}
-                          </span>
+  const groups: { label: string; checks: ShiftCheck[] }[] = []
+  for (const check of filtered) {
+    const label = monthLabelFormatter.format(new Date(check.shiftDate))
+    const last = groups[groups.length - 1]
+    if (last && last.label === label) last.checks.push(check)
+    else groups.push({ label, checks: [check] })
+  }
+
+  return (
+    <div dir="rtl" className="min-h-svh pb-24" style={{ background: C.appBg, color: C.text }}>
+      <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 pt-5">
+        <div className="flex items-center gap-3 rounded-2xl p-3" style={{ background: C.primaryLight }}>
+          <div className="flex size-12 shrink-0 items-center justify-center rounded-xl" style={{ background: C.primary }}>
+            <ClipboardList className="size-6 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold" style={{ color: C.primary }}>
+            בדיקות מלאי
+          </h1>
+        </div>
+
+        <div
+          className="flex items-center gap-2 rounded-full border px-4"
+          style={{ borderColor: C.border, background: C.card, height: 44 }}
+        >
+          <Search className="size-[18px] shrink-0" style={{ color: C.textMuted }} />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="חיפוש לפי מנהל/ת בר"
+            className="h-full flex-1 bg-transparent text-sm outline-none"
+            style={{ color: C.text }}
+          />
+        </div>
+
+        {groups.length === 0 && (
+          <p className="text-center" style={{ color: C.textMuted }}>
+            {checks.length === 0 ? 'אין עדיין בדיקות מלאי.' : 'אין בדיקות תואמות.'}
+          </p>
+        )}
+
+        {groups.length > 0 && (
+          <div className="flex flex-col gap-3 rounded-3xl border p-3.5" style={{ background: C.subtleBg, borderColor: C.border }}>
+            {groups.map((group, i) => (
+              <div key={group.label} className={i === 0 ? 'flex flex-col gap-2' : 'flex flex-col gap-2 pt-2'}>
+                <p className="px-0.5 text-xs font-bold" style={{ color: C.textMuted }}>
+                  {group.label}
+                </p>
+                {group.checks.map((check) => {
+                  const isOpen = expanded.has(check.shiftId)
+                  return (
+                    <div
+                      key={check.shiftId}
+                      className="overflow-hidden rounded-2xl border"
+                      style={{ background: C.card, borderColor: C.border }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleExpanded(check.shiftId)}
+                        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-start"
+                      >
+                        <div
+                          className="flex size-[34px] shrink-0 items-center justify-center rounded-full"
+                          style={{ background: C.accent }}
+                        >
+                          <ClipboardList className="size-[15px] text-white" />
                         </div>
-                      )
-                    })}
-                  </div>
-                )}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold">
+                            {check.managerName} · {weekLabelFormatter.format(new Date(check.shiftDate))}
+                          </p>
+                          <p className="text-xs" style={{ color: C.textMuted }}>
+                            {check.counts.length} פריטים נספרו
+                          </p>
+                        </div>
+                        <ChevronDown
+                          className="size-4 shrink-0 transition-transform"
+                          style={{ color: C.textMuted, transform: isOpen ? undefined : 'rotate(90deg)' }}
+                        />
+                      </button>
+                      {isOpen && (
+                        <div className="flex flex-col border-t px-3 py-1.5" style={{ borderColor: C.border }}>
+                          {check.counts.map((count, index) => {
+                            const item = itemNames.get(count.inventory_item_id)
+                            return (
+                              <div
+                                key={count.id}
+                                className="flex items-center justify-between gap-2 py-1.5 text-sm"
+                                style={{ borderTop: index === 0 ? undefined : `1px solid ${C.border}` }}
+                              >
+                                <span className="min-w-0 truncate">{item?.name ?? '—'}</span>
+                                <span className="shrink-0 text-xs" style={{ color: C.textMuted }}>
+                                  <span className="text-sm font-bold tabular-nums" style={{ color: C.text }}>
+                                    {count.quantity_counted}
+                                  </span>{' '}
+                                  {item?.unit ?? ''} · {formatDateTime(count.created_at)}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
-            )
-          })}
-        </CardContent>
-      </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <BottomNav active="/inventory/items" />
     </div>
   )
 }

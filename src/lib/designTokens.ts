@@ -24,3 +24,8 @@ export const C = {
   info: '#2563EB',
   infoBg: '#EAF2FF',
 }
+
+// Icon-tile colors for product categories, cycled by the category's
+// position -- shared so a category keeps the same color on the inventory
+// items list and the categories page.
+export const CATEGORY_COLORS = [C.primary, C.accent, '#4E8B6A', C.info]

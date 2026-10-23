@@ -4,7 +4,7 @@ import { ChevronDown, Download, MoreVertical, Package, Plus, Search, Upload } fr
 
 import { supabase } from '@/lib/supabase'
 import { parseCsv, toCsv } from '@/lib/csv'
-import { C } from '@/lib/designTokens'
+import { C, CATEGORY_COLORS } from '@/lib/designTokens'
 import { BottomNav } from '@/components/BottomNav'
 import type { InventoryItem, InventoryItemWithStock, InventoryUnitType, ProductCategory, Supplier } from '@/lib/types'
 
@@ -384,10 +384,12 @@ export function InventoryItems() {
           </p>
         )}
 
-        {groups.map((group, groupIndex) => {
+        {groups.map((group) => {
           const isCollapsed = collapsed.has(group.key)
           const groupLow = group.items.filter((i) => i.active && i.is_low_stock).length
-          const iconColor = group.key === 'none' ? C.textMuted : CATEGORY_COLORS[groupIndex % CATEGORY_COLORS.length]
+          const categoryIndex = categories.findIndex((c) => c.id === group.key)
+          const iconColor =
+            categoryIndex === -1 ? C.textMuted : CATEGORY_COLORS[categoryIndex % CATEGORY_COLORS.length]
           return (
             <div
               key={group.key}
@@ -491,8 +493,6 @@ export function InventoryItems() {
     </div>
   )
 }
-
-const CATEGORY_COLORS = [C.primary, C.accent, '#4E8B6A', C.info]
 
 function FilterBanner({ text }: { text: string }) {
   return (
