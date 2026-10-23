@@ -1,16 +1,17 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { Martini, Beer, Users, ShieldCheck, ChevronLeft, type LucideIcon } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
 import { shiftAssignmentRoleLabels } from '@/lib/shiftLabels'
-import { cn, formatTime } from '@/lib/utils'
+import { formatTime } from '@/lib/utils'
 import { activeWeekStart, addDays, toDateStr, shiftDateOfWeek } from '@/lib/weeklyChecklist'
 import { useConfirmAssign } from '@/hooks/useConfirmAssign'
 import { ConfirmAssignDialog } from '@/components/ConfirmAssignDialog'
 import { useInfoDialog } from '@/hooks/useInfoDialog'
 import { InfoDialog } from '@/components/InfoDialog'
-import { Button } from '@/components/ui/button'
+import { C } from '@/lib/designTokens'
 import type { Shift, ShiftAssignment, ShiftAssignmentRole, ShiftManagerAssignment, ShiftType } from '@/lib/types'
 
 const shortDateFormatter = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'numeric' })
@@ -43,6 +44,166 @@ const LIST_LABELS: Record<Duty, string> = {
   bartender: 'משמרות פתוחות לברמנים/יות',
   area_manager: 'משמרות פתוחות לאחראי/ת מתחם',
   area_supervisor: 'משמרות פתוחות למנהל/ת מתחם',
+}
+
+// Same duty icons/colors as the redesigned /shifts page.
+const DUTY_ICON: Record<Duty, LucideIcon> = {
+  bar_manager: Martini,
+  bartender: Beer,
+  area_manager: Users,
+  area_supervisor: ShieldCheck,
+}
+const DUTY_ICON_BG: Record<Duty, string> = {
+  bar_manager: C.primary,
+  bartender: C.accent,
+  area_manager: '#3F8F6B',
+  area_supervisor: C.info,
+}
+
+interface Slot {
+  key: string
+  dateLabel: string
+  typeLabel: string
+  hoursLabel: string
+  barManagerName?: string
+  peerNames: string[]
+  status: 'open' | 'mine' | 'full' | 'cancelled'
+  namesTitle?: string
+  revertible?: boolean
+  // Set when the viewer is only on one half of a whole-evening duty
+  // (a bar manager split their pairing in Shifts.tsx) -- "פתיחה בלבד" /
+  // "סגירה בלבד", shown next to the "✓ משובץ" badge.
+  partialLabel?: string
+  // Set when only one side is actually relevant (a lone open slot, or
+  // the viewer's own partial assignment) -- "משמרת פתיחה"/"משמרת סגירה",
+  // shown in orange right in the title, next to the hours.
+  sideTypeLabel?: string
+  onClick?: () => void
+}
+
+function DutyTile({ icon: Icon, iconBg, label, onClick }: { icon: LucideIcon; iconBg: string; label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-3 rounded-2xl border p-3.5 text-start"
+      style={{ background: C.card, borderColor: C.border }}
+    >
+      <div className="flex size-[46px] shrink-0 items-center justify-center rounded-2xl" style={{ background: iconBg }}>
+        <Icon className="size-[22px] text-white" />
+      </div>
+      <span className="flex-1 text-base font-bold" style={{ color: C.text }}>
+        {label}
+      </span>
+      <ChevronLeft className="size-[18px] shrink-0" style={{ color: C.textMuted }} />
+    </button>
+  )
+}
+
+function SlotCard({ slot, duty }: { slot: Slot; duty: Duty }) {
+  const Icon = DUTY_ICON[duty]
+  const mine = slot.status === 'mine'
+  const full = slot.status === 'full'
+  const cancelled = slot.status === 'cancelled'
+  const muted = full || cancelled
+
+  return (
+    <button
+      type="button"
+      disabled={!slot.onClick}
+      onClick={slot.onClick}
+      title={slot.namesTitle}
+      className="relative flex w-full flex-col items-start gap-1 rounded-2xl border text-start disabled:cursor-default"
+      style={{
+        background: mine ? C.successBg : muted ? C.subtleBg : C.card,
+        borderColor: mine ? '#BEE6CF' : C.border,
+        opacity: muted ? 0.75 : 1,
+        paddingTop: 20,
+        paddingBottom: 14,
+        paddingRight: 16,
+        paddingLeft: 14,
+      }}
+    >
+      <div
+        className="absolute flex size-9 items-center justify-center rounded-full ring-4"
+        style={{ background: muted ? '#B9BFBA' : DUTY_ICON_BG[duty], ['--tw-ring-color' as string]: C.appBg, top: -16, right: 14 }}
+      >
+        <Icon className="size-4 text-white" />
+      </div>
+
+      {(mine || full || cancelled) && (
+        <span
+          className="absolute rounded-full px-2 py-0.5 text-[11px] font-bold"
+          style={{
+            background: mine ? C.card : C.border,
+            color: mine ? C.success : C.textMuted,
+            top: 10,
+            left: 12,
+          }}
+        >
+          {mine ? `✓ משובץ${slot.partialLabel ? ` (${slot.partialLabel})` : ''}` : cancelled ? 'מבוטלת' : 'מלאה'}
+        </span>
+      )}
+
+      <div className="flex w-full items-center justify-between gap-2">
+        <span className="text-[15px] font-bold" style={{ color: muted ? C.textSecondary : C.text }}>
+          {slot.typeLabel}{' '}
+          {slot.sideTypeLabel && (
+            <span style={{ color: C.warning }}>{slot.sideTypeLabel} </span>
+          )}
+          <span className="font-medium" style={{ color: mine ? C.primaryHover : C.textMuted }}>
+            {slot.hoursLabel}
+          </span>
+        </span>
+        <span className="shrink-0 text-[13px]" style={{ color: mine ? C.primaryHover : C.textMuted }}>
+          {slot.dateLabel}
+        </span>
+      </div>
+      {slot.barManagerName && (
+        <span className="text-[13px]" style={{ color: mine ? C.primaryHover : C.textMuted }}>
+          מנהל/ת בר: {slot.barManagerName}
+        </span>
+      )}
+      {slot.peerNames.length > 0 && (
+        <span className="text-[13px]" style={{ color: C.textMuted }}>
+          גם: {slot.peerNames.join(', ')}
+        </span>
+      )}
+    </button>
+  )
+}
+
+function WizardHeader({ back }: { back?: { label: string; onClick: () => void } }) {
+  return (
+    <header
+      className="sticky top-0 z-10 flex items-center justify-between border-b px-4 py-3"
+      style={{ background: C.card, borderColor: C.border }}
+    >
+      <div className="flex items-center gap-2">
+        <img src="/logo.png" alt="ברבורג" className="size-9 shrink-0 rounded-full object-cover" />
+        <span className="text-lg font-bold">ברבורג</span>
+      </div>
+      {back && (
+        <button
+          type="button"
+          onClick={back.onClick}
+          className="flex items-center gap-1 text-sm font-semibold"
+          style={{ color: C.textSecondary }}
+        >
+          <ChevronLeft className="size-4" />
+          {back.label}
+        </button>
+      )}
+    </header>
+  )
+}
+
+function WizardShell({ children }: { children: ReactNode }) {
+  return (
+    <div dir="rtl" className="min-h-svh pb-10" style={{ background: C.appBg, color: C.text }}>
+      {children}
+    </div>
+  )
 }
 
 // Area manager and area supervisor run on their own hours, distinct from
@@ -262,65 +423,85 @@ function OnboardingWizardInner() {
 
   if (!myEmployeeId) {
     return (
-      <div className="mx-auto flex max-w-md flex-col items-center gap-4 py-16 text-center">
-        <p className="text-muted-foreground text-sm">החשבון שלך אינו משויך לעובד/ת, ולכן לא ניתן לשבץ אותך למשמרת.</p>
-        <Button onClick={finish} disabled={finishing}>
-          להמשך לאפליקציה
-        </Button>
-      </div>
+      <WizardShell>
+        <WizardHeader />
+        <div className="mx-auto flex max-w-xl flex-col items-center gap-4 px-4 py-16 text-center">
+          <p className="text-sm" style={{ color: C.textMuted }}>
+            החשבון שלך אינו משויך לעובד/ת, ולכן לא ניתן לשבץ אותך למשמרת.
+          </p>
+          <button
+            type="button"
+            onClick={finish}
+            disabled={finishing}
+            className="h-11 rounded-xl px-5 text-sm font-bold text-white disabled:opacity-50"
+            style={{ background: C.primary }}
+          >
+            להמשך לאפליקציה
+          </button>
+        </div>
+      </WizardShell>
     )
   }
 
   if (step === 'pick') {
     return (
-      <div className="mx-auto flex max-w-md flex-col gap-6 py-10">
-        <div className="flex flex-col gap-1 text-center">
-          <h1 className="text-xl font-semibold">ברוך/ה הבא/ה</h1>
-          <p className="text-muted-foreground text-sm">מה תרצה/י לעשות היום?</p>
-        </div>
-
-        <div className="flex flex-col gap-3">
-          {barManagerEligible && (
-            <Button
-              size="lg"
-              className="h-auto justify-start px-5 py-4 text-base"
-              onClick={() => pickDuty('bar_manager')}
-            >
-              {PICK_LABELS.bar_manager}
-            </Button>
-          )}
-          <Button
-            size="lg"
-            variant={barManagerEligible ? 'outline' : 'default'}
-            className="h-auto justify-start px-5 py-4 text-base"
-            onClick={() => pickDuty('bartender')}
+      <WizardShell>
+        <WizardHeader />
+        <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 pt-5">
+          <div
+            className="flex flex-col gap-1 rounded-2xl p-4 text-center"
+            style={{ background: C.primaryLight }}
           >
-            {PICK_LABELS.bartender}
-          </Button>
-          <Button
-            size="lg"
-            variant="outline"
-            className="h-auto justify-start px-5 py-4 text-base"
-            onClick={() => pickDuty('area_manager')}
-          >
-            {PICK_LABELS.area_manager}
-          </Button>
-          {canSuperviseArea && (
-            <Button
-              size="lg"
-              variant="outline"
-              className="h-auto justify-start px-5 py-4 text-base"
-              onClick={() => pickDuty('area_supervisor')}
-            >
-              {PICK_LABELS.area_supervisor}
-            </Button>
-          )}
-        </div>
+            <h1 className="text-xl font-bold" style={{ color: C.primary }}>
+              ברוך/ה הבא/ה!
+            </h1>
+            <p className="text-sm" style={{ color: C.primaryHover }}>
+              מה תרצה/י לעשות היום?
+            </p>
+          </div>
 
-        <Button variant="ghost" onClick={finish} disabled={finishing}>
-          דלג להמשך לאפליקציה
-        </Button>
-      </div>
+          <div className="flex flex-col gap-2.5">
+            {barManagerEligible && (
+              <DutyTile
+                icon={DUTY_ICON.bar_manager}
+                iconBg={DUTY_ICON_BG.bar_manager}
+                label={PICK_LABELS.bar_manager}
+                onClick={() => pickDuty('bar_manager')}
+              />
+            )}
+            <DutyTile
+              icon={DUTY_ICON.bartender}
+              iconBg={DUTY_ICON_BG.bartender}
+              label={PICK_LABELS.bartender}
+              onClick={() => pickDuty('bartender')}
+            />
+            <DutyTile
+              icon={DUTY_ICON.area_manager}
+              iconBg={DUTY_ICON_BG.area_manager}
+              label={PICK_LABELS.area_manager}
+              onClick={() => pickDuty('area_manager')}
+            />
+            {canSuperviseArea && (
+              <DutyTile
+                icon={DUTY_ICON.area_supervisor}
+                iconBg={DUTY_ICON_BG.area_supervisor}
+                label={PICK_LABELS.area_supervisor}
+                onClick={() => pickDuty('area_supervisor')}
+              />
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={finish}
+            disabled={finishing}
+            className="self-center px-1 py-2 text-sm font-semibold disabled:opacity-50"
+            style={{ color: C.textMuted }}
+          >
+            דלג להמשך לאפליקציה
+          </button>
+        </div>
+      </WizardShell>
     )
   }
 
@@ -328,27 +509,6 @@ function OnboardingWizardInner() {
   const weeks = allWeeks.slice(0, visibleWeekCount)
   const hasMoreWeeks = allWeeks.length > visibleWeekCount
   const currentWeek = toDateStr(activeWeekStart())
-
-  interface Slot {
-    key: string
-    dateLabel: string
-    typeLabel: string
-    hoursLabel: string
-    barManagerName?: string
-    peerNames: string[]
-    status: 'open' | 'mine' | 'full' | 'cancelled'
-    namesTitle?: string
-    revertible?: boolean
-    // Set when the viewer is only on one half of a whole-evening duty
-    // (a bar manager split their pairing in Shifts.tsx) -- "פתיחה בלבד" /
-    // "סגירה בלבד", shown next to the "✓ משובץ" badge.
-    partialLabel?: string
-    // Set when only one side is actually relevant (a lone open slot, or
-    // the viewer's own partial assignment) -- "משמרת פתיחה"/"משמרת סגירה",
-    // shown in orange right in the title, next to the hours.
-    sideTypeLabel?: string
-    onClick?: () => void
-  }
 
   const slots: Slot[] = []
 
@@ -589,108 +749,74 @@ function OnboardingWizardInner() {
   }
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-4 py-10">
+    <WizardShell>
       <ConfirmAssignDialog state={dialogState} onApprove={handleApprove} onDecline={handleDecline} />
       <InfoDialog state={infoState} onClose={handleClose} />
-      <div className="flex items-center justify-between">
-        <Button variant="ghost" size="sm" onClick={() => setStep('pick')}>
-          חזרה
-        </Button>
-        <h1 className="text-base font-semibold">{duty ? LIST_LABELS[duty] : ''}</h1>
-      </div>
+      <WizardHeader back={{ label: 'חזרה', onClick: () => setStep('pick') }} />
 
-      <p className="text-center text-lg font-bold">לאיזה משמרת תרצה/י להשתבץ?</p>
-
-      {!loadedShifts && <p className="text-muted-foreground text-center text-sm">טוען...</p>}
-
-      {loadedShifts && slots.length === 0 && (
-        <p className="text-muted-foreground text-center text-sm">אין כרגע משמרות פתוחות.</p>
-      )}
-
-      {loadedShifts && slots.length > 0 && (
-        <div className="flex flex-col gap-2.5">
-          {slots.map((slot) => (
-            <button
-              key={slot.key}
-              type="button"
-              disabled={!slot.onClick}
-              onClick={slot.onClick}
-              title={slot.namesTitle}
-              className={cn(
-                'relative flex flex-col items-start gap-1.5 overflow-hidden rounded-xl border p-4 text-right transition-colors',
-                slot.status === 'open' && slot.onClick && 'hover:border-primary hover:bg-accent cursor-pointer',
-                slot.status === 'mine' && 'border-green-200 bg-green-50',
-                slot.status === 'mine' &&
-                  slot.revertible &&
-                  'hover:border-destructive hover:bg-destructive/10 cursor-pointer',
-                slot.status === 'mine' &&
-                  slot.onClick &&
-                  !slot.revertible &&
-                  'hover:border-primary hover:bg-accent cursor-pointer',
-                slot.status === 'full' && 'bg-muted opacity-60',
-                slot.status === 'cancelled' && 'bg-muted opacity-60',
-              )}
-            >
-              <div className="flex w-full items-center justify-between">
-                <span className="text-lg font-semibold">
-                  {slot.typeLabel}{' '}
-                  {slot.sideTypeLabel && (
-                    <span className="text-amber-600 dark:text-amber-400">{slot.sideTypeLabel} </span>
-                  )}
-                  <span className="text-muted-foreground font-normal">{slot.hoursLabel}</span>
-                </span>
-                <span className="text-muted-foreground text-base">{slot.dateLabel}</span>
-              </div>
-              {slot.barManagerName && (
-                <span className="text-muted-foreground text-base">מנהל/ת בר: {slot.barManagerName}</span>
-              )}
-              {slot.peerNames.length > 0 && (
-                <span className="text-muted-foreground text-base">גם: {slot.peerNames.join(', ')}</span>
-              )}
-              {slot.status === 'mine' && (
-                <span className="rounded-full bg-green-100 px-2 py-0.5 text-base font-medium text-green-700">
-                  ✓ משובץ{slot.partialLabel ? ` (${slot.partialLabel})` : ''}
-                </span>
-              )}
-              {slot.status === 'full' && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <span className="-rotate-12 rounded-md border-2 border-red-600/70 px-2 py-0.5 text-base font-bold text-red-600/70">
-                    משמרת מלאה
-                  </span>
-                </div>
-              )}
-              {slot.status === 'cancelled' && (
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                  <span className="-rotate-12 rounded-md border-2 border-slate-500/70 px-2 py-0.5 text-base font-bold text-slate-600/70">
-                    משמרת מבוטלת
-                  </span>
-                </div>
-              )}
-            </button>
-          ))}
+      <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 pt-5">
+        <div className="text-center">
+          <h1 className="text-[17px] font-bold">{duty ? LIST_LABELS[duty] : ''}</h1>
+          <p className="mt-1 text-sm" style={{ color: C.textMuted }}>
+            לאיזה משמרת תרצה/י להשתבץ?
+          </p>
         </div>
-      )}
 
-      {error && <p className="text-destructive text-sm">{error}</p>}
+        {!loadedShifts && (
+          <p className="text-center text-sm" style={{ color: C.textMuted }}>
+            טוען...
+          </p>
+        )}
 
-      {assignedCount > 0 && (
-        <p className="text-center text-sm text-green-600">שובצת ל־{assignedCount} משמרות עד כה.</p>
-      )}
+        {loadedShifts && slots.length === 0 && (
+          <p className="text-center text-sm" style={{ color: C.textMuted }}>
+            אין כרגע משמרות פתוחות.
+          </p>
+        )}
 
-      {loadedShifts && hasMoreWeeks && (
-        <Button
-          variant="outline"
-          onClick={() =>
-            setVisibleWeekCount((c) => c + (duty === 'area_supervisor' || duty === 'bar_manager' ? 6 : 3))
-          }
+        {loadedShifts && slots.length > 0 && (
+          <div className="flex flex-col gap-2.5">
+            {slots.map((slot) => (
+              <SlotCard key={slot.key} slot={slot} duty={duty!} />
+            ))}
+          </div>
+        )}
+
+        {error && (
+          <p className="text-center text-sm" style={{ color: C.error }}>
+            {error}
+          </p>
+        )}
+
+        {assignedCount > 0 && (
+          <p className="text-center text-sm font-semibold" style={{ color: C.success }}>
+            שובצת ל־{assignedCount} משמרות עד כה.
+          </p>
+        )}
+
+        {loadedShifts && hasMoreWeeks && (
+          <button
+            type="button"
+            onClick={() =>
+              setVisibleWeekCount((c) => c + (duty === 'area_supervisor' || duty === 'bar_manager' ? 6 : 3))
+            }
+            className="h-9 self-center rounded-full border px-4 text-sm font-bold"
+            style={{ background: C.card, borderColor: C.border, color: C.primary }}
+          >
+            עוד משמרות
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={finish}
+          disabled={finishing}
+          className="h-12 rounded-2xl text-[15px] font-bold text-white disabled:opacity-50"
+          style={{ background: C.success }}
         >
-          עוד משמרות
-        </Button>
-      )}
-
-      <Button className="bg-green-600 text-white hover:bg-green-700" onClick={finish} disabled={finishing}>
-        סיימנו!
-      </Button>
-    </div>
+          סיימנו!
+        </button>
+      </div>
+    </WizardShell>
   )
 }
