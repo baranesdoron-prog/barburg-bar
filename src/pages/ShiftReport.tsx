@@ -457,11 +457,11 @@ export function ShiftReport() {
         </div>
 
         <Link
-          to={`/shifts/${id}`}
+          to="/reports"
           className="self-center px-1 py-2 text-sm font-bold print:hidden"
           style={{ color: C.primary }}
         >
-          חזרה למשמרת
+          חזרה לדוחות
         </Link>
       </div>
 
