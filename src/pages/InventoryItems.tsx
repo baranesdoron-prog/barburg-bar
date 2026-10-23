@@ -1,15 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { ChevronDown, Download, MoreVertical, Package, Plus, Search, Upload } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import { parseCsv, toCsv } from '@/lib/csv'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { C } from '@/lib/designTokens'
+import { BottomNav } from '@/components/BottomNav'
 import type { InventoryItem, InventoryItemWithStock, InventoryUnitType, ProductCategory, Supplier } from '@/lib/types'
 
-const selectClass =
-  'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
+type StatusFilter = 'all' | 'low' | 'inactive'
 
 const CSV_TEMPLATE_HEADER = [
   'name',
@@ -36,6 +35,9 @@ export function InventoryItems() {
   const [nameFilter, setNameFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [supplierFilter, setSupplierFilter] = useState('')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
 
   const [importSummary, setImportSummary] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -83,6 +85,7 @@ export function InventoryItems() {
     setNameFilter('')
     setCategoryFilter('')
     setSupplierFilter('')
+    setStatusFilter('all')
     search({ name: '', category: '', supplier: '' })
   }
 
@@ -210,51 +213,127 @@ export function InventoryItems() {
   if (items === null) return null
 
   const categorySortOrder = new Map(categories.map((c) => [c.id, c.sort_order]))
-  const sortedItems = items
-    .map((item) => ({ item, categoryName: categories.find((c) => c.id === item.category_id)?.name }))
-    .sort((a, b) => {
-      const orderA = a.item.category_id ? (categorySortOrder.get(a.item.category_id) ?? Infinity) : Infinity
-      const orderB = b.item.category_id ? (categorySortOrder.get(b.item.category_id) ?? Infinity) : Infinity
-      if (orderA !== orderB) return orderA - orderB
-      const displayA = a.item.display_order ?? Infinity
-      const displayB = b.item.display_order ?? Infinity
-      if (displayA !== displayB) return displayA - displayB
-      return a.item.name.localeCompare(b.item.name)
+  const supplierNames = new Map(suppliers.map((s) => [s.id, s.name]))
+
+  const lowCount = items.filter((i) => i.active && i.is_low_stock).length
+  const inactiveCount = items.filter((i) => !i.active).length
+
+  // Name/category/supplier narrow server-side (see search()); the stat
+  // tiles are a client-side view on top of that, so their counts always
+  // describe what the current filters returned.
+  const visibleItems = items.filter((item) => {
+    if (statusFilter === 'low') return item.active && item.is_low_stock
+    if (statusFilter === 'inactive') return !item.active
+    return true
+  })
+
+  const sortedItems = [...visibleItems].sort((a, b) => {
+    const orderA = a.category_id ? (categorySortOrder.get(a.category_id) ?? Infinity) : Infinity
+    const orderB = b.category_id ? (categorySortOrder.get(b.category_id) ?? Infinity) : Infinity
+    if (orderA !== orderB) return orderA - orderB
+    const displayA = a.display_order ?? Infinity
+    const displayB = b.display_order ?? Infinity
+    if (displayA !== displayB) return displayA - displayB
+    return a.name.localeCompare(b.name)
+  })
+
+  const groups: { key: string; name: string; items: InventoryItemWithStock[] }[] = []
+  for (const item of sortedItems) {
+    const key = item.category_id ?? 'none'
+    const last = groups[groups.length - 1]
+    if (last && last.key === key) last.items.push(item)
+    else
+      groups.push({
+        key,
+        name: categories.find((c) => c.id === item.category_id)?.name ?? 'ללא קטגוריה',
+        items: [item],
+      })
+  }
+
+  function toggleCategory(key: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
     })
+  }
+
+  const stats: { key: StatusFilter; label: string; value: number; color: string; bg: string }[] = [
+    { key: 'all', label: 'מוצרים', value: items.length, color: C.primary, bg: C.primaryLight },
+    { key: 'low', label: 'מלאי נמוך', value: lowCount, color: C.error, bg: C.errorBg },
+    { key: 'inactive', label: 'מושבתים', value: inactiveCount, color: C.textSecondary, bg: C.subtleBg },
+  ]
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-4">
-      <h1 className="text-xl font-semibold">פריטי מלאי</h1>
-
-      {unclassifiedOnly && (
-        <div className="flex items-center justify-between rounded-md border border-orange-500/60 bg-orange-50 p-2 text-sm dark:bg-orange-950/20">
-          <span>מוצג: מוצרים ללא סיווג (קטגוריה) בלבד</span>
-          <Link to="/inventory/items" className="text-muted-foreground text-xs hover:underline">
-            נקה
-          </Link>
+    <div dir="rtl" className="min-h-svh pb-40" style={{ background: C.appBg, color: C.text }}>
+      <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 pt-5">
+        <div className="flex items-center gap-3 rounded-2xl p-3" style={{ background: C.primaryLight }}>
+          <div className="flex size-12 shrink-0 items-center justify-center rounded-xl" style={{ background: C.primary }}>
+            <Package className="size-6 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold" style={{ color: C.primary }}>
+            פריטי מלאי
+          </h1>
         </div>
-      )}
 
-      {unassignedSupplierOnly && (
-        <div className="flex items-center justify-between rounded-md border border-fuchsia-500/60 bg-fuchsia-50 p-2 text-sm dark:bg-fuchsia-950/20">
-          <span>מוצג: מוצרים ללא ספק משויך בלבד</span>
-          <Link to="/inventory/items" className="text-muted-foreground text-xs hover:underline">
-            נקה
-          </Link>
+        {unclassifiedOnly && <FilterBanner text="מוצג: מוצרים ללא סיווג (קטגוריה) בלבד" />}
+        {unassignedSupplierOnly && <FilterBanner text="מוצג: מוצרים ללא ספק משויך בלבד" />}
+
+        <div className="grid grid-cols-3 gap-2">
+          {stats.map((stat) => {
+            const selected = statusFilter === stat.key
+            return (
+              <button
+                key={stat.key}
+                type="button"
+                onClick={() => setStatusFilter(selected && stat.key !== 'all' ? 'all' : stat.key)}
+                className="flex flex-col items-start gap-0.5 rounded-2xl border p-3 text-start"
+                style={{
+                  background: selected ? stat.bg : C.card,
+                  borderColor: selected ? stat.color : C.border,
+                }}
+              >
+                <span className="text-2xl font-bold tabular-nums" style={{ color: selected ? stat.color : C.text }}>
+                  {stat.value}
+                </span>
+                <span className="text-xs font-semibold" style={{ color: selected ? stat.color : C.textMuted }}>
+                  {stat.label}
+                </span>
+              </button>
+            )
+          })}
         </div>
-      )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">חיפוש</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          <Input placeholder="שם מוצר" value={nameFilter} onChange={(e) => setNameFilter(e.target.value)} />
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            search()
+          }}
+          className="flex items-center gap-2 rounded-full border px-4"
+          style={{ borderColor: C.border, background: C.card, height: 44 }}
+        >
+          <Search className="size-[18px] shrink-0" style={{ color: C.textMuted }} />
+          <input
+            value={nameFilter}
+            onChange={(e) => setNameFilter(e.target.value)}
+            onBlur={() => search()}
+            placeholder="חיפוש לפי שם מוצר"
+            className="h-full flex-1 bg-transparent text-sm outline-none"
+            style={{ color: C.text }}
+          />
+        </form>
+
+        <div className="flex gap-2">
           <select
-            className={selectClass}
+            className="h-10 min-w-0 flex-1 rounded-xl border px-3 text-sm disabled:opacity-50"
+            style={{ borderColor: C.border, background: C.card, color: C.text }}
             value={categoryFilter}
             disabled={unclassifiedOnly}
-            onChange={(e) => setCategoryFilter(e.target.value)}
+            onChange={(e) => {
+              setCategoryFilter(e.target.value)
+              search({ category: e.target.value })
+            }}
           >
             <option value="">כל הקטגוריות</option>
             {categories.map((c) => (
@@ -264,10 +343,14 @@ export function InventoryItems() {
             ))}
           </select>
           <select
-            className={selectClass}
+            className="h-10 min-w-0 flex-1 rounded-xl border px-3 text-sm disabled:opacity-50"
+            style={{ borderColor: C.border, background: C.card, color: C.text }}
             value={supplierFilter}
             disabled={unassignedSupplierOnly}
-            onChange={(e) => setSupplierFilter(e.target.value)}
+            onChange={(e) => {
+              setSupplierFilter(e.target.value)
+              search({ supplier: e.target.value })
+            }}
           >
             <option value="">כל הספקים</option>
             {suppliers.map((s) => (
@@ -276,95 +359,266 @@ export function InventoryItems() {
               </option>
             ))}
           </select>
-          <div className="flex gap-2">
-            <Button className="flex-1" onClick={() => search()}>
-              חיפוש
-            </Button>
-            <Button variant="outline" className="flex-1" onClick={handleClearFilters}>
-              נקה סינון
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      <Card>
-        <CardContent className="flex flex-col gap-2 pt-6">
-          {items.length === 0 && <p className="text-muted-foreground text-sm">לא נמצאו פריטים.</p>}
-          {sortedItems.map(({ item, categoryName }, index) => {
-            const isInherited = !item.supplier_id && !!item.resolved_supplier_id
-            const supplierName = suppliers.find((s) => s.id === item.resolved_supplier_id)?.name
-            const supplierLabel = supplierName && (isInherited ? `${supplierName} (בירושה)` : supplierName)
-            const isLowStock = item.is_low_stock
-            const showCategoryHeader = categoryName !== sortedItems[index - 1]?.categoryName
+        {(nameFilter || categoryFilter || supplierFilter || statusFilter !== 'all') && (
+          <button
+            type="button"
+            onClick={handleClearFilters}
+            className="-mt-2 self-start text-xs font-semibold"
+            style={{ color: C.textSecondary }}
+          >
+            נקה סינון
+          </button>
+        )}
 
-            return (
-              <div key={item.id}>
-                {showCategoryHeader && (
-                  <p className="text-muted-foreground mt-2 text-xs font-semibold first:mt-0">
-                    {categoryName ?? 'ללא קטגוריה'}
-                  </p>
-                )}
-                <div className="flex items-start gap-3 rounded-md border p-2 text-sm">
-                  {item.image_url && (
-                    <img src={item.image_url} alt={item.name} className="size-12 shrink-0 rounded-md object-cover" />
-                  )}
-                  <div className="flex-1">
-                    <p className={item.active ? 'font-medium' : 'text-muted-foreground font-medium line-through'}>
-                      {item.name}
-                      {item.unit && <span className="text-muted-foreground"> ({item.unit})</span>}
-                    </p>
-                    <p className="text-muted-foreground text-xs">
-                      {[categoryName, item.vendor, supplierLabel, item.sku].filter(Boolean).join(' · ')}
-                    </p>
-                    <p className="text-muted-foreground text-xs">
-                      {item.unit_type === 'box' ? `קופסה (${item.units_per_box} יח')` : 'בודד'}
-                      {item.unit_price !== null && ` · ₪${item.unit_price}`}
-                    </p>
-                    <p className={isLowStock ? 'text-destructive text-xs font-medium' : 'text-muted-foreground text-xs'}>
-                      מלאי נוכחי: {item.current_stock}
-                      {item.minimum_quantity !== null && ` (מינימום ${item.minimum_quantity})`}
-                      {isLowStock && ' — מלאי נמוך'}
-                    </p>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <Button asChild variant="ghost" size="sm">
-                      <Link to={`/inventory/items/${item.id}/edit`}>עריכה</Link>
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleToggleActive(item)}>
-                      {item.active ? 'השבתה' : 'הפעלה'}
-                    </Button>
-                    {!item.active && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => handleDelete(item)}
-                      >
-                        מחיקה
-                      </Button>
-                    )}
-                  </div>
+        {deleteError && (
+          <p className="rounded-xl px-3 py-2 text-sm" style={{ background: C.errorBg, color: C.error }}>
+            {deleteError}
+          </p>
+        )}
+
+        {groups.length === 0 && (
+          <p className="text-center" style={{ color: C.textMuted }}>
+            לא נמצאו פריטים.
+          </p>
+        )}
+
+        {groups.map((group, groupIndex) => {
+          const isCollapsed = collapsed.has(group.key)
+          const groupLow = group.items.filter((i) => i.active && i.is_low_stock).length
+          const iconColor = group.key === 'none' ? C.textMuted : CATEGORY_COLORS[groupIndex % CATEGORY_COLORS.length]
+          return (
+            <div
+              key={group.key}
+              className="overflow-hidden rounded-3xl border"
+              style={{ background: C.card, borderColor: C.border }}
+            >
+              <button
+                type="button"
+                onClick={() => toggleCategory(group.key)}
+                className="flex w-full items-center gap-2.5 px-3 py-3 text-start"
+              >
+                <div
+                  className="flex size-[34px] shrink-0 items-center justify-center rounded-xl"
+                  style={{ background: iconColor }}
+                >
+                  <Package className="size-4 text-white" />
                 </div>
-              </div>
-            )
-          })}
-          {deleteError && <p className="text-destructive text-sm">{deleteError}</p>}
-        </CardContent>
-      </Card>
+                <span className="min-w-0 flex-1 truncate text-[15px] font-bold">{group.name}</span>
+                {groupLow > 0 && (
+                  <span
+                    className="shrink-0 rounded-full px-2 py-0.5 text-xs font-bold"
+                    style={{ background: C.errorBg, color: C.error }}
+                  >
+                    {groupLow} נמוך
+                  </span>
+                )}
+                <span className="shrink-0 text-xs tabular-nums" style={{ color: C.textMuted }}>
+                  {group.items.length}
+                </span>
+                <ChevronDown
+                  className="size-4 shrink-0 transition-transform"
+                  style={{ color: C.textMuted, transform: isCollapsed ? 'rotate(90deg)' : undefined }}
+                />
+              </button>
 
-      <div className="flex flex-col gap-2">
-        <Button asChild>
-          <Link to="/inventory/items/new">הוספת מוצר</Link>
-        </Button>
-        <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-          ייבוא קובץ CSV
-        </Button>
-        <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportFile} />
-        <Button variant="ghost" onClick={handleDownloadTemplate}>
-          הורדת תבנית ייבוא
-        </Button>
-        {importSummary && <p className="text-muted-foreground text-sm">{importSummary}</p>}
+              {!isCollapsed && (
+                <div className="flex flex-col gap-2 border-t p-2.5" style={{ background: C.subtleBg, borderColor: C.border }}>
+                  {group.items.map((item) => (
+                    <ItemRow
+                      key={item.id}
+                      item={item}
+                      supplierName={item.resolved_supplier_id ? supplierNames.get(item.resolved_supplier_id) : undefined}
+                      menuOpen={openMenuId === item.id}
+                      onToggleMenu={() => setOpenMenuId(openMenuId === item.id ? null : item.id)}
+                      onToggleActive={() => {
+                        setOpenMenuId(null)
+                        handleToggleActive(item)
+                      }}
+                      onDelete={() => {
+                        setOpenMenuId(null)
+                        handleDelete(item)
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold"
+            style={{ borderColor: C.border, background: C.card, color: C.textSecondary }}
+          >
+            <Upload className="size-3.5" />
+            ייבוא קובץ CSV
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadTemplate}
+            className="flex h-9 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold"
+            style={{ borderColor: C.border, background: C.card, color: C.textSecondary }}
+          >
+            <Download className="size-3.5" />
+            הורדת תבנית ייבוא
+          </button>
+          <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportFile} />
+        </div>
+        {importSummary && (
+          <p className="text-sm" style={{ color: C.textMuted }}>
+            {importSummary}
+          </p>
+        )}
       </div>
+
+      {openMenuId && <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />}
+
+      <Link
+        to="/inventory/items/new"
+        className="fixed bottom-20 left-4 z-10 flex h-12 items-center gap-1.5 rounded-full px-5 text-sm font-bold text-white shadow-lg"
+        style={{ background: C.primary }}
+      >
+        <Plus className="size-4" />
+        הוספת מוצר
+      </Link>
+
+      <BottomNav active="/inventory/items" />
+    </div>
+  )
+}
+
+const CATEGORY_COLORS = [C.primary, C.accent, '#4E8B6A', C.info]
+
+function FilterBanner({ text }: { text: string }) {
+  return (
+    <div
+      className="flex items-center justify-between gap-2 rounded-2xl px-3 py-2.5 text-sm font-semibold"
+      style={{ background: C.warningBg, color: C.warning }}
+    >
+      <span>{text}</span>
+      <Link to="/inventory/items" className="shrink-0 text-xs font-medium" style={{ color: C.textSecondary }}>
+        נקה
+      </Link>
+    </div>
+  )
+}
+
+function ItemRow({
+  item,
+  supplierName,
+  menuOpen,
+  onToggleMenu,
+  onToggleActive,
+  onDelete,
+}: {
+  item: InventoryItemWithStock
+  supplierName: string | undefined
+  menuOpen: boolean
+  onToggleMenu: () => void
+  onToggleActive: () => void
+  onDelete: () => void
+}) {
+  const isInherited = !item.supplier_id && !!item.resolved_supplier_id
+  const supplierLabel = supplierName && (isInherited ? `${supplierName} (בירושה)` : supplierName)
+  const isLow = item.active && item.is_low_stock
+  const minimum = item.minimum_quantity
+  // The bar spans 0 to twice the minimum, so the threshold tick sits in
+  // the middle: an item at the line reads as half full, and how far the
+  // fill is from that tick shows how far stock is above or below it.
+  const fill = minimum && minimum > 0 ? Math.min(item.current_stock / (minimum * 2), 1) : null
+
+  return (
+    <div
+      className="relative flex items-center gap-2.5 rounded-2xl border px-2.5 py-2.5"
+      style={{ background: C.card, borderColor: C.border, opacity: item.active ? 1 : 0.65 }}
+    >
+      <Link to={`/inventory/items/${item.id}/edit`} className="flex min-w-0 flex-1 items-center gap-2.5">
+        {item.image_url ? (
+          <img src={item.image_url} alt={item.name} className="size-10 shrink-0 rounded-xl object-cover" />
+        ) : (
+          <div
+            className="flex size-10 shrink-0 items-center justify-center rounded-xl"
+            style={{ background: C.subtleBg, color: C.textMuted }}
+          >
+            <Package className="size-4" />
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-bold" style={{ textDecoration: item.active ? undefined : 'line-through' }}>
+            {item.name}
+            {item.unit && (
+              <span className="font-medium" style={{ color: C.textMuted }}>
+                {' '}
+                ({item.unit})
+              </span>
+            )}
+          </p>
+          <p className="truncate text-xs" style={{ color: C.textMuted }}>
+            {[
+              item.active ? null : 'מושבת',
+              supplierLabel,
+              item.unit_type === 'box' ? `קופסה (${item.units_per_box} יח')` : 'בודד',
+              item.unit_price !== null ? `₪${item.unit_price}` : null,
+              item.sku,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </p>
+          {fill !== null && (
+            <div className="relative mt-1.5 h-1.5 overflow-hidden rounded-full" style={{ background: C.subtleBg }}>
+              <div
+                className="absolute inset-y-0 right-0 rounded-full"
+                style={{ width: `${fill * 100}%`, background: isLow ? C.error : C.success }}
+              />
+              <div className="absolute inset-y-0 right-1/2 w-0.5" style={{ background: C.textMuted }} />
+            </div>
+          )}
+        </div>
+        <div className="min-w-[46px] shrink-0 text-center">
+          <p className="text-lg leading-tight font-bold tabular-nums" style={{ color: isLow ? C.error : C.text }}>
+            {item.current_stock}
+          </p>
+          {minimum !== null && (
+            <p className="text-[11px]" style={{ color: C.textMuted }}>
+              מינ' {minimum}
+            </p>
+          )}
+        </div>
+      </Link>
+
+      <button
+        type="button"
+        onClick={onToggleMenu}
+        aria-label="פעולות"
+        className="flex size-8 shrink-0 items-center justify-center rounded-full"
+        style={{ color: C.textMuted }}
+      >
+        <MoreVertical className="size-4" />
+      </button>
+
+      {menuOpen && (
+        <div
+          className="absolute top-12 left-2 z-20 flex w-36 flex-col rounded-2xl border p-1.5 text-sm shadow-lg"
+          style={{ background: C.card, borderColor: C.border }}
+        >
+          <Link to={`/inventory/items/${item.id}/edit`} className="rounded-xl px-3 py-2">
+            עריכה
+          </Link>
+          <button type="button" onClick={onToggleActive} className="rounded-xl px-3 py-2 text-start">
+            {item.active ? 'השבתה' : 'הפעלה'}
+          </button>
+          {!item.active && (
+            <button type="button" onClick={onDelete} className="rounded-xl px-3 py-2 text-start" style={{ color: C.error }}>
+              מחיקה
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
