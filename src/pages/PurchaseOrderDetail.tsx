@@ -42,7 +42,7 @@ export function PurchaseOrderDetail() {
 
     const [supplierRes, itemsRes, catalogRes, categoriesRes] = await Promise.all([
       supabase.from('suppliers').select('*').eq('id', loadedOrder.supplier_id).single(),
-      supabase.from('purchase_order_items').select('*').eq('purchase_order_id', id),
+      supabase.from('purchase_order_items').select('*').eq('purchase_order_id', id).order('created_at').order('id'),
       supabase.from('inventory_items').select('*').eq('active', true).order('name'),
       supabase.from('product_categories').select('*'),
     ])
