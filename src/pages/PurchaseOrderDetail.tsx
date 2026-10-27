@@ -169,9 +169,11 @@ export function PurchaseOrderDetail() {
     const { error: updateError } = await supabase.from('purchase_order_items').update({ quantity }).eq('id', item.id)
     if (updateError) {
       setError(updateError.message)
+      setQuantities((prev) => ({ ...prev, [item.id]: String(item.quantity) }))
       return
     }
-    load()
+    // Update in place rather than reloading, so the lines keep their position
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, quantity } : i)))
   }
 
   if (!order && error) {
