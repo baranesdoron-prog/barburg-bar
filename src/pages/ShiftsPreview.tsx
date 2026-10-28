@@ -927,6 +927,7 @@ function WeekSection({
   myEmployeeId,
   compact,
   canManage,
+  supervisesArea,
   isAdmin,
   onSaved,
 }: {
@@ -943,6 +944,9 @@ function WeekSection({
   myEmployeeId: string | null
   compact: boolean
   canManage: boolean
+  // Area supervisors manage area managers (only) on upcoming evenings --
+  // mirrors shift_assignments_*_area_managers_by_supervisor's RLS.
+  supervisesArea: boolean
   isAdmin: boolean
   onSaved: () => void
 }) {
@@ -978,6 +982,7 @@ function WeekSection({
   // Matches shift_assignments_delete_self_future_week's RLS: a bartender
   // can only remove their own assignment for a strictly-future week.
   const canSelfRemove = week > toDateStr(activeWeekStart())
+  const canManageAreaManagers = canManage || (supervisesArea && week >= toDateStr(activeWeekStart()))
 
   const bartenderMax = activeOpening?.required_staff_count ?? activeClosing?.required_staff_count ?? 3
   const eveningHours =
@@ -1334,7 +1339,7 @@ function WeekSection({
               shiftCounts={shiftCounts}
               employeePhones={employeePhones}
               myEmployeeId={myEmployeeId}
-              viewerCanManage={canManage}
+              viewerCanManage={canManageAreaManagers}
               canSelfRemove={canSelfRemove}
               takenIds={weekTakenIds}
               dateLabel={dateLabel}
@@ -1447,6 +1452,7 @@ export function ShiftsPreview() {
     shiftManagers,
     dutyEligible,
     areaSupervisorEligible,
+    supervisesAreaIds,
     employeeNames,
     shiftCounts,
     reload,
@@ -1576,6 +1582,7 @@ export function ShiftsPreview() {
             myEmployeeId={myEmployeeId}
             compact={compact}
             canManage={canManage}
+            supervisesArea={!!myEmployeeId && supervisesAreaIds.has(myEmployeeId)}
             isAdmin={isAdmin}
             onSaved={reload}
           />

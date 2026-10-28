@@ -170,6 +170,7 @@ export function useShiftWeeksData({
   const [shiftManagers, setShiftManagers] = useState<Employee[]>([])
   const [dutyEligible, setDutyEligible] = useState<Employee[]>([])
   const [areaSupervisorEligible, setAreaSupervisorEligible] = useState<Employee[]>([])
+  const [supervisesAreaIds, setSupervisesAreaIds] = useState<Set<string>>(new Set())
   const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({})
   const [shiftCounts, setShiftCounts] = useState<Record<string, ShiftCountInfo>>({})
 
@@ -181,6 +182,7 @@ export function useShiftWeeksData({
       setShiftManagers([])
       setDutyEligible([])
       setAreaSupervisorEligible([])
+      setSupervisesAreaIds(new Set())
       setEmployeeNames({})
       setShiftCounts({})
       return
@@ -257,6 +259,9 @@ export function useShiftWeeksData({
     setAreaSupervisorEligible(
       allEmployees.filter((e) => e.can_supervise_area || roleByEmployeeId.get(e.id) === 'administrator'),
     )
+    // The flag alone (not the admin fallback above) is what lets someone
+    // manage area managers without a manager account role.
+    setSupervisesAreaIds(new Set(allEmployees.filter((e) => e.can_supervise_area).map((e) => e.id)))
 
     const names: Record<string, string> = {}
     for (const emp of allEmployees) names[emp.id] = emp.full_name
@@ -334,6 +339,7 @@ export function useShiftWeeksData({
     shiftManagers,
     dutyEligible,
     areaSupervisorEligible,
+    supervisesAreaIds,
     employeeNames,
     shiftCounts,
     reload: load,
