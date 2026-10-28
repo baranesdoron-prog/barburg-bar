@@ -1,34 +1,69 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { AlertTriangle, Clock, Package, PackageX, ShoppingCart, Tag, Truck, Users, CalendarDays, type LucideIcon } from 'lucide-react'
+import {
+  AlertTriangle,
+  CalendarDays,
+  CalendarPlus,
+  Clock,
+  LayoutDashboard,
+  Package,
+  ShoppingCart,
+  Tag,
+  Truck,
+  Users,
+  type LucideIcon,
+} from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
-import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { roleLabels, ROLES_MANAGING_SHIFTS, ROLES_VIEWING_SHIFTS } from '@/lib/roleLabels'
-import { purchaseOrderStatusBadgeClass, purchaseOrderStatusLabels } from '@/lib/purchaseOrderLabels'
+import { formatMoney, purchaseOrderStatusLabels, purchaseOrderStatusTone } from '@/lib/purchaseOrderLabels'
 import { useAppUserContext } from '@/lib/outletContext'
 import { hasCheckedWizardLandingThisSession, markWizardLandingChecked } from '@/lib/onboardingWizard'
-import { cn, formatDate, formatTime } from '@/lib/utils'
+import { formatTime } from '@/lib/utils'
 import { activeWeekStart, addDays, parseDateStr, shiftDateOfWeek, toDateStr } from '@/lib/weeklyChecklist'
+import { C, CATEGORY_COLORS } from '@/lib/designTokens'
+import { DUTY_ICON, DUTY_ICON_BG } from '@/lib/dutyIcons'
 import type {
   AppRole,
   AppSettings,
   PurchaseOrder,
   PurchaseOrderItem,
   Shift,
+  ShiftAssignmentRole,
   ShiftManagerAssignment,
   Supplier,
   WeeklyChecklistItem,
 } from '@/lib/types'
 
-const selectClass =
-  'border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] md:text-sm'
-const weekLabelFormatter = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'long' })
+const dayMonthFormatter = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'numeric' })
+const longDayMonthFormatter = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'long' })
+const weekdayDateFormatter = new Intl.DateTimeFormat('he-IL', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'numeric',
+  timeZone: 'Asia/Jerusalem',
+})
 
 interface EmployeeNameRow {
   id: string
   full_name: string
+}
+
+// Section heading with an optional "see all" link on the far side.
+function SectionHeader({ title, link }: { title: string; link?: { to: string; label: string } }) {
+  return (
+    <div className="flex items-baseline justify-between px-0.5">
+      <h2 className="text-[17px] font-bold" style={{ color: C.text }}>
+        {title}
+      </h2>
+      {link && (
+        <Link to={link.to} className="text-[13px] font-semibold" style={{ color: C.textSecondary }}>
+          {link.label}
+        </Link>
+      )}
+    </div>
+  )
 }
 
 function ClosingAlertCard({ shifts, employeeNames }: { shifts: Shift[]; employeeNames: Map<string, string> }) {
@@ -46,72 +81,94 @@ function ClosingAlertCard({ shifts, employeeNames }: { shifts: Shift[]; employee
   if (needsClosing.length === 0) return null
 
   return (
-    <Card className="border-amber-500/60 bg-amber-50 dark:bg-amber-950/20">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base text-amber-800 dark:text-amber-400">
-            משמרות ממתינות לסגירה ({needsClosing.length})
-          </CardTitle>
-          <Clock className="size-5 text-amber-600" />
+    <section
+      className="flex flex-col gap-2.5 rounded-[20px] border p-3.5"
+      style={{ background: C.warningBg, borderColor: '#F3D9A8' }}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Clock className="size-5" style={{ color: C.warning }} />
+          <h2 className="text-base font-bold" style={{ color: '#8A5000' }}>
+            ממתינה לסגירה
+          </h2>
         </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        {needsClosing.map((shift) => (
-          <div
-            key={shift.id}
-            className="bg-background flex items-center justify-between gap-3 rounded-md border border-amber-500/40 p-3 text-sm"
-          >
-            <div>
-              <p className="font-medium">{formatDate(shift.start_time)}</p>
-              <p className="text-muted-foreground">
-                {shift.shift_manager_id ? (employeeNames.get(shift.shift_manager_id) ?? '—') : 'לא הוגדר מנהל בר'}
-                {' • '}
-                {formatTime(shift.start_time)} - {formatTime(shift.end_time)}
-              </p>
-            </div>
-            <Button asChild size="sm" variant="outline">
-              <Link to={`/shifts/${shift.id}/close`}>סיום משמרת</Link>
-            </Button>
+        <span
+          className="flex h-6 min-w-6 items-center justify-center rounded-full px-2 text-[13px] font-bold text-white"
+          style={{ background: C.warning }}
+        >
+          {needsClosing.length}
+        </span>
+      </div>
+      {needsClosing.map((shift) => (
+        <div key={shift.id} className="flex items-center justify-between gap-2.5 rounded-[14px] p-3" style={{ background: C.card }}>
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="text-[15px] font-bold" style={{ color: C.text }}>
+              {weekdayDateFormatter.format(new Date(shift.start_time))}
+            </span>
+            <span className="text-[13px]" style={{ color: C.textSecondary }}>
+              {shift.shift_manager_id ? (employeeNames.get(shift.shift_manager_id) ?? '—') : 'לא הוגדר מנהל בר'}
+              {' · '}
+              {formatTime(shift.start_time)}–{formatTime(shift.end_time)}
+            </span>
           </div>
-        ))}
-      </CardContent>
-    </Card>
+          <Link
+            to={`/shifts/${shift.id}/close`}
+            className="flex h-10 shrink-0 items-center rounded-xl px-3.5 text-sm font-bold text-white"
+            style={{ background: C.primary }}
+          >
+            סיום משמרת
+          </Link>
+        </div>
+      ))}
+    </section>
   )
 }
 
-function StatCard({
+function StatTile({
   icon: Icon,
   value,
   label,
-  colorClass,
+  tone,
   to,
 }: {
   icon: LucideIcon
   value: number
   label: string
-  colorClass: string
-  to?: string
+  tone: { bg: string; fg: string; number?: string }
+  to: string
 }) {
-  const content = (
-    <Card className={cn('h-full', to && 'hover:bg-accent transition-colors')}>
-      <CardContent className="flex h-full flex-col items-start gap-3 pt-6">
-        <div className={cn('flex size-10 items-center justify-center rounded-lg', colorClass)}>
-          <Icon className="size-5" />
-        </div>
-        <div>
-          <p className="text-2xl font-semibold">{value}</p>
-          <p className="text-muted-foreground text-xs">{label}</p>
-        </div>
-      </CardContent>
-    </Card>
-  )
-
-  return to ? (
-    <Link to={to} className="block h-full">
-      {content}
+  return (
+    <Link
+      to={to}
+      className="flex flex-col gap-2.5 rounded-[18px] border p-3.5"
+      style={{ background: C.card, borderColor: C.border, color: C.text }}
+    >
+      <div className="flex size-[38px] items-center justify-center rounded-xl" style={{ background: tone.bg }}>
+        <Icon className="size-5" style={{ color: tone.fg }} />
+      </div>
+      <div className="flex flex-col">
+        <span className="text-[26px] leading-tight font-extrabold" style={{ color: value > 0 ? (tone.number ?? C.text) : C.text }}>
+          {value}
+        </span>
+        <span className="text-[13px]" style={{ color: C.textSecondary }}>
+          {label}
+        </span>
+      </div>
     </Link>
-  ) : (
-    content
+  )
+}
+
+function OverviewCell({ icon: Icon, value, label, to, className }: { icon: LucideIcon; value: number; label: string; to: string; className?: string }) {
+  return (
+    <Link to={to} className={`flex items-center gap-2.5 p-3.5 ${className ?? ''}`} style={{ borderColor: C.border, color: C.text }}>
+      <Icon className="size-5 shrink-0" style={{ color: C.primary }} />
+      <div className="flex flex-col">
+        <span className="text-lg font-extrabold">{value}</span>
+        <span className="text-xs" style={{ color: C.textSecondary }}>
+          {label}
+        </span>
+      </div>
+    </Link>
   )
 }
 
@@ -227,104 +284,94 @@ function ManagerSummary() {
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <StatCard
-          icon={AlertTriangle}
-          value={stats.lowStockProducts}
-          label="מוצרים מתחת למינימום"
-          colorClass="bg-red-100 text-red-600"
-          to="/purchase-orders/reorder"
-        />
-        <StatCard
-          icon={Tag}
-          value={stats.unclassifiedProducts}
-          label="מוצרים ללא סיווג"
-          colorClass="bg-orange-100 text-orange-600"
-          to="/inventory/items?unclassified=1"
-        />
-        <StatCard
-          icon={PackageX}
-          value={stats.unassignedSupplierProducts}
-          label="מוצרים ללא ספק משויך"
-          colorClass="bg-fuchsia-100 text-fuchsia-600"
-          to="/inventory/items?unassigned_supplier=1"
-        />
-        <StatCard
-          icon={ShoppingCart}
-          value={stats.openOrders}
-          label="הזמנות פתוחות"
-          colorClass="bg-rose-100 text-rose-600"
-          to="/purchase-orders"
-        />
-        <StatCard
-          icon={Package}
-          value={stats.activeProducts}
-          label="מוצרים פעילים"
-          colorClass="bg-amber-100 text-amber-600"
-          to="/inventory/items"
-        />
-        <StatCard
-          icon={Truck}
-          value={stats.activeSuppliers}
-          label="ספקים פעילים"
-          colorClass="bg-emerald-100 text-emerald-600"
-          to="/suppliers"
-        />
-        <StatCard
-          icon={CalendarDays}
-          value={stats.shiftsThisWeek}
-          label="משמרות השבוע"
-          colorClass="bg-violet-100 text-violet-600"
-          to="/shifts"
-        />
-        <StatCard
-          icon={Users}
-          value={stats.activeEmployees}
-          label="עובדים פעילים"
-          colorClass="bg-blue-100 text-blue-600"
-          to="/admin/users"
-        />
-      </div>
+      <section className="flex flex-col gap-2.5">
+        <SectionHeader title="דורש טיפול" />
+        <div className="grid grid-cols-2 gap-2.5">
+          <StatTile
+            icon={AlertTriangle}
+            value={stats.lowStockProducts}
+            label="מתחת למינימום"
+            tone={{ bg: C.errorBg, fg: C.error, number: C.error }}
+            to="/purchase-orders/reorder"
+          />
+          <StatTile
+            icon={ShoppingCart}
+            value={stats.openOrders}
+            label="הזמנות פתוחות"
+            tone={{ bg: C.accentLight, fg: C.warning }}
+            to="/purchase-orders"
+          />
+          <StatTile
+            icon={Tag}
+            value={stats.unclassifiedProducts}
+            label="מוצרים ללא סיווג"
+            tone={{ bg: C.warningBg, fg: C.warning }}
+            to="/inventory/items?unclassified=1"
+          />
+          <StatTile
+            icon={Truck}
+            value={stats.unassignedSupplierProducts}
+            label="מוצרים ללא ספק"
+            tone={{ bg: C.warningBg, fg: C.warning }}
+            to="/inventory/items?unassigned_supplier=1"
+          />
+        </div>
+      </section>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">הזמנות רכש אחרונות</CardTitle>
-            <Link to="/purchase-orders" className="text-muted-foreground text-xs hover:underline">
-              הצג הכל
-            </Link>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            {recentOrders.length === 0 && <p className="text-muted-foreground text-sm">אין הזמנות רכש עדיין.</p>}
-            {recentOrders.map((order) => (
+      <section className="flex flex-col gap-2.5">
+        <SectionHeader title="סקירה כללית" />
+        <div className="grid grid-cols-2 overflow-hidden rounded-[20px] border" style={{ background: C.card, borderColor: C.border }}>
+          <OverviewCell icon={Package} value={stats.activeProducts} label="מוצרים פעילים" to="/inventory/items" className="border-e border-b" />
+          <OverviewCell icon={Truck} value={stats.activeSuppliers} label="ספקים פעילים" to="/suppliers" className="border-b" />
+          <OverviewCell icon={CalendarDays} value={stats.shiftsThisWeek} label="משמרות השבוע" to="/shifts" className="border-e" />
+          <OverviewCell icon={Users} value={stats.activeEmployees} label="עובדים פעילים" to="/admin/users" />
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-2.5">
+        <SectionHeader title="הזמנות רכש אחרונות" link={{ to: '/purchase-orders', label: 'הצג הכל' }} />
+        {recentOrders.length === 0 && (
+          <p className="text-sm" style={{ color: C.textMuted }}>
+            אין הזמנות רכש עדיין.
+          </p>
+        )}
+        <div className="flex flex-col gap-2">
+          {recentOrders.map((order, index) => {
+            const supplierName = supplierNames.get(order.supplier_id) ?? '—'
+            const tone = purchaseOrderStatusTone[order.status]
+            return (
               <Link
                 key={order.id}
                 to={`/purchase-orders/${order.id}`}
-                className="hover:bg-accent flex items-center justify-between rounded-md border p-2 text-sm transition-colors"
+                className="flex items-center gap-3 rounded-2xl border p-3"
+                style={{ background: C.card, borderColor: C.border, color: C.text }}
               >
-                <div>
-                  <p className="font-medium">{supplierNames.get(order.supplier_id) ?? '—'}</p>
-                  <p className="text-muted-foreground text-xs">
-                    {order.order_number} • {formatDate(order.created_at)}
-                  </p>
+                <div
+                  className="flex size-10 shrink-0 items-center justify-center rounded-xl text-[17px] font-extrabold text-white"
+                  style={{ background: CATEGORY_COLORS[index % CATEGORY_COLORS.length] }}
+                >
+                  {supplierName.charAt(0)}
                 </div>
-                <div className="flex flex-col items-end gap-1">
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-[15px] font-bold">{supplierName}</span>
+                  <span className="text-xs" style={{ color: C.textMuted }}>
+                    {order.order_number} · {dayMonthFormatter.format(new Date(order.created_at))}
+                  </span>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
                   <span
-                    className={cn(
-                      'rounded-full px-2 py-1 text-xs font-medium',
-                      purchaseOrderStatusBadgeClass[order.status],
-                    )}
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${order.status === 'cancelled' ? 'line-through' : ''}`}
+                    style={{ background: tone.bg, color: tone.fg }}
                   >
                     {purchaseOrderStatusLabels[order.status]}
                   </span>
-                  <span className="text-muted-foreground">₪{(orderTotals[order.id] ?? 0).toFixed(2)}</span>
+                  <span className="text-[13px] font-bold">{formatMoney(orderTotals[order.id] ?? 0)}</span>
                 </div>
               </Link>
-            ))}
-          </CardContent>
-        </Card>
-
-      </div>
+            )
+          })}
+        </div>
+      </section>
     </>
   )
 }
@@ -334,24 +381,108 @@ interface ShiftManagerEmployee {
   full_name: string
 }
 
-function ShiftManagerAssignmentCard() {
+// One duty row of the management card: the duty's icon, who holds it (or
+// "חסר שיבוץ"), and a picker styled as a small button -- a real <select>
+// laid invisibly over it, so the phone's native picker opens on tap.
+function StaffingRow({
+  role,
+  label,
+  assignedName,
+  isMe,
+  options,
+  disabled,
+  extra,
+  onPick,
+}: {
+  role: ShiftAssignmentRole
+  label: string
+  assignedName: string | null
+  isMe: boolean
+  options: ShiftManagerEmployee[]
+  disabled: boolean
+  extra?: ReactNode
+  onPick: (employeeId: string) => void
+}) {
+  const Icon = DUTY_ICON[role]
+  const missing = !assignedName
+
+  return (
+    <div className="flex items-center gap-3 px-3.5 py-2.5">
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-full" style={{ background: DUTY_ICON_BG[role] }}>
+        <Icon className="size-5 text-white" />
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <span className="text-xs" style={{ color: C.textMuted }}>
+          {label}
+        </span>
+        <span className="truncate text-[15px] font-bold" style={{ color: missing ? C.warning : C.text }}>
+          {assignedName ?? 'חסר שיבוץ'}
+          {isMe && (
+            <span className="font-semibold" style={{ color: C.success }}>
+              {' '}
+              (את/ה)
+            </span>
+          )}
+        </span>
+      </div>
+      {extra}
+      <div
+        className="relative flex h-9 shrink-0 items-center rounded-xl border px-3 text-[13px]"
+        style={
+          missing
+            ? { background: C.warningBg, borderColor: '#F3D9A8', color: '#8A5000', fontWeight: 700 }
+            : { background: C.card, borderColor: C.border, color: C.textSecondary, fontWeight: 600 }
+        }
+      >
+        {missing ? 'בחירה' : 'החלפה'}
+        <select
+          aria-label={`${missing ? 'בחירת' : 'החלפת'} ${label}`}
+          className="absolute inset-0 cursor-pointer opacity-0"
+          value=""
+          disabled={disabled}
+          onChange={(e) => onPick(e.target.value)}
+        >
+          <option value="" disabled>
+            {label}
+          </option>
+          {options.map((emp) => (
+            <option key={emp.id} value={emp.id}>
+              {emp.full_name}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  )
+}
+
+// Bar manager (week-level shift_manager_assignments) and area supervisor
+// for this week and next, in one card. Area supervisor ("מנהל/ת מתחם") is
+// one person for the whole night like bar manager, but there's no week-level
+// table for it -- just a pair of shift_assignments rows (opening + closing)
+// always written/removed together, matching WeekCard's
+// handleSetAreaSupervisor in Shifts.tsx.
+function ManagementStaffingCard({ employeeNames, myEmployeeId }: { employeeNames: Map<string, string>; myEmployeeId: string | null }) {
   const weeks = [toDateStr(activeWeekStart()), toDateStr(addDays(activeWeekStart(), 7))]
-  const [employees, setEmployees] = useState<ShiftManagerEmployee[]>([])
-  const [assignments, setAssignments] = useState<Map<string, string>>(new Map())
+  const [barManagerOptions, setBarManagerOptions] = useState<ShiftManagerEmployee[]>([])
+  const [barManagers, setBarManagers] = useState<Map<string, string>>(new Map())
   const [taskStats, setTaskStats] = useState<{ completed: number; total: number } | null>(null)
+  const [supervisorOptions, setSupervisorOptions] = useState<ShiftManagerEmployee[]>([])
+  const [shiftIdsByWeek, setShiftIdsByWeek] = useState<Map<string, string[]>>(new Map())
+  const [supervisors, setSupervisors] = useState<Map<string, string>>(new Map())
   const [saving, setSaving] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  async function load() {
+  async function loadBarManagers() {
     const [employeesRes, assignmentsRes] = await Promise.all([
       supabase.rpc('list_shift_manager_employees'),
       supabase.from('shift_manager_assignments').select('*').in('week_start', weeks),
     ])
-    setEmployees((employeesRes.data as ShiftManagerEmployee[]) ?? [])
+    setBarManagerOptions((employeesRes.data as ShiftManagerEmployee[]) ?? [])
     const loadedAssignments = new Map(
       ((assignmentsRes.data as ShiftManagerAssignment[]) ?? []).map((a) => [a.week_start, a.employee_id]),
     )
-    setAssignments(loadedAssignments)
+    setBarManagers(loadedAssignments)
 
     const currentWeek = weeks[0]
     if (loadedAssignments.has(currentWeek)) {
@@ -363,86 +494,7 @@ function ShiftManagerAssignmentCard() {
     }
   }
 
-  useEffect(() => {
-    load()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  async function handleAssign(week: string, employeeId: string) {
-    if (!employeeId) return
-    setSaving(week)
-    const { error: assignError } = await supabase.rpc('set_weekly_shift_manager', {
-      p_week_start: week,
-      p_employee_id: employeeId,
-    })
-    setSaving(null)
-    if (assignError) {
-      setError(assignError.message)
-      return
-    }
-    load()
-  }
-
-  const missingCount = weeks.filter((w) => !assignments.get(w)).length
-
-  return (
-    <Card className={missingCount > 0 ? 'border-amber-500/60 bg-amber-50 dark:bg-amber-950/20' : undefined}>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base">שיבוץ מנהל בר</CardTitle>
-        <Link to="/shifts" className="text-muted-foreground text-xs hover:underline">
-          שיבוץ לפי שנה
-        </Link>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        {weeks.map((week) => {
-          const assigned = assignments.get(week) ?? ''
-          const isCurrentWeek = week === weeks[0]
-          return (
-            <div key={week} className="flex items-center justify-between gap-2 text-sm">
-              <span>{weekLabelFormatter.format(shiftDateOfWeek(week))}</span>
-              <div className="flex items-center gap-2">
-                {isCurrentWeek && taskStats && (
-                  <Link to={`/weekly-checklist?week=${week}`} className="text-muted-foreground text-xs hover:underline">
-                    {taskStats.completed}/{taskStats.total} משימות
-                  </Link>
-                )}
-                <select
-                  className={cn(selectClass, 'w-40', !assigned && 'border-amber-500')}
-                  value={assigned}
-                  disabled={saving === week}
-                  onChange={(e) => handleAssign(week, e.target.value)}
-                >
-                  <option value="">— לא שובץ —</option>
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.full_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )
-        })}
-        {error && <p className="text-destructive text-sm">{error}</p>}
-      </CardContent>
-    </Card>
-  )
-}
-
-// Area supervisor ("מנהל/ת מתחם") is one person for the whole night, same
-// as bar manager -- but unlike bar manager there's no dedicated
-// week-level table for it, just a pair of shift_assignments rows (one per
-// shift instance, opening + closing) always written/removed together.
-// Matches WeekCard's handleSetAreaSupervisor in Shifts.tsx.
-function AreaSupervisorAssignmentCard() {
-  const weeks = [toDateStr(activeWeekStart()), toDateStr(addDays(activeWeekStart(), 7))]
-  const [eligible, setEligible] = useState<ShiftManagerEmployee[]>([])
-  const [shiftIdsByWeek, setShiftIdsByWeek] = useState<Map<string, string[]>>(new Map())
-  const [assignments, setAssignments] = useState<Map<string, string>>(new Map())
-  const [saving, setSaving] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  async function load() {
+  async function loadSupervisors() {
     await supabase.rpc('ensure_upcoming_shifts')
 
     const [shiftsRes, employeesRes, rolesRes] = await Promise.all([
@@ -463,11 +515,11 @@ function AreaSupervisorAssignmentCard() {
     const allEmployees = (employeesRes.data as { id: string; full_name: string; can_supervise_area: boolean }[]) ?? []
     // Admins can cover area-supervisor duty too, on top of the explicit
     // can_supervise_area allow-list -- matches AllocationsList in Shifts.tsx.
-    setEligible(allEmployees.filter((e) => e.can_supervise_area || roleByEmployeeId.get(e.id) === 'administrator'))
+    setSupervisorOptions(allEmployees.filter((e) => e.can_supervise_area || roleByEmployeeId.get(e.id) === 'administrator'))
 
     const allShiftIds = [...shiftsByWeek.values()].flat()
     if (allShiftIds.length === 0) {
-      setAssignments(new Map())
+      setSupervisors(new Map())
       return
     }
 
@@ -487,17 +539,34 @@ function AreaSupervisorAssignmentCard() {
       const week = shiftToWeek.get(row.shift_id)
       if (week) loadedAssignments.set(week, row.employee_id)
     }
-    setAssignments(loadedAssignments)
+    setSupervisors(loadedAssignments)
   }
 
   useEffect(() => {
-    load()
+    loadBarManagers()
+    loadSupervisors()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  async function handleAssign(week: string, employeeId: string) {
+  async function handleAssignBarManager(week: string, employeeId: string) {
     if (!employeeId) return
-    setSaving(week)
+    setSaving(`bar_manager:${week}`)
+    setError(null)
+    const { error: assignError } = await supabase.rpc('set_weekly_shift_manager', {
+      p_week_start: week,
+      p_employee_id: employeeId,
+    })
+    setSaving(null)
+    if (assignError) {
+      setError(assignError.message)
+      return
+    }
+    loadBarManagers()
+  }
+
+  async function handleAssignSupervisor(week: string, employeeId: string) {
+    if (!employeeId) return
+    setSaving(`area_supervisor:${week}`)
     setError(null)
 
     const shiftIds = shiftIdsByWeek.get(week) ?? []
@@ -524,44 +593,63 @@ function AreaSupervisorAssignmentCard() {
     }
 
     setSaving(null)
-    load()
+    loadSupervisors()
   }
 
-  const missingCount = weeks.filter((w) => !assignments.get(w)).length
-
   return (
-    <Card className={missingCount > 0 ? 'border-amber-500/60 bg-amber-50 dark:bg-amber-950/20' : undefined}>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base">שיבוץ מנהל/ת מתחם</CardTitle>
-        <Link to="/shifts" className="text-muted-foreground text-xs hover:underline">
-          שיבוץ לפי שנה
-        </Link>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        {weeks.map((week) => {
-          const assigned = assignments.get(week) ?? ''
+    <section className="flex flex-col gap-2.5">
+      <SectionHeader title="שיבוץ ניהול" link={{ to: '/shifts', label: 'לכל המשמרות' }} />
+      <div className="flex flex-col rounded-[20px] border" style={{ background: C.card, borderColor: C.border }}>
+        {weeks.map((week, index) => {
+          const barManagerId = barManagers.get(week) ?? null
+          const supervisorId = supervisors.get(week) ?? null
+          const isCurrentWeek = index === 0
           return (
-            <div key={week} className="flex items-center justify-between gap-2 text-sm">
-              <span>{weekLabelFormatter.format(shiftDateOfWeek(week))}</span>
-              <select
-                className={cn(selectClass, 'w-40', !assigned && 'border-amber-500')}
-                value={assigned}
-                disabled={saving === week}
-                onChange={(e) => handleAssign(week, e.target.value)}
-              >
-                <option value="">— לא שובץ —</option>
-                {eligible.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.full_name}
-                  </option>
-                ))}
-              </select>
+            <div key={week} className="flex flex-col pb-1.5">
+              {index > 0 && <div className="mx-3.5 h-px" style={{ background: C.border }} />}
+              <span className="px-3.5 pt-3 pb-0.5 text-[13px] font-bold" style={{ color: C.textSecondary }}>
+                {isCurrentWeek ? 'השבוע' : 'שבוע הבא'} · חמישי {dayMonthFormatter.format(shiftDateOfWeek(week))}
+              </span>
+              <StaffingRow
+                role="bar_manager"
+                label="מנהל/ת בר"
+                assignedName={barManagerId ? (employeeNames.get(barManagerId) ?? '—') : null}
+                isMe={!!barManagerId && barManagerId === myEmployeeId}
+                options={barManagerOptions}
+                disabled={saving === `bar_manager:${week}`}
+                extra={
+                  isCurrentWeek &&
+                  taskStats && (
+                    <Link
+                      to={`/weekly-checklist?week=${week}`}
+                      className="shrink-0 rounded-full px-2.5 py-1 text-xs font-bold"
+                      style={{ background: C.successBg, color: C.success }}
+                    >
+                      {taskStats.completed}/{taskStats.total} משימות
+                    </Link>
+                  )
+                }
+                onPick={(employeeId) => handleAssignBarManager(week, employeeId)}
+              />
+              <StaffingRow
+                role="area_supervisor"
+                label="מנהל/ת מתחם"
+                assignedName={supervisorId ? (employeeNames.get(supervisorId) ?? '—') : null}
+                isMe={!!supervisorId && supervisorId === myEmployeeId}
+                options={supervisorOptions}
+                disabled={saving === `area_supervisor:${week}`}
+                onPick={(employeeId) => handleAssignSupervisor(week, employeeId)}
+              />
             </div>
           )
         })}
-        {error && <p className="text-destructive text-sm">{error}</p>}
-      </CardContent>
-    </Card>
+      </div>
+      {error && (
+        <p className="text-sm" style={{ color: C.error }}>
+          {error}
+        </p>
+      )}
+    </section>
   )
 }
 
@@ -597,38 +685,70 @@ function MyWeeklyTasksCard({ employeeId }: { employeeId: string }) {
   if (!loaded || !weekStart) return null
 
   const todayStr = toDateStr(new Date())
+  const completedCount = items.filter((i) => i.completed).length
   const openItems = items
     .filter((i) => !i.completed)
     .sort((a, b) => a.due_date.localeCompare(b.due_date))
-    .slice(0, 5)
+    .slice(0, 3)
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-base">המשימות הקרובות שלי</CardTitle>
-        <Link to={`/weekly-checklist?week=${weekStart}`} className="text-muted-foreground text-xs hover:underline">
-          לרשימה המלאה
-        </Link>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        {openItems.length === 0 && <p className="text-muted-foreground text-sm">כל המשימות לשבוע הושלמו.</p>}
+    <section className="flex flex-col gap-2.5">
+      <SectionHeader title="המשימות שלי השבוע" link={{ to: `/weekly-checklist?week=${weekStart}`, label: 'לרשימה המלאה' }} />
+      <div className="flex flex-col gap-3 rounded-[20px] border p-3.5" style={{ background: C.card, borderColor: C.border }}>
+        <div className="flex flex-col gap-1.5">
+          <div className="flex justify-between text-[13px]">
+            <span className="font-bold" style={{ color: C.text }}>
+              {completedCount} מתוך {items.length} הושלמו
+            </span>
+            <span style={{ color: C.textMuted }}>משמרת חמישי {dayMonthFormatter.format(shiftDateOfWeek(weekStart))}</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full" style={{ background: C.subtleBg }}>
+            <div
+              className="h-2 rounded-full"
+              style={{ background: C.success, width: `${items.length > 0 ? (completedCount / items.length) * 100 : 0}%` }}
+            />
+          </div>
+        </div>
+
+        {openItems.length === 0 && (
+          <p className="text-sm" style={{ color: C.textMuted }}>
+            כל המשימות לשבוע הושלמו.
+          </p>
+        )}
         {openItems.map((item) => {
           const isLate = !item.is_optional && item.due_date < todayStr
+          const isToday = item.due_date === todayStr
           return (
-            <div key={item.id} className="rounded-md border p-2 text-sm">
-              <p>
-                {item.title}
-                {item.is_optional && <span className="text-muted-foreground"> (אופציונלי)</span>}
-              </p>
-              <p className={isLate ? 'text-destructive text-xs font-medium' : 'text-muted-foreground text-xs'}>
-                {weekLabelFormatter.format(parseDateStr(item.due_date))}
-                {isLate && ' — באיחור'}
-              </p>
+            <div
+              key={item.id}
+              className="flex items-start gap-2.5 rounded-[14px] px-3 py-2.5"
+              style={{ background: isLate ? C.errorBg : C.subtleBg }}
+            >
+              <span
+                aria-hidden="true"
+                className="mt-px size-[22px] shrink-0 rounded-[7px] border-2"
+                style={{ background: C.card, borderColor: isLate ? C.error : '#B9BFBA' }}
+              />
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-semibold" style={{ color: C.text }}>
+                  {item.title}
+                  {item.is_optional && (
+                    <span className="font-medium" style={{ color: C.textMuted }}>
+                      {' '}
+                      (אופציונלי)
+                    </span>
+                  )}
+                </span>
+                <span className="text-xs" style={{ color: isLate ? C.error : C.textMuted, fontWeight: isLate ? 700 : 400 }}>
+                  {longDayMonthFormatter.format(parseDateStr(item.due_date))}
+                  {isLate ? ' · באיחור' : isToday ? ' · היום' : ''}
+                </span>
+              </div>
             </div>
           )
         })}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }
 
@@ -659,28 +779,42 @@ function ManagerDashboard() {
   const canManage = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">לוח בקרה</h1>
-          <p className="text-muted-foreground text-sm">ברבורג — ניהול הבר הקהילתי</p>
-        </div>
-        <Link to="/onboarding" className="text-muted-foreground text-sm hover:underline">
-          שבץ אותי למשמרת
-        </Link>
+    <div dir="rtl" className="min-h-svh" style={{ background: C.appBg, color: C.text }}>
+      <div className="mx-auto flex max-w-xl flex-col gap-5 pt-1">
+        <section className="flex flex-col gap-3 rounded-[20px] p-3.5" style={{ background: C.primaryLight }}>
+          <div className="flex items-center gap-3">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-[14px]" style={{ background: C.primary }}>
+              <LayoutDashboard className="size-6 text-white" />
+            </div>
+            <div className="flex flex-col">
+              <h1 className="text-2xl font-extrabold" style={{ color: C.primary }}>
+                לוח בקרה
+              </h1>
+              <span className="text-sm" style={{ color: C.primaryHover }}>
+                ברבורג — ניהול הבר הקהילתי
+              </span>
+            </div>
+          </div>
+          <Link
+            to="/onboarding"
+            className="flex h-11 items-center justify-center gap-2 rounded-[14px] text-[15px] font-bold"
+            style={{ background: C.card, color: C.primary }}
+          >
+            <CalendarPlus className="size-[18px]" />
+            שבץ אותי למשמרת
+          </Link>
+        </section>
+
+        <ClosingAlertCard shifts={shifts} employeeNames={employeeNames} />
+
+        {effectiveRole === 'shift_manager' && appUser.employee_id && (
+          <MyWeeklyTasksCard employeeId={appUser.employee_id} />
+        )}
+
+        {canManage && <ManagementStaffingCard employeeNames={employeeNames} myEmployeeId={appUser.employee_id} />}
+
+        {canManage && <ManagerSummary />}
       </div>
-
-      <ClosingAlertCard shifts={shifts} employeeNames={employeeNames} />
-
-      {canManage && <ShiftManagerAssignmentCard />}
-
-      {canManage && <AreaSupervisorAssignmentCard />}
-
-      {effectiveRole === 'shift_manager' && appUser.employee_id && (
-        <MyWeeklyTasksCard employeeId={appUser.employee_id} />
-      )}
-
-      {canManage && <ManagerSummary />}
     </div>
   )
 }
