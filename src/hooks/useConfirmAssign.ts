@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
+import type { ShiftAssignmentRole } from '@/lib/types'
 
 export interface ConfirmAssignState {
   title: string
@@ -8,7 +9,7 @@ export interface ConfirmAssignState {
   // shows just the position.
   partLabel?: string
   hoursLabel: string
-  positionLabel: string
+  role: ShiftAssignmentRole
 }
 
 // Turns a self-assign/self-remove click into an awaitable yes/no gate:

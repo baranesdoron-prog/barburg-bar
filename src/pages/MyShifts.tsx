@@ -384,7 +384,8 @@ function BartenderDuty({
               action: 'remove',
               dateLabel: weekLabelFormatter.format(new Date(anyShift.start_time)),
               hoursLabel,
-              positionLabel: shiftAssignmentRoleLabels.bartender,
+              role: 'bartender',
+              partLabel: mine.assignmentIds.length === 1 ? (mine.openingAssignmentId ? 'פתיחה' : 'סגירה') : undefined,
             })
             if (!ok) return
             handleLeave()
