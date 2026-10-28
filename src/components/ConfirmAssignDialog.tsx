@@ -1,5 +1,7 @@
-import { Calendar, CalendarX2, Check, Clock, UserRound, type LucideIcon } from 'lucide-react'
+import { Calendar, CalendarX2, Check, Clock, type LucideIcon } from 'lucide-react'
 import { C } from '@/lib/designTokens'
+import { DUTY_ICON, DUTY_ICON_BG } from '@/lib/dutyIcons'
+import { shiftAssignmentRoleLabels } from '@/lib/shiftLabels'
 import type { ConfirmAssignState } from '@/hooks/useConfirmAssign'
 
 function DetailRow({
@@ -7,16 +9,20 @@ function DetailRow({
   label,
   value,
   last,
+  iconBg,
 }: {
   icon: LucideIcon
   label: string
   value: string
   last?: boolean
+  // Filled tile in the duty's own color (white icon), like the /shifts
+  // duty cards -- otherwise a plain white tile.
+  iconBg?: string
 }) {
   return (
     <div className="flex items-center gap-3 px-3.5 py-3" style={last ? undefined : { borderBottom: `1px solid ${C.border}` }}>
-      <div className="flex size-[34px] shrink-0 items-center justify-center rounded-[10px]" style={{ background: C.card }}>
-        <Icon className="size-[18px]" style={{ color: C.primary }} />
+      <div className="flex size-[34px] shrink-0 items-center justify-center rounded-[10px]" style={{ background: iconBg ?? C.card }}>
+        <Icon className="size-[18px]" style={{ color: iconBg ? '#fff' : C.primary }} />
       </div>
       <div className="flex flex-col">
         <span className="text-xs" style={{ color: C.textMuted }}>
@@ -42,7 +48,8 @@ export function ConfirmAssignDialog({
   if (!state) return null
 
   const isAssign = state.action === 'assign'
-  const position = state.partLabel ? `${state.positionLabel} · ${state.partLabel}` : state.positionLabel
+  const roleLabel = shiftAssignmentRoleLabels[state.role]
+  const position = state.partLabel ? `${roleLabel} · ${state.partLabel}` : roleLabel
 
   return (
     <div dir="rtl" className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(32, 42, 38, 0.55)' }}>
@@ -76,7 +83,7 @@ export function ConfirmAssignDialog({
         <div className="flex w-full flex-col rounded-[18px] border" style={{ background: C.subtleBg, borderColor: C.border }}>
           <DetailRow icon={Calendar} label="תאריך" value={state.dateLabel} />
           <DetailRow icon={Clock} label="שעות" value={state.hoursLabel} />
-          <DetailRow icon={UserRound} label="תפקיד" value={position} last />
+          <DetailRow icon={DUTY_ICON[state.role]} iconBg={DUTY_ICON_BG[state.role]} label="תפקיד" value={position} last />
         </div>
 
         <div className="flex w-full flex-col gap-2">

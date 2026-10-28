@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
 import { ROLES_MANAGING_SHIFTS } from '@/lib/roleLabels'
-import { effectiveStatusLabels, effectiveStatusBadgeClass, shiftTypeLabel, shiftAssignmentRoleLabels } from '@/lib/shiftLabels'
+import { effectiveStatusLabels, effectiveStatusBadgeClass, shiftTypeLabel } from '@/lib/shiftLabels'
 import {
   sundaysInYear,
   EARLIEST_WEEK_START,
@@ -1085,7 +1085,7 @@ function BarManagerRow({
                   action: 'assign',
                   dateLabel,
                   hoursLabel: AREA_SUPERVISOR_HOURS,
-                  positionLabel: 'מנהל/ת בר',
+                  role: 'bar_manager',
                 })
                 if (!ok) return
                 onSet(myEmployeeId)
@@ -1252,7 +1252,7 @@ function AreaSupervisorRow({
                   action: 'assign',
                     dateLabel,
                     hoursLabel: AREA_SUPERVISOR_HOURS,
-                    positionLabel: 'מנהל/ת מתחם',
+                    role: 'area_supervisor',
                   })
                   if (!ok) return
                   onSet(myEmployeeId)
@@ -1295,7 +1295,7 @@ function AreaSupervisorRow({
                     action: 'remove',
                     dateLabel,
                     hoursLabel: AREA_SUPERVISOR_HOURS,
-                    positionLabel: 'מנהל/ת מתחם',
+                    role: 'area_supervisor',
                   })
                   if (!ok) return
                   onSet(null)
@@ -1329,7 +1329,7 @@ function AreaSupervisorRow({
                   action: 'assign',
                 dateLabel,
                 hoursLabel: AREA_SUPERVISOR_HOURS,
-                positionLabel: 'מנהל/ת מתחם',
+                role: 'area_supervisor',
               })
               if (!ok) return
               onSet(myEmployeeId)
@@ -1421,7 +1421,7 @@ function DutyRow({
       action: 'assign',
       dateLabel,
       hoursLabel,
-      positionLabel: shiftAssignmentRoleLabels[role],
+      role,
     })
     if (!ok) return
     onAssign(myEmployeeId)
@@ -1575,7 +1575,7 @@ function DutyRow({
                   action: 'remove',
                   dateLabel,
                   hoursLabel,
-                  positionLabel: shiftAssignmentRoleLabels[role],
+                  role,
                 })
                 if (!ok) return
                 onRemove(mine.assignmentIds)

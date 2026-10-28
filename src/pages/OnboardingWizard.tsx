@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Martini, Beer, Users, ShieldCheck, ChevronLeft, type LucideIcon } from 'lucide-react'
+import { ChevronLeft, type LucideIcon } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import { useAppUserContext } from '@/lib/outletContext'
@@ -12,6 +12,7 @@ import { ConfirmAssignDialog } from '@/components/ConfirmAssignDialog'
 import { useInfoDialog } from '@/hooks/useInfoDialog'
 import { InfoDialog } from '@/components/InfoDialog'
 import { C } from '@/lib/designTokens'
+import { DUTY_ICON, DUTY_ICON_BG } from '@/lib/dutyIcons'
 import type { Shift, ShiftAssignment, ShiftAssignmentRole, ShiftManagerAssignment, ShiftType } from '@/lib/types'
 
 const shortDateFormatter = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'numeric' })
@@ -46,19 +47,6 @@ const LIST_LABELS: Record<Duty, string> = {
   area_supervisor: 'משמרות פתוחות למנהל/ת מתחם',
 }
 
-// Same duty icons/colors as the redesigned /shifts page.
-const DUTY_ICON: Record<Duty, LucideIcon> = {
-  bar_manager: Martini,
-  bartender: Beer,
-  area_manager: Users,
-  area_supervisor: ShieldCheck,
-}
-const DUTY_ICON_BG: Record<Duty, string> = {
-  bar_manager: C.primary,
-  bartender: C.accent,
-  area_manager: '#3F8F6B',
-  area_supervisor: C.info,
-}
 
 interface Slot {
   key: string
@@ -640,7 +628,7 @@ function OnboardingWizardInner() {
                     dateLabel,
                     partLabel,
                     hoursLabel,
-                    positionLabel: shiftAssignmentRoleLabels[duty],
+                    role: duty,
                   })
                   if (!ok) return
                   handleRemove(mine.map((a) => a.id))
@@ -658,7 +646,7 @@ function OnboardingWizardInner() {
                     dateLabel,
                     partLabel,
                     hoursLabel,
-                    positionLabel: shiftAssignmentRoleLabels[duty],
+                    role: duty,
                   })
                   if (!ok) return
                   handleAssignDuty(shifts, duty)
@@ -720,7 +708,7 @@ function OnboardingWizardInner() {
                     action: 'assign',
                   dateLabel,
                   hoursLabel,
-                  positionLabel: 'מנהל/ת בר',
+                  role: 'bar_manager',
                 })
                 if (!ok) return
                 handleAssignBarManager(week)

@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { C } from '@/lib/designTokens'
 import { useAppUserContext } from '@/lib/outletContext'
 import { ROLES_MANAGING_SHIFTS } from '@/lib/roleLabels'
-import { effectiveStatusLabels, shiftAssignmentRoleLabels } from '@/lib/shiftLabels'
+import { effectiveStatusLabels } from '@/lib/shiftLabels'
 import {
   sundaysInYear,
   EARLIEST_WEEK_START,
@@ -427,7 +427,7 @@ function BarManagerBody({
             action: 'assign',
             dateLabel,
             hoursLabel: AREA_SUPERVISOR_HOURS,
-            positionLabel: 'מנהל/ת בר',
+            role: 'bar_manager',
           })
           if (!ok) return
           onSet(myEmployeeId)
@@ -539,7 +539,7 @@ function AreaSupervisorBody({
       action: 'assign',
       dateLabel,
       hoursLabel: AREA_SUPERVISOR_HOURS,
-      positionLabel: 'מנהל/ת מתחם',
+      role: 'area_supervisor',
     })
     if (!ok) return
     onSet(myEmployeeId)
@@ -630,7 +630,7 @@ function AreaSupervisorBody({
                 action: 'remove',
                 dateLabel,
                 hoursLabel: AREA_SUPERVISOR_HOURS,
-                positionLabel: 'מנהל/ת מתחם',
+                role: 'area_supervisor',
               })
               if (!ok) return
               onSet(null)
@@ -709,11 +709,10 @@ function DutyListBody({
   const people = mergeDutyPeople(openingAssignments, closingAssignments)
   const iAmEligible = !!myEmployeeId && eligible.some((e) => e.id === myEmployeeId)
   const anyShiftId = openingShift?.id ?? closingShift?.id
-  const positionLabel = shiftAssignmentRoleLabels[role]
 
   async function associateMe() {
     if (!myEmployeeId) return
-    const ok = await confirmAssign({ title: 'איזה כיף!', action: 'assign', dateLabel, hoursLabel, positionLabel })
+    const ok = await confirmAssign({ title: 'איזה כיף!', action: 'assign', dateLabel, hoursLabel, role })
     if (!ok) return
     onAssign(myEmployeeId)
   }
@@ -825,7 +824,7 @@ function DutyListBody({
           compact={compact}
           onCancel={async () => {
             if (canSelfRemove) {
-              const ok = await confirmAssign({ title: 'איזה באסה! לא מסתדר?', action: 'remove', dateLabel, hoursLabel, positionLabel })
+              const ok = await confirmAssign({ title: 'איזה באסה! לא מסתדר?', action: 'remove', dateLabel, hoursLabel, role })
               if (!ok) return
               onRemove(mine.assignmentIds)
             } else {
