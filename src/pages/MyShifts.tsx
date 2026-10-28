@@ -383,7 +383,6 @@ function BartenderDuty({
               title: 'איזה באסה! לא מסתדר?',
               action: 'remove',
               dateLabel: weekLabelFormatter.format(new Date(anyShift.start_time)),
-              typeLabel: 'משמרת שלמה',
               hoursLabel,
               positionLabel: shiftAssignmentRoleLabels.bartender,
             })

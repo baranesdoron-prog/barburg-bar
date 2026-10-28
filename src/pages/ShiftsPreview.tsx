@@ -426,7 +426,6 @@ function BarManagerBody({
             title: 'איזה כיף!',
             action: 'assign',
             dateLabel,
-            typeLabel: 'משמרת שלמה',
             hoursLabel: AREA_SUPERVISOR_HOURS,
             positionLabel: 'מנהל/ת בר',
           })
@@ -539,7 +538,6 @@ function AreaSupervisorBody({
       title: 'איזה כיף!',
       action: 'assign',
       dateLabel,
-      typeLabel: 'משמרת שלמה',
       hoursLabel: AREA_SUPERVISOR_HOURS,
       positionLabel: 'מנהל/ת מתחם',
     })
@@ -631,7 +629,6 @@ function AreaSupervisorBody({
                 title: 'איזה באסה! לא מסתדר?',
                 action: 'remove',
                 dateLabel,
-                typeLabel: 'משמרת שלמה',
                 hoursLabel: AREA_SUPERVISOR_HOURS,
                 positionLabel: 'מנהל/ת מתחם',
               })
@@ -712,12 +709,11 @@ function DutyListBody({
   const people = mergeDutyPeople(openingAssignments, closingAssignments)
   const iAmEligible = !!myEmployeeId && eligible.some((e) => e.id === myEmployeeId)
   const anyShiftId = openingShift?.id ?? closingShift?.id
-  const typeLabel = 'משמרת שלמה'
   const positionLabel = shiftAssignmentRoleLabels[role]
 
   async function associateMe() {
     if (!myEmployeeId) return
-    const ok = await confirmAssign({ title: 'איזה כיף!', action: 'assign', dateLabel, typeLabel, hoursLabel, positionLabel })
+    const ok = await confirmAssign({ title: 'איזה כיף!', action: 'assign', dateLabel, hoursLabel, positionLabel })
     if (!ok) return
     onAssign(myEmployeeId)
   }
@@ -829,7 +825,7 @@ function DutyListBody({
           compact={compact}
           onCancel={async () => {
             if (canSelfRemove) {
-              const ok = await confirmAssign({ title: 'איזה באסה! לא מסתדר?', action: 'remove', dateLabel, typeLabel, hoursLabel, positionLabel })
+              const ok = await confirmAssign({ title: 'איזה באסה! לא מסתדר?', action: 'remove', dateLabel, hoursLabel, positionLabel })
               if (!ok) return
               onRemove(mine.assignmentIds)
             } else {
