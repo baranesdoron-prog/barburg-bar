@@ -475,7 +475,16 @@ function OnboardingWizardInner() {
     )
   }
 
-  const allWeeks = [...shiftsByWeek.keys()].sort()
+  // Only evenings whose date hasn't passed -- tonight still counts. Goes by
+  // the shifts' real start time, since the week alone (activeWeekStart
+  // only rolls over on Friday) still includes earlier days of this week.
+  const startOfToday = new Date()
+  startOfToday.setHours(0, 0, 0, 0)
+  const allWeeks = [...shiftsByWeek.keys()].sort().filter((week) => {
+    const { opening, closing } = shiftsByWeek.get(week) ?? {}
+    const eveningStart = opening?.start_time ?? closing?.start_time
+    return (eveningStart ? new Date(eveningStart) : shiftDateOfWeek(week)) >= startOfToday
+  })
   const weeks = allWeeks.slice(0, visibleWeekCount)
   const hasMoreWeeks = allWeeks.length > visibleWeekCount
   const currentWeek = toDateStr(activeWeekStart())
