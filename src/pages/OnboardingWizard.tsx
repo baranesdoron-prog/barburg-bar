@@ -482,16 +482,6 @@ function OnboardingWizardInner() {
               />
             )}
           </div>
-
-          <button
-            type="button"
-            onClick={finish}
-            disabled={finishing}
-            className="self-center px-1 py-2 text-sm font-semibold disabled:opacity-50"
-            style={{ color: C.textMuted }}
-          >
-            דלג להמשך לאפליקציה
-          </button>
         </div>
       </WizardShell>
     )
