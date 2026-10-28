@@ -4,7 +4,9 @@ export interface ConfirmAssignState {
   title: string
   action: 'assign' | 'remove'
   dateLabel: string
-  typeLabel: string
+  // Only for a half-evening pick ('פתיחה' / 'סגירה'); a whole evening
+  // shows just the position.
+  partLabel?: string
   hoursLabel: string
   positionLabel: string
 }

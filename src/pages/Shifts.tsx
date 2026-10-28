@@ -1084,7 +1084,6 @@ function BarManagerRow({
                   title: 'איזה כיף!',
                   action: 'assign',
                   dateLabel,
-                  typeLabel: 'משמרת שלמה',
                   hoursLabel: AREA_SUPERVISOR_HOURS,
                   positionLabel: 'מנהל/ת בר',
                 })
@@ -1252,7 +1251,6 @@ function AreaSupervisorRow({
                   title: 'איזה כיף!',
                   action: 'assign',
                     dateLabel,
-                    typeLabel: 'משמרת שלמה',
                     hoursLabel: AREA_SUPERVISOR_HOURS,
                     positionLabel: 'מנהל/ת מתחם',
                   })
@@ -1296,7 +1294,6 @@ function AreaSupervisorRow({
                     title: 'איזה באסה! לא מסתדר?',
                     action: 'remove',
                     dateLabel,
-                    typeLabel: 'משמרת שלמה',
                     hoursLabel: AREA_SUPERVISOR_HOURS,
                     positionLabel: 'מנהל/ת מתחם',
                   })
@@ -1331,7 +1328,6 @@ function AreaSupervisorRow({
                   title: 'איזה כיף!',
                   action: 'assign',
                 dateLabel,
-                typeLabel: 'משמרת שלמה',
                 hoursLabel: AREA_SUPERVISOR_HOURS,
                 positionLabel: 'מנהל/ת מתחם',
               })
@@ -1417,7 +1413,6 @@ function DutyRow({
   const people = mergeDutyPeople(openingAssignments, closingAssignments)
   const iAmEligible = !!myEmployeeId && eligible.some((e) => e.id === myEmployeeId)
   const anyShiftId = openingShift?.id ?? closingShift?.id
-  const typeLabel = 'משמרת שלמה'
 
   async function associateMe() {
     if (!myEmployeeId) return
@@ -1425,7 +1420,6 @@ function DutyRow({
       title: 'איזה כיף!',
       action: 'assign',
       dateLabel,
-      typeLabel,
       hoursLabel,
       positionLabel: shiftAssignmentRoleLabels[role],
     })
@@ -1580,7 +1574,6 @@ function DutyRow({
                   title: 'איזה באסה! לא מסתדר?',
                   action: 'remove',
                   dateLabel,
-                  typeLabel,
                   hoursLabel,
                   positionLabel: shiftAssignmentRoleLabels[role],
                 })

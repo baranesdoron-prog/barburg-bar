@@ -578,12 +578,13 @@ function OnboardingWizardInner() {
               ? 'opening'
               : 'closing'
             : null
-      const sideTypeLabel =
+      const partLabel =
         duty === 'bartender' && relevantSide === 'opening'
-          ? 'משמרת פתיחה'
+          ? 'פתיחה'
           : duty === 'bartender' && relevantSide === 'closing'
-            ? 'משמרת סגירה'
+            ? 'סגירה'
             : undefined
+      const sideTypeLabel = partLabel ? `משמרת ${partLabel}` : undefined
       const hoursLabel =
         duty === 'bartender' && relevantSide === 'opening' && shifts.opening
           ? `${formatTime(shifts.opening.start_time)}–${formatTime(shifts.opening.end_time)}`
@@ -637,7 +638,7 @@ function OnboardingWizardInner() {
                     title: 'איזה באסה! לא מסתדר?',
                     action: 'remove',
                     dateLabel,
-                    typeLabel: sideTypeLabel ?? 'משמרת שלמה',
+                    partLabel,
                     hoursLabel,
                     positionLabel: shiftAssignmentRoleLabels[duty],
                   })
@@ -655,7 +656,7 @@ function OnboardingWizardInner() {
                     title: 'איזה כיף!',
                     action: 'assign',
                     dateLabel,
-                    typeLabel: sideTypeLabel ?? 'משמרת שלמה',
+                    partLabel,
                     hoursLabel,
                     positionLabel: shiftAssignmentRoleLabels[duty],
                   })
@@ -718,7 +719,6 @@ function OnboardingWizardInner() {
                     title: 'איזה כיף!',
                     action: 'assign',
                   dateLabel,
-                  typeLabel: 'משמרת שלמה',
                   hoursLabel,
                   positionLabel: 'מנהל/ת בר',
                 })
