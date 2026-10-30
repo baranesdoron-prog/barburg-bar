@@ -21,6 +21,8 @@ export interface AppSettings {
   id: boolean
   onboarding_wizard_enabled: boolean
   onboarding_wizard_frequency: 'first_login' | 'every_login'
+  shift_emails_enabled: boolean
+  shift_email_bcc: string[]
   updated_at: string
 }
 
