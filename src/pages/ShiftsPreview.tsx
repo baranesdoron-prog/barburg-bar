@@ -908,7 +908,9 @@ function DutyCard({
   )
 }
 
-function WeekSection({
+// Also rendered by the onboarding wizard's shift list, so the wizard shows
+// each evening exactly as this page does.
+export function WeekSection({
   week,
   shifts,
   assignmentsByShift,
@@ -1427,11 +1429,38 @@ function WeekSection({
   )
 }
 
+// Separate fetch (not part of the shared useShiftWeeksData hook, which the
+// legacy page also uses and doesn't need phone numbers for).
+export function useEmployeePhones() {
+  const [employeePhones, setEmployeePhones] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    let isMounted = true
+    supabase
+      .from('employees')
+      .select('id, phone')
+      .then(({ data }) => {
+        if (!isMounted || !data) return
+        setEmployeePhones(
+          Object.fromEntries(
+            (data as { id: string; phone: string | null }[])
+              .filter((e) => !!e.phone)
+              .map((e) => [e.id, e.phone as string]),
+          ),
+        )
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  return employeePhones
+}
+
 export function ShiftsPreview() {
   const { appUser, effectiveRole } = useAppUserContext()
   const [year, setYear] = useState(currentYear)
   const [compact, setCompact] = useState(false)
-  const [employeePhones, setEmployeePhones] = useState<Record<string, string>>({})
 
   const canManage = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
   const isAdmin = effectiveRole === 'administrator'
@@ -1453,27 +1482,7 @@ export function ShiftsPreview() {
     reload,
   } = useShiftWeeksData({ weeks, canManage, callEnsureUpcoming: true })
 
-  // Separate fetch (not part of the shared hook, which the legacy page
-  // also uses and doesn't need phone numbers for).
-  useEffect(() => {
-    let isMounted = true
-    supabase
-      .from('employees')
-      .select('id, phone')
-      .then(({ data }) => {
-        if (!isMounted || !data) return
-        setEmployeePhones(
-          Object.fromEntries(
-            (data as { id: string; phone: string | null }[])
-              .filter((e) => !!e.phone)
-              .map((e) => [e.id, e.phone as string]),
-          ),
-        )
-      })
-    return () => {
-      isMounted = false
-    }
-  }, [])
+  const employeePhones = useEmployeePhones()
 
   const visibleWeeks = weeks.filter((w) => w >= ARCHIVE_CUTOFF || weekNeedsClosing(shiftsByWeek.get(w) ?? {}))
   const canSeeLegacy = SHIFTS_LEGACY_ACCESS_USER_IDS.includes(appUser.id)
