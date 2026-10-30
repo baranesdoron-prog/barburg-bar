@@ -412,3 +412,9 @@ enabled = true
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# Called every minute by the pg_cron job (migration 102), which has no user
+# JWT -- the function checks its own x-cron-secret header instead, and
+# requires an administrator's session for test sends.
+[functions.send-shift-emails]
+verify_jwt = false

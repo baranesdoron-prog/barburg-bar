@@ -123,6 +123,112 @@ function OnboardingSettingsCard() {
   )
 }
 
+// Shift emails (sign-up, removal, day-before reminder) -- sent by the
+// send-shift-emails edge function. Off until the sending domain is set up.
+function ShiftEmailSettingsCard() {
+  const [settings, setSettings] = useState<AppSettings | null>(null)
+  const [bccText, setBccText] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  async function load() {
+    const { data } = await supabase.from('app_settings').select('*').eq('id', true).single()
+    const loaded = data as AppSettings
+    setSettings(loaded)
+    setBccText((loaded?.shift_email_bcc ?? []).join('\n'))
+  }
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  async function save(patch: Partial<Pick<AppSettings, 'shift_emails_enabled' | 'shift_email_bcc'>>) {
+    setSaving(true)
+    setError(null)
+    setMessage(null)
+    const { error: updateError } = await supabase.from('app_settings').update(patch).eq('id', true)
+    setSaving(false)
+    if (updateError) {
+      setError(updateError.message)
+      return
+    }
+    if ('shift_email_bcc' in patch) setMessage('נשמר')
+    load()
+  }
+
+  function saveBcc() {
+    const addresses = bccText
+      .split(/[\s,;]+/)
+      .map((a) => a.trim())
+      .filter(Boolean)
+    const invalid = addresses.filter((a) => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a))
+    if (invalid.length > 0) {
+      setError(`כתובת לא תקינה: ${invalid.join(', ')}`)
+      return
+    }
+    save({ shift_email_bcc: addresses })
+  }
+
+  async function sendTest() {
+    setTesting(true)
+    setError(null)
+    setMessage(null)
+    const { data, error: invokeError } = await supabase.functions.invoke('send-shift-emails', { body: { test: true } })
+    setTesting(false)
+    if (invokeError) {
+      // The function's own message (e.g. "not configured yet") is in the response body.
+      const body = await (invokeError as { context?: Response }).context?.json?.().catch(() => null)
+      setError(body?.error ?? invokeError.message)
+      return
+    }
+    setMessage(`נשלחו ${data?.sent ?? 0} מיילים לדוגמה אל ${data?.to ?? ''}`)
+  }
+
+  if (!settings) return null
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">מיילים על משמרות</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <label className="flex items-center justify-between text-sm">
+          <span>שליחת מייל לעובד/ת בשיבוץ, בהסרה ותזכורת יום לפני המשמרת</span>
+          <input
+            type="checkbox"
+            checked={settings.shift_emails_enabled}
+            disabled={saving}
+            onChange={(e) => save({ shift_emails_enabled: e.target.checked })}
+          />
+        </label>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="shift-email-bcc">עותק מוסתר (BCC) של כל מייל</Label>
+          <textarea
+            id="shift-email-bcc"
+            dir="ltr"
+            rows={3}
+            className="border-input rounded-md border bg-transparent px-3 py-2 text-sm"
+            placeholder="name@example.com"
+            value={bccText}
+            onChange={(e) => setBccText(e.target.value)}
+          />
+          <p className="text-muted-foreground text-xs">כתובת אחת בכל שורה. כדי להפסיק לקבל עותקים, מחק/י את הכתובות ושמור/י.</p>
+          <Button type="button" variant="outline" size="sm" className="self-start" disabled={saving} onClick={saveBcc}>
+            שמירת רשימת העותקים
+          </Button>
+        </div>
+        <Button type="button" variant="outline" size="sm" className="self-start" disabled={testing} onClick={sendTest}>
+          {testing ? 'שולח...' : 'שליחת מיילים לדוגמה אליי'}
+        </Button>
+        {message && <p className="text-sm text-green-700">{message}</p>}
+        {error && <p className="text-destructive text-sm">{error}</p>}
+      </CardContent>
+    </Card>
+  )
+}
+
 export function Users() {
   const [users, setUsers] = useState<AdminAppUserRow[] | null>(null)
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -184,6 +290,7 @@ export function Users() {
       </div>
 
       <OnboardingSettingsCard />
+      <ShiftEmailSettingsCard />
 
       {showInviteForm && (
         <InviteForm
