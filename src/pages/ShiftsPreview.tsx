@@ -1289,7 +1289,7 @@ export function WeekSection({
           </DutyCard>
 
           <DutyCard
-            label="אחראי/ת מתחם בכיר/ה"
+            label="מנהל/ת מתחם"
             icon={ShieldCheck}
             iconBg={C.info}
             hoursLabel={AREA_SUPERVISOR_HOURS}
