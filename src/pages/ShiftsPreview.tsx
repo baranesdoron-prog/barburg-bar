@@ -510,6 +510,7 @@ function AreaSupervisorBody({
   showInfo,
   onSet,
   compact,
+  readOnly = false,
 }: {
   employeeId: string | null
   phone: string | undefined
@@ -525,10 +526,13 @@ function AreaSupervisorBody({
   showInfo: (details: InfoDialogState) => Promise<void>
   onSet: (employeeId: string | null) => void
   compact: boolean
+  // Names only, no sign-up or remove -- the wizard shows every duty but
+  // only lets the viewer act on the one they picked.
+  readOnly?: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const iAmEligible = !!myEmployeeId && eligible.some((e) => e.id === myEmployeeId)
-  const isMine = !!employeeId && employeeId === myEmployeeId
+  const isMine = !!employeeId && employeeId === myEmployeeId && !readOnly
   const name = employeeId ? nameWithStar(employeeNames[employeeId] ?? '—', shiftCounts, employeeId, 'area_supervisor') : null
   const textSize = compact ? 'text-sm' : 'text-base'
 
@@ -644,7 +648,12 @@ function AreaSupervisorBody({
         />
       )}
       {!employeeId && disabled && <p className={textSize} style={{ color: C.textMuted }}>מבוטל</p>}
-      {!employeeId && !disabled && <AssociateMeButton compact={compact} disabled={!iAmEligible} onClick={assignSelf} />}
+      {!employeeId && !disabled && readOnly && (
+        <p className={textSize} style={{ color: C.textMuted }}>
+          עדיין לא שובץ
+        </p>
+      )}
+      {!employeeId && !disabled && !readOnly && <AssociateMeButton compact={compact} disabled={!iAmEligible} onClick={assignSelf} />}
     </>
   )
 }
@@ -677,6 +686,7 @@ function DutyListBody({
   onSwapSingle,
   onUnify,
   onAssignSingle,
+  readOnly = false,
 }: {
   role: Duty
   max: number
@@ -705,6 +715,8 @@ function DutyListBody({
   onSwapSingle?: (oldAssignmentId: string, newEmployeeId: string, shiftId: string) => void
   onUnify?: (employeeId: string, shiftId: string) => void
   onAssignSingle?: (employeeId: string, shiftId: string) => void
+  // Names only, no sign-up or remove -- see AreaSupervisorBody.
+  readOnly?: boolean
 }) {
   const people = mergeDutyPeople(openingAssignments, closingAssignments)
   const iAmEligible = !!myEmployeeId && eligible.some((e) => e.id === myEmployeeId)
@@ -799,8 +811,8 @@ function DutyListBody({
   }
 
   // Self-service.
-  const mine = people.find((p) => p.employee_id === myEmployeeId)
-  const others = people.filter((p) => p.employee_id !== myEmployeeId)
+  const mine = readOnly ? undefined : people.find((p) => p.employee_id === myEmployeeId)
+  const others = mine ? people.filter((p) => p.employee_id !== myEmployeeId) : people
 
   return (
     <div className="flex flex-col gap-2">
@@ -836,7 +848,9 @@ function DutyListBody({
           }}
         />
       )}
-      {!mine && <AssociateMeButton compact={compact} disabled={!iAmEligible || people.length >= max || !anyShiftId} onClick={associateMe} />}
+      {!mine && !readOnly && (
+        <AssociateMeButton compact={compact} disabled={!iAmEligible || people.length >= max || !anyShiftId} onClick={associateMe} />
+      )}
     </div>
   )
 }
@@ -923,10 +937,11 @@ export function WeekSection({
   employeePhones,
   myEmployeeId,
   compact,
-  canManage,
+  canManage: canManageProp,
   supervisesArea,
   isAdmin,
   onSaved,
+  selfServiceDuty,
 }: {
   week: string
   shifts: WeekShifts
@@ -946,7 +961,13 @@ export function WeekSection({
   supervisesArea: boolean
   isAdmin: boolean
   onSaved: () => void
+  // Set by the onboarding wizard: no manager controls (status, close or
+  // cancel the shift, assigning others) for anyone, and the viewer can
+  // only sign themselves up for (or off) this one duty -- every other
+  // card is read-only.
+  selfServiceDuty?: Duty
 }) {
+  const canManage = canManageProp && !selfServiceDuty
   const [error, setError] = useState<string | null>(null)
   const [showCancelForm, setShowCancelForm] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
@@ -979,7 +1000,8 @@ export function WeekSection({
   // Matches shift_assignments_delete_self_future_week's RLS: a bartender
   // can only remove their own assignment for a strictly-future week.
   const canSelfRemove = week > toDateStr(activeWeekStart())
-  const canManageAreaManagers = canManage || (supervisesArea && week >= toDateStr(activeWeekStart()))
+  const canManageAreaManagers = canManage || (!selfServiceDuty && supervisesArea && week >= toDateStr(activeWeekStart()))
+  const readOnlyFor = (duty: Duty) => !!selfServiceDuty && selfServiceDuty !== duty
 
   const bartenderMax = activeOpening?.required_staff_count ?? activeClosing?.required_staff_count ?? 3
   const eveningHours =
@@ -1238,8 +1260,9 @@ export function WeekSection({
               shiftCounts={shiftCounts}
               shiftManagers={shiftManagers}
               myEmployeeId={myEmployeeId}
-              viewerCanManage={canManage}
-              canPickAnyone={isAdmin}
+              // Wizard: the "self-assign only" shift-manager mode.
+              viewerCanManage={canManage || selfServiceDuty === 'bar_manager'}
+              canPickAnyone={isAdmin && !selfServiceDuty}
               disabled={weekFullyCancelled}
               dateLabel={dateLabel}
               confirmAssign={confirmAssign}
@@ -1259,6 +1282,7 @@ export function WeekSection({
           >
             <DutyListBody
               role="bartender"
+              readOnly={readOnlyFor('bartender')}
               max={bartenderMax}
               openingShift={activeOpening}
               closingShift={activeClosing}
@@ -1298,6 +1322,7 @@ export function WeekSection({
             compact={compact}
           >
             <AreaSupervisorBody
+              readOnly={readOnlyFor('area_supervisor')}
               employeeId={areaSupervisorId}
               phone={areaSupervisorId ? employeePhones[areaSupervisorId] : undefined}
               eligible={areaSupervisorEligible}
@@ -1326,6 +1351,7 @@ export function WeekSection({
           >
             <DutyListBody
               role="area_manager"
+              readOnly={readOnlyFor('area_manager')}
               max={2}
               openingShift={activeOpening}
               closingShift={activeClosing}
