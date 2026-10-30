@@ -329,6 +329,7 @@ function OnboardingWizardInner() {
               supervisesArea={supervisesAreaIds.has(myEmployeeId)}
               isAdmin={isAdmin}
               onSaved={reload}
+              selfServiceDuty={duty}
             />
           ))}
 
