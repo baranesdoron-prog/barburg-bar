@@ -173,6 +173,7 @@ export function useShiftWeeksData({
   const [supervisesAreaIds, setSupervisesAreaIds] = useState<Set<string>>(new Set())
   const [employeeNames, setEmployeeNames] = useState<Record<string, string>>({})
   const [shiftCounts, setShiftCounts] = useState<Record<string, ShiftCountInfo>>({})
+  const [loaded, setLoaded] = useState(false)
 
   async function load() {
     if (weeks.length === 0) {
@@ -185,6 +186,7 @@ export function useShiftWeeksData({
       setSupervisesAreaIds(new Set())
       setEmployeeNames({})
       setShiftCounts({})
+      setLoaded(true)
       return
     }
 
@@ -325,6 +327,7 @@ export function useShiftWeeksData({
     } else {
       setAssignmentsByShift(new Map())
     }
+    setLoaded(true)
   }
 
   useEffect(() => {
@@ -342,6 +345,7 @@ export function useShiftWeeksData({
     supervisesAreaIds,
     employeeNames,
     shiftCounts,
+    loaded,
     reload: load,
   }
 }
