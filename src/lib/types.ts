@@ -23,6 +23,10 @@ export interface AppSettings {
   onboarding_wizard_frequency: 'first_login' | 'every_login'
   shift_emails_enabled: boolean
   shift_email_bcc: string[]
+  shift_whatsapp_enabled: boolean
+  reminder_days_before: number
+  reminder_time: string
+  whatsapp_webhook_last_at: string | null
   updated_at: string
 }
 

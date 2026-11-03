@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
 import { roleLabels } from '@/lib/roleLabels'
@@ -123,8 +124,11 @@ function OnboardingSettingsCard() {
   )
 }
 
-// Shift emails (sign-up, removal, day-before reminder) -- sent by the
-// send-shift-emails edge function. Off until the sending domain is set up.
+// Shift notifications (sign-up, removal, cancelled/changed evening,
+// reminder): the per-channel switches, the reminder time, and the email
+// extras (BCC, sample emails). With both switches off the app shows no
+// notification choices and sends nothing. Who chose what is shown read-only:
+// only the users themselves can choose.
 function ShiftEmailSettingsCard() {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [bccText, setBccText] = useState('')
@@ -132,19 +136,37 @@ function ShiftEmailSettingsCard() {
   const [testing, setTesting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [reminderTime, setReminderTime] = useState('08:00')
+  const [counts, setCounts] = useState<{ email: number; whatsapp: number; none: number } | null>(null)
 
   async function load() {
-    const { data } = await supabase.from('app_settings').select('*').eq('id', true).single()
+    const [{ data }, emailRes, whatsappRes, noneRes] = await Promise.all([
+      supabase.from('app_settings').select('*').eq('id', true).single(),
+      supabase.from('employees').select('id', { count: 'exact', head: true }).eq('active', true).eq('notify_email', true),
+      supabase.from('employees').select('id', { count: 'exact', head: true }).eq('active', true).eq('notify_whatsapp', true),
+      supabase
+        .from('employees')
+        .select('id', { count: 'exact', head: true })
+        .eq('active', true)
+        .eq('notify_email', false)
+        .eq('notify_whatsapp', false),
+    ])
     const loaded = data as AppSettings
     setSettings(loaded)
     setBccText((loaded?.shift_email_bcc ?? []).join('\n'))
+    setReminderTime((loaded?.reminder_time ?? '08:00').slice(0, 5))
+    setCounts({ email: emailRes.count ?? 0, whatsapp: whatsappRes.count ?? 0, none: noneRes.count ?? 0 })
   }
 
   useEffect(() => {
     load()
   }, [])
 
-  async function save(patch: Partial<Pick<AppSettings, 'shift_emails_enabled' | 'shift_email_bcc'>>) {
+  async function save(
+    patch: Partial<
+      Pick<AppSettings, 'shift_emails_enabled' | 'shift_whatsapp_enabled' | 'shift_email_bcc' | 'reminder_days_before' | 'reminder_time'>
+    >,
+  ) {
     setSaving(true)
     setError(null)
     setMessage(null)
@@ -154,7 +176,7 @@ function ShiftEmailSettingsCard() {
       setError(updateError.message)
       return
     }
-    if ('shift_email_bcc' in patch) setMessage('נשמר')
+    if ('shift_email_bcc' in patch || 'reminder_time' in patch || 'reminder_days_before' in patch) setMessage('נשמר')
     load()
   }
 
@@ -191,11 +213,11 @@ function ShiftEmailSettingsCard() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">מיילים על משמרות</CardTitle>
+        <CardTitle className="text-base">התראות על משמרות</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <label className="flex items-center justify-between text-sm">
-          <span>שליחת מייל לעובד/ת בשיבוץ, בהסרה ותזכורת יום לפני המשמרת</span>
+          <span>התראות באימייל</span>
           <input
             type="checkbox"
             checked={settings.shift_emails_enabled}
@@ -203,6 +225,57 @@ function ShiftEmailSettingsCard() {
             onChange={(e) => save({ shift_emails_enabled: e.target.checked })}
           />
         </label>
+        <label className="flex items-center justify-between text-sm">
+          <span>התראות ב־WhatsApp</span>
+          <input
+            type="checkbox"
+            checked={settings.shift_whatsapp_enabled}
+            disabled={saving}
+            onChange={(e) => save({ shift_whatsapp_enabled: e.target.checked })}
+          />
+        </label>
+        <p className="text-muted-foreground bg-muted rounded-md px-3 py-2 text-xs">
+          כששניהם כבויים, האפליקציה עובדת בדיוק כמו היום: אין בחירת ערוץ בהרשמה, בחלון השיבוץ או בפרופיל, ושום הודעה לא נשלחת.
+          ערוץ שמופעל מופיע כאפשרות לבחירה, ונשלח רק למי שבחר/ה בו בעצמו/ה ונתן/ה הסכמה. על שיבוץ, הסרה, ביטול או שינוי
+          שעות במשמרת, ותזכורת.
+        </p>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium">מתי לשלוח תזכורת (שעון ישראל)</span>
+          <div className="flex items-center gap-2">
+            <select
+              className={cn(selectClass, 'w-36')}
+              value={settings.reminder_days_before}
+              disabled={saving}
+              onChange={(e) => save({ reminder_days_before: Number(e.target.value) })}
+            >
+              <option value={0}>ביום המשמרת</option>
+              <option value={1}>יום אחד לפני</option>
+              <option value={2}>יומיים לפני</option>
+              <option value={3}>3 ימים לפני</option>
+            </select>
+            <span className="text-sm">בשעה</span>
+            <Input
+              type="time"
+              className="w-28"
+              value={reminderTime}
+              disabled={saving}
+              onChange={(e) => setReminderTime(e.target.value)}
+              onBlur={() => reminderTime && reminderTime !== settings.reminder_time.slice(0, 5) && save({ reminder_time: reminderTime })}
+            />
+          </div>
+        </div>
+
+        {counts && (
+          <p className="text-muted-foreground text-xs">
+            בחרו בעצמם: {counts.email} באימייל · {counts.whatsapp} ב־WhatsApp · {counts.none} עוד לא בחרו. רק המשתמשים עצמם יכולים לבחור.
+          </p>
+        )}
+
+        <Link to="/admin/whatsapp" className="self-start text-sm font-semibold underline">
+          בדיקות והיסטוריית הודעות WhatsApp
+        </Link>
+        <p className="border-t pt-3 text-sm font-medium">אימייל</p>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="shift-email-bcc">עותק מוסתר (BCC) של כל מייל</Label>
           <textarea

@@ -7,6 +7,9 @@ import { PasswordField } from '@/components/PasswordField'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { NotificationChoice, type NotificationChoiceValue } from '@/components/NotificationChoice'
+import { maskPhone } from '@/lib/notifications'
+import { E164, useNotificationPrefs } from '@/hooks/useNotificationPrefs'
 
 interface Employee {
   full_name: string
@@ -54,8 +57,84 @@ export function Profile() {
           </p>
         )}
       </CardContent>
+      {appUser.employee_id && <NotificationsSection employeeId={appUser.employee_id} />}
       <ChangePasswordSection />
     </Card>
+  )
+}
+
+const consentDateFormatter = new Intl.DateTimeFormat('he-IL', { day: 'numeric', month: 'numeric', year: 'numeric' })
+
+// How this user gets shift notifications -- only while the admin has at
+// least one channel switched on. Only the user themselves can change it.
+function NotificationsSection({ employeeId }: { employeeId: string }) {
+  const notifications = useNotificationPrefs(employeeId)
+  const { prefs, emailEnabled, whatsappEnabled } = notifications
+  const [choice, setChoice] = useState<NotificationChoiceValue | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  if (!notifications.loaded || !prefs || !(emailEnabled || whatsappEnabled)) return null
+
+  const value = choice ?? { email: prefs.email, whatsapp: prefs.whatsapp, consent: false }
+  // Consent is asked for when turning a channel on, not to keep one.
+  const turningOn = (emailEnabled && value.email && !prefs.email) || (whatsappEnabled && value.whatsapp && !prefs.whatsapp)
+  const changed = value.email !== prefs.email || value.whatsapp !== prefs.whatsapp
+  const noneChosen = !(emailEnabled && value.email) && !(whatsappEnabled && value.whatsapp)
+
+  async function handleSave(e: FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    setMessage(null)
+    const failure = await notifications.save(value.email, value.whatsapp, value.consent)
+    setSaving(false)
+    if (failure) {
+      setError(failure)
+      return
+    }
+    setChoice(null)
+    setMessage('נשמר')
+  }
+
+  return (
+    <form onSubmit={handleSave}>
+      <CardContent className="flex flex-col gap-3 border-t pt-6 text-start">
+        <p className="text-sm font-medium">עדכונים על משמרות</p>
+        <NotificationChoice
+          emailEnabled={emailEnabled}
+          whatsappEnabled={whatsappEnabled}
+          value={value}
+          onChange={(next) => {
+            setChoice(next)
+            setMessage(null)
+          }}
+          intro="שיבוץ, הסרה, ביטול או שינוי במשמרת, ותזכורת לפני המשמרת."
+          showConsent={turningOn}
+          whatsappTarget={maskPhone(prefs.phone)}
+          whatsappUnavailableReason={E164.test(prefs.phone ?? '') ? null : 'צריך מספר טלפון תקין. אפשר לבקש ממנהל/ת לעדכן אותו.'}
+        />
+        {prefs.whatsappOptedOutAt && !prefs.whatsapp && whatsappEnabled && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
+            הוסרת מ־WhatsApp כי השבת "הסר" ב־{consentDateFormatter.format(new Date(prefs.whatsappOptedOutAt))}. אפשר לסמן שוב כדי לחזור.
+          </p>
+        )}
+        {noneChosen && changed && (
+          <p className="text-muted-foreground text-xs">בלי ערוץ לא יישלחו אליך עדכונים, ותתבקש/י לבחור שוב בשיבוץ הבא.</p>
+        )}
+        {prefs.consentAt && (
+          <p className="text-muted-foreground text-xs">הסכמת לקבלת הודעות ב־{consentDateFormatter.format(new Date(prefs.consentAt))}.</p>
+        )}
+        {error && <p className="text-destructive text-sm">{error}</p>}
+        {message && <p className="text-sm text-green-600">{message}</p>}
+      </CardContent>
+      <CardFooter>
+        <Button type="submit" className="w-full" disabled={saving || !changed || (turningOn && !value.consent)}>
+          שמירת הגדרות העדכונים
+        </Button>
+      </CardFooter>
+    </form>
   )
 }
 

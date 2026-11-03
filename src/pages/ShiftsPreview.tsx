@@ -1050,6 +1050,23 @@ export function WeekSection({
     shifts.closing?.status === 'cancelled' ? shifts.closing.id : null,
   ].filter((v): v is string => !!v)
 
+  // A manager just assigned someone else: if notifications are on but that
+  // person hasn't chosen how to get them, say so -- no message will reach them.
+  async function warnIfNotNotified(employeeId: string | null) {
+    if (!employeeId || employeeId === myEmployeeId) return
+    const [{ data: channels }, { data: person }] = await Promise.all([
+      supabase.rpc('notification_channels'),
+      supabase.from('employees').select('notify_email, notify_whatsapp').eq('id', employeeId).single(),
+    ])
+    const on = (channels as { email: boolean; whatsapp: boolean }[] | null)?.[0]
+    if (!on || !(on.email || on.whatsapp) || !person) return
+    if ((on.email && person.notify_email) || (on.whatsapp && person.notify_whatsapp)) return
+    showInfo({
+      title: 'השיבוץ נשמר',
+      body: `${employeeNames[employeeId] ?? 'העובד/ת'} עוד לא בחר/ה איך לקבל עדכונים, ולכן לא תישלח אליו/ה הודעה על השיבוץ.`,
+    })
+  }
+
   async function handleSetShiftManager(employeeId: string | null) {
     setError(null)
     const { error: rpcError } = await supabase.rpc('set_weekly_shift_manager', { p_week_start: week, p_employee_id: employeeId })
@@ -1058,6 +1075,7 @@ export function WeekSection({
       return
     }
     onSaved()
+    warnIfNotNotified(employeeId)
   }
 
   async function handleAssignDuty(employeeId: string, role: ShiftAssignmentRole) {
@@ -1077,6 +1095,7 @@ export function WeekSection({
       return
     }
     onSaved()
+    warnIfNotNotified(employeeId)
   }
 
   async function handleRemoveDuty(assignmentIds: string[]) {
@@ -1110,6 +1129,7 @@ export function WeekSection({
       }
     }
     onSaved()
+    warnIfNotNotified(newEmployeeId)
   }
 
   async function handleUnifyDuty(employeeId: string, role: ShiftAssignmentRole, shiftId: string) {
@@ -1139,6 +1159,7 @@ export function WeekSection({
       return
     }
     onSaved()
+    warnIfNotNotified(newEmployeeId)
   }
 
   async function handleSetAreaSupervisor(employeeId: string | null) {
@@ -1164,6 +1185,7 @@ export function WeekSection({
       }
     }
     onSaved()
+    warnIfNotNotified(employeeId)
   }
 
   async function handleCancelWeek() {
