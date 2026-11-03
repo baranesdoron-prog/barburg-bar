@@ -1,6 +1,8 @@
 # Shift emails — setup
 
-Employees get an email when they're signed up for an evening (by themselves or by a manager), when they're removed, and a reminder at 12:00 the day before. Emails are sent through [Resend](https://resend.com) by the `send-shift-emails` Supabase edge function.
+Employees get an email when they're signed up for an evening (by themselves or by a manager), when they're removed, when their evening is cancelled or its hours change, and a reminder at the time set on the users page (default: the day before at 08:00).
+
+Emails only go to people who **chose email themselves** and consented. Choosing happens at account sign-up, in the shift sign-up popup, or on the profile page; an administrator can't choose for them. See also `docs/whatsapp.md`, which uses the same switches. Emails are sent through [Resend](https://resend.com) by the `send-shift-emails` Supabase edge function.
 
 How it works:
 
@@ -8,7 +10,7 @@ How it works:
 - Every minute, a `pg_cron` job queues any due reminders, and if anything is waiting it calls the edge function (migration 102).
 - The edge function re-checks each row against the current assignments, builds the email and the calendar file, and sends it.
 
-Nothing is queued while the switch on the users page (מיילים על משמרות) is off.
+Nothing is queued while **התראות באימייל** under משתמשים → התראות על משמרות is off. While both channel switches are off, the app also shows no notification choices.
 
 ## One-time setup
 
@@ -32,11 +34,11 @@ Nothing is queued while the switch on the users page (מיילים על משמר
    ```
 7. **Turn it on.** On the users page:
    - Add the BCC addresses.
-   - Press **שליחת מיילים לדוגמה אליי** and check the four sample emails.
-   - Switch on **שליחת מייל לעובד/ת…**.
+   - Press **שליחת מיילים לדוגמה אליי** and check the six sample emails.
+   - Switch on **התראות באימייל**.
 
 ## Day to day
 
-- **Who gets emails:** an employee needs an approved app account. The email goes to the address they log in with. Employees without an account are skipped.
-- **Turning it off:** use the switch on the users page. To stop the hidden copies, clear the BCC list and save.
+- **Who gets emails:** an employee needs an approved app account and must have chosen email. The email goes to the address they log in with. Everyone else is skipped.
+- **Turning it off:** use the switch on the users page. Users' choices are kept, so turning it back on restores them. To stop the hidden copies, clear the BCC list and save.
 - **Checking what was sent:** `shift_email_outbox` keeps every email, with `status` (sent, skipped, failed) and the reason in `error`. Admins can read it.

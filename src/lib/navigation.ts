@@ -14,6 +14,7 @@ import {
   User,
   Users,
   Wand2,
+  MessageCircle,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -87,6 +88,7 @@ export function getNavItems(role: AppRole): NavItem[] {
 
   if (role === 'administrator') {
     items.push({ to: '/admin/users', label: 'משתמשים', icon: Users })
+    items.push({ to: '/admin/whatsapp', label: 'WhatsApp', icon: MessageCircle })
   }
 
   return items

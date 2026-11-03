@@ -20,6 +20,7 @@ import { ForgotPassword } from '@/pages/ForgotPassword'
 import { ResetPassword } from '@/pages/ResetPassword'
 import { PendingApproval } from '@/pages/PendingApproval'
 import { Dashboard, DashboardHome } from '@/pages/Dashboard'
+import { AdminWhatsApp } from '@/pages/AdminWhatsApp'
 import { OnboardingWizard } from '@/pages/OnboardingWizard'
 import { MyShifts, MyAssignedShifts } from '@/pages/MyShifts'
 import { Profile } from '@/pages/Profile'
@@ -146,6 +147,7 @@ export function App() {
         <Route element={<RequireRole roles={['administrator']} />}>
           <Route path="/admin/approvals" element={<AdminApprovals />} />
           <Route path="/admin/users" element={<Users />} />
+          <Route path="/admin/whatsapp" element={<AdminWhatsApp />} />
         </Route>
       </Route>
     </Routes>

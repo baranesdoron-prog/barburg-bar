@@ -1,7 +1,9 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
+import { NotificationChoice, type NotificationChoiceValue } from '@/components/NotificationChoice'
+import { isChoiceValid } from '@/lib/notifications'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -22,16 +24,44 @@ export function SignUp() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
+  // Which notification channels the admin has switched on; with none on,
+  // the form is exactly as before.
+  const [channels, setChannels] = useState({ email: false, whatsapp: false })
+  const [notify, setNotify] = useState<NotificationChoiceValue>({ email: false, whatsapp: false, consent: false })
+  const anyChannelOn = channels.email || channels.whatsapp
+
+  useEffect(() => {
+    supabase.rpc('notification_channels').then(({ data }) => {
+      const row = (data as { email: boolean; whatsapp: boolean }[] | null)?.[0]
+      if (row) setChannels({ email: row.email, whatsapp: row.whatsapp })
+    })
+  }, [])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError(null)
+    if (anyChannelOn && !isChoiceValid(notify, channels.email, channels.whatsapp)) {
+      setError('יש לבחור איך לקבל עדכונים על משמרות ולסמן את ההסכמה.')
+      return
+    }
     setSubmitting(true)
 
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: fullName, phone } },
+      options: {
+        data: {
+          full_name: fullName,
+          phone,
+          ...(anyChannelOn
+            ? {
+                notify_email: channels.email && notify.email,
+                notify_whatsapp: channels.whatsapp && notify.whatsapp,
+                notify_consent: notify.consent,
+              }
+            : {}),
+        },
+      },
     })
 
     setSubmitting(false)
@@ -117,6 +147,15 @@ export function SignUp() {
                 onChange={(e) => setPhone(e.target.value)}
               />
             </div>
+            {anyChannelOn && (
+              <NotificationChoice
+                emailEnabled={channels.email}
+                whatsappEnabled={channels.whatsapp}
+                value={notify}
+                onChange={setNotify}
+                whatsappTarget={channels.whatsapp ? '(למספר שלמעלה)' : null}
+              />
+            )}
             {error && <p className="text-destructive text-sm">{error}</p>}
           </CardContent>
           <CardFooter className="flex flex-col gap-4">

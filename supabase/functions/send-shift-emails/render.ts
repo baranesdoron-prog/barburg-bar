@@ -5,7 +5,7 @@
 // the app's public/email/ folder.
 
 export type Duty = 'bartender' | 'area_manager' | 'area_supervisor' | 'bar_manager'
-export type EmailKind = 'assigned' | 'removed' | 'reminder'
+export type EmailKind = 'assigned' | 'removed' | 'reminder' | 'changed' | 'cancelled'
 
 export interface TeamMember {
   name: string
@@ -22,6 +22,9 @@ export interface ShiftEmail {
   partLabel: string | null
   dateLabel: string // "יום חמישי, 12.11"
   hoursLabel: string // "19:30–00:30"
+  // Reminders: "מחר" / "היום", or null when it's further away (the admin
+  // can set the reminder several days ahead).
+  whenLabel: string | null
   actorName: string | null // the manager, when it wasn't the employee themselves
   team: TeamMember[]
   showAllPhones: boolean
@@ -168,7 +171,7 @@ function calendarSection(email: ShiftEmail) {
 
 function hero(email: ShiftEmail) {
   const position = email.partLabel ? `${DUTY_LABELS[email.role]} (${email.partLabel})` : DUTY_LABELS[email.role]
-  const avatarFile = email.kind === 'removed' ? `${email.role}-off.png` : `${email.role}.png`
+  const avatarFile = email.kind === 'removed' || email.kind === 'cancelled' ? `${email.role}-off.png` : `${email.role}.png`
   const avatar = `<img src="${esc(`${email.appUrl}/email/${avatarFile}`)}" width="92" height="92" alt="${esc(DUTY_LABELS[email.role])}" style="display:block;margin:0 auto;border:0;width:92px;height:92px;border-radius:46px;">`
 
   let bg = C.primaryLight
@@ -194,12 +197,24 @@ function hero(email: ShiftEmail) {
     sub = email.actorName
       ? `<b>${esc(email.actorName)}</b> הסיר/ה אותך מהמשמרת בתור ${esc(position)}`
       : `חבל שלא מסתדר, ${esc(email.firstName)}. נתראה במשמרת אחרת!`
+  } else if (email.kind === 'cancelled') {
+    bg = C.subtleBg
+    titleColor = C.text
+    subColor = C.textSecondary
+    title = 'המשמרת בוטלה'
+    sub = `המשמרת שלך ב${esc(email.dateLabel)} בוטלה${email.actorName ? ` ע״י <b>${esc(email.actorName)}</b>` : ''}. נתראה במשמרת אחרת!`
+  } else if (email.kind === 'changed') {
+    bg = C.accentLight
+    titleColor = C.warningText
+    subColor = C.warningText
+    title = `חל שינוי במשמרת, ${email.firstName}`
+    sub = `השעות החדשות: <b dir="ltr">${esc(email.hoursLabel)}</b>`
   } else {
     bg = C.accentLight
     titleColor = C.warningText
     subColor = C.warningText
-    title = `מחר במשמרת, ${email.firstName}!`
-    sub = `את/ה <b>${esc(position)}</b> מחר בערב · ${esc(email.hoursLabel.split('–')[0])}`
+    title = email.whenLabel ? `${email.whenLabel} במשמרת, ${email.firstName}!` : `תזכורת למשמרת, ${email.firstName}!`
+    sub = `את/ה <b>${esc(position)}</b> ${email.whenLabel ? `${esc(email.whenLabel)} בערב` : esc(email.dateLabel)} · ${esc(email.hoursLabel.split('–')[0])}`
   }
 
   return `<tr><td align="center" style="background:${bg};padding:26px 18px 22px;text-align:center;">
@@ -212,7 +227,8 @@ function hero(email: ShiftEmail) {
 }
 
 export function renderShiftEmail(email: ShiftEmail): { subject: string; html: string } {
-  const removed = email.kind === 'removed'
+  // Removed or evening cancelled: the details are shown crossed out.
+  const removed = email.kind === 'removed' || email.kind === 'cancelled'
   const position = email.partLabel ? `${DUTY_LABELS[email.role]} (${email.partLabel})` : DUTY_LABELS[email.role]
 
   const subject =
@@ -222,10 +238,14 @@ export function renderShiftEmail(email: ShiftEmail): { subject: string; html: st
         : `שובצת למשמרת ברבורג · ${email.dateLabel}`
       : email.kind === 'removed'
         ? `הוסרת ממשמרת ברבורג · ${email.dateLabel}`
-        : `תזכורת: מחר במשמרת ברבורג · ${email.hoursLabel.split('–')[0]}`
+        : email.kind === 'cancelled'
+          ? `המשמרת בוטלה · ${email.dateLabel}`
+          : email.kind === 'changed'
+            ? `שינוי בשעות המשמרת · ${email.dateLabel}`
+            : `תזכורת: ${email.whenLabel ?? email.dateLabel} במשמרת ברבורג · ${email.hoursLabel.split('–')[0]}`
 
   const details = card(
-    detailRow('תאריך', email.kind === 'reminder' ? `מחר, ${email.dateLabel}` : email.dateLabel, { struck: removed }) +
+    detailRow('תאריך', email.kind === 'reminder' && email.whenLabel ? `${email.whenLabel}, ${email.dateLabel}` : email.dateLabel, { struck: removed }) +
       detailRow('שעות', email.hoursLabel, { struck: removed, ltr: true }) +
       detailRow('תפקיד', position, { struck: removed, last: removed }) +
       (removed ? '' : detailRow('מקום', 'ברבורג', { last: true })),
@@ -258,7 +278,9 @@ export function renderShiftEmail(email: ShiftEmail): { subject: string; html: st
         : 'לא מסתדר? אפשר לבטל באפליקציה עד סוף השבוע שלפני המשמרת. אחרי זה, יש לפנות למנהל/ת הבר.'
       : email.kind === 'reminder'
         ? 'משהו השתנה? עדכן/י את מנהל/ת הבר בהקדם.'
-        : ''
+        : email.kind === 'changed'
+          ? 'השעות החדשות לא מסתדרות? עדכן/י את מנהל/ת הבר בהקדם.'
+          : ''
 
   const html = `<!doctype html>
 <html lang="he" dir="rtl">
@@ -280,7 +302,7 @@ export function renderShiftEmail(email: ShiftEmail): { subject: string; html: st
       ${removedNote}
       ${removed ? '' : teamSection(email)}
       ${tasks}
-      ${email.kind === 'assigned' ? calendarSection(email) : ''}
+      ${email.kind === 'assigned' || email.kind === 'changed' ? calendarSection(email) : ''}
       <tr><td style="padding:0 0 ${footer ? 14 : 0}px;">${cta}</td></tr>
       ${footer ? `<tr><td style="font-size:12px;line-height:1.6;color:${C.textMuted};text-align:center;">${footer}</td></tr>` : ''}
     </table>

@@ -77,6 +77,15 @@ function hoursLabel(start: Date, end: Date) {
   return `${timeFormatter.format(start)}–${timeFormatter.format(end)}`
 }
 
+const israelDateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: TZ })
+
+// "היום" / "מחר" for a reminder, by Israel calendar date; null further out.
+function relativeDayLabel(date: Date) {
+  const day = (d: Date) => Date.parse(israelDateFormatter.format(d))
+  const diff = Math.round((day(date) - day(new Date())) / 86400000)
+  return diff === 0 ? 'היום' : diff === 1 ? 'מחר' : null
+}
+
 function firstName(fullName: string) {
   return fullName.trim().split(/\s+/)[0] ?? fullName
 }
@@ -136,6 +145,10 @@ async function recipientEmail(db: SupabaseClient, employeeId: string) {
 // One queued email: re-checks it against the assignments as they are now
 // (the queue can be a minute stale), builds it and sends it.
 async function handleRow(db: SupabaseClient, row: OutboxRow, bcc: string[]): Promise<Outcome> {
+  // Only people who chose email themselves (migration 103).
+  const { data: prefs } = await db.from('employees').select('notify_email').eq('id', row.employee_id).single()
+  if (!prefs?.notify_email) return { status: 'skipped', reason: 'did not choose email' }
+
   const { data: shiftRows } = await db.from('shifts').select('id, shift_type, status, start_time, end_time').eq('week_start', row.week_start)
   // Prefer the non-cancelled instance per type, same as the app does.
   const byType: Partial<Record<'opening' | 'closing', Shift>> = {}
@@ -147,12 +160,17 @@ async function handleRow(db: SupabaseClient, row: OutboxRow, bcc: string[]): Pro
   const closing = byType.closing
   if (!opening && !closing) return { status: 'skipped', reason: 'no shifts that week' }
   const active = [opening, closing].filter((s): s is Shift => !!s && s.status !== 'cancelled')
-  if (row.kind !== 'removed' && active.length === 0) return { status: 'skipped', reason: 'evening cancelled' }
+  const all = [opening, closing].filter((s): s is Shift => !!s)
+  if (row.kind === 'cancelled') {
+    if (active.length > 0) return { status: 'skipped', reason: 'evening not cancelled' }
+  } else if (row.kind !== 'removed' && active.length === 0) {
+    return { status: 'skipped', reason: 'evening cancelled' }
+  }
 
   const { data: assignmentRows } = await db
     .from('shift_assignments')
     .select('shift_id, employee_id, assignment_role')
-    .in('shift_id', active.map((s) => s.id))
+    .in('shift_id', (row.kind === 'cancelled' ? all : active).map((s) => s.id))
   const assignments = (assignmentRows as Assignment[]) ?? []
   const mine = assignments.filter((a) => a.employee_id === row.employee_id && a.assignment_role === row.assignment_role)
   const holds = mine.length > 0
@@ -185,6 +203,8 @@ async function handleRow(db: SupabaseClient, row: OutboxRow, bcc: string[]): Pro
     }
   } else if (!holds) {
     return { status: 'skipped', reason: 'no longer assigned' }
+  } else if ((row.kind === 'reminder' || row.kind === 'changed') && new Date((opening ?? closing)!.start_time).getTime() < Date.now()) {
+    return { status: 'skipped', reason: 'evening already started' }
   }
 
   const to = await recipientEmail(db, row.employee_id)
@@ -252,6 +272,7 @@ async function handleRow(db: SupabaseClient, row: OutboxRow, bcc: string[]): Pro
     partLabel,
     dateLabel: dateLabel(start),
     hoursLabel: hoursLabel(start, end),
+    whenLabel: relativeDayLabel(start),
     actorName: row.actor_employee_id ? (employees.get(row.actor_employee_id)?.full_name ?? null) : null,
     team,
     showAllPhones: row.kind === 'reminder',
@@ -259,7 +280,7 @@ async function handleRow(db: SupabaseClient, row: OutboxRow, bcc: string[]): Pro
     weekStart: row.week_start,
     googleUrl: googleCalendarUrl(event),
     outlookUrl: outlookCalendarUrl(event),
-    icsFilename: row.kind === 'assigned' ? icsFilename : null,
+    icsFilename: row.kind === 'assigned' || row.kind === 'changed' ? icsFilename : null,
   }
   const { subject, html } = renderShiftEmail(email)
 
@@ -271,7 +292,11 @@ async function handleRow(db: SupabaseClient, row: OutboxRow, bcc: string[]): Pro
     ics:
       row.kind === 'reminder'
         ? null
-        : { filename: icsFilename, content: buildIcs(event, row.kind === 'removed'), method: row.kind === 'removed' ? 'CANCEL' : 'PUBLISH' },
+        : {
+            filename: icsFilename,
+            content: buildIcs(event, row.kind === 'removed' || row.kind === 'cancelled'),
+            method: row.kind === 'removed' || row.kind === 'cancelled' ? 'CANCEL' : 'PUBLISH',
+          },
   })
   return { status: 'sent' }
 }
@@ -339,12 +364,15 @@ async function sendSamples(to: string) {
     { kind: 'assigned', role: 'area_manager', actorName: 'דנה לוי' },
     { kind: 'removed', role: 'bartender', actorName: null },
     { kind: 'reminder', role: 'bar_manager', actorName: null },
+    { kind: 'changed', role: 'bartender', actorName: 'דנה לוי' },
+    { kind: 'cancelled', role: 'bartender', actorName: 'דנה לוי' },
   ]
   for (const sample of samples) {
     const { subject, html } = renderShiftEmail({
       kind: sample.kind,
       appUrl: appUrl(),
       firstName: 'בדיקה',
+      whenLabel: 'מחר',
       role: sample.role,
       partLabel: null,
       dateLabel: dateLabel(start),
@@ -356,7 +384,7 @@ async function sendSamples(to: string) {
       weekStart: '',
       googleUrl: googleCalendarUrl(event),
       outlookUrl: outlookCalendarUrl(event),
-      icsFilename: sample.kind === 'assigned' ? 'barburg-test.ics' : null,
+      icsFilename: sample.kind === 'assigned' || sample.kind === 'changed' ? 'barburg-test.ics' : null,
     })
     await sendViaResend({
       to,
@@ -366,7 +394,7 @@ async function sendSamples(to: string) {
       ics:
         sample.kind === 'reminder'
           ? null
-          : { filename: 'barburg-test.ics', content: buildIcs(event, sample.kind === 'removed'), method: sample.kind === 'removed' ? 'CANCEL' : 'PUBLISH' },
+          : { filename: 'barburg-test.ics', content: buildIcs(event, sample.kind === 'removed' || sample.kind === 'cancelled'), method: sample.kind === 'removed' || sample.kind === 'cancelled' ? 'CANCEL' : 'PUBLISH' },
     })
   }
   return samples.length

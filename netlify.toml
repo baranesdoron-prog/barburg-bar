@@ -2,6 +2,12 @@
   command = "npm run build"
   publish = "dist"
 
+# WhatsApp notifications (netlify/functions/whatsapp-*): server-side only,
+# secrets in Netlify environment variables -- see docs/whatsapp.md.
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
