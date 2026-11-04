@@ -39,7 +39,7 @@ export default async (req: Request) => {
   try {
     db = serviceClient()
   } catch {
-    return json({ error: 'השרת לא מוגדר: חסרים SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY ב־Netlify.' }, 500)
+    return json({ error: 'השרת לא מוגדר: חסר המשתנה SUPABASE_SERVICE_ROLE_KEY ב־Netlify (המפתח הסודי מ־Supabase, לא ה־anon key).' }, 500)
   }
 
   // --- who's calling ---------------------------------------------------

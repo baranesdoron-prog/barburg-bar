@@ -30,9 +30,12 @@ export function canSend(config: WhatsAppConfig) {
 }
 
 export function serviceClient(): SupabaseClient {
-  const url = process.env.SUPABASE_URL
+  // The project address is the same one the app already uses (VITE_SUPABASE_URL).
+  // The key is NOT the app's public anon key: it's the secret service-role key,
+  // which must never be a VITE_ variable (those are built into the browser app).
+  const url = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !key) throw new Error('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are not set')
+  if (!url || !key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set')
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
 }
 
