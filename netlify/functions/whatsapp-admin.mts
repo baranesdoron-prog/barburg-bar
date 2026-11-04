@@ -23,6 +23,8 @@ import {
 
 const TEST_SENDS_PER_HOUR = 20
 
+const HELLO_WORLD = { key: 'hello_world', meta_name: 'hello_world', language: 'en_US', param_count: 0 }
+
 interface TemplateRow {
   key: 'registration' | 'reminder' | 'update'
   meta_name: string
@@ -176,11 +178,18 @@ export default async (req: Request) => {
     const to = normalizePhone(String(body.to ?? ''))
     if (!to) return json({ error: 'מספר הטלפון לא תקין.' }, 400)
 
-    const { data: template } = await db
-      .from('whatsapp_templates')
-      .select('key, meta_name, language, param_count')
-      .eq('key', String(body.templateKey ?? ''))
-      .single()
+    // hello_world: Meta's own pre-approved sample template on every new
+    // account -- for checking the connection before our templates exist.
+    const template =
+      body.templateKey === HELLO_WORLD.key
+        ? HELLO_WORLD
+        : (
+            await db
+              .from('whatsapp_templates')
+              .select('key, meta_name, language, param_count')
+              .eq('key', String(body.templateKey ?? ''))
+              .single()
+          ).data
     if (!template) return json({ error: 'תבנית לא קיימת.' }, 400)
 
     const params = Array.isArray(body.params) ? body.params.map((p: unknown) => String(p ?? '').trim()) : []

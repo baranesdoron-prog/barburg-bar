@@ -10,7 +10,7 @@ import { C } from '@/lib/designTokens'
 // Netlify function, which re-checks that the caller is an administrator --
 // the browser never sees a WhatsApp credential.
 
-type TemplateKey = 'registration' | 'reminder' | 'update'
+type TemplateKey = 'registration' | 'reminder' | 'update' | 'hello_world'
 
 interface Template {
   key: TemplateKey
@@ -54,12 +54,14 @@ interface SendResult {
 }
 
 const TEMPLATE_LABELS: Record<TemplateKey, string> = {
+  hello_world: 'hello_world · תבנית הבדיקה של Meta (אנגלית)',
   registration: 'אישור הרשמה למשמרת',
   reminder: 'תזכורת למשמרת',
   update: 'שינוי או ביטול במשמרת',
 }
 
 const PARAM_HINTS: Record<TemplateKey, string[]> = {
+  hello_world: [],
   registration: ['שם', 'תאריך', 'שעות'],
   reminder: ['שם', 'שעות'],
   update: ['שם', 'תאריך', 'פרטים מעודכנים'],
@@ -191,7 +193,19 @@ export function AdminWhatsApp() {
     loadHistory()
   }, [loadStatus, loadHistory])
 
-  const template = status?.templates.find((t) => t.key === templateKey) ?? null
+  // hello_world is Meta's own approved sample on every new account (not in
+  // our templates table) -- for checking the connection before ours exist.
+  const template: Template | null =
+    templateKey === 'hello_world'
+      ? {
+          key: 'hello_world',
+          meta_name: 'hello_world',
+          language: 'en_US',
+          param_count: 0,
+          body: 'Hello World\n\nWelcome and congratulations!! This message demonstrates your ability to send a WhatsApp message notification from the Cloud API, hosted by Meta. Thank you for taking the time to test with us.',
+          status: 'approved',
+        }
+      : (status?.templates.find((t) => t.key === templateKey) ?? null)
   const paramCount = template?.param_count ?? PARAM_HINTS[templateKey].length
   const normalized = useMemo(() => normalizePhone(to), [to])
   const filledParams = params.slice(0, paramCount)
@@ -409,31 +423,33 @@ export function AdminWhatsApp() {
           </select>
         </label>
 
-        <div className="flex flex-col gap-2">
-          <span className="text-[13px] font-semibold">ערכי התבנית</span>
-          {Array.from({ length: paramCount }, (_, i) => (
-            <label key={i} className="flex items-center gap-2">
-              <span className="w-24 shrink-0 text-xs font-bold" style={{ color: C.textMuted }}>
-                {i + 1} · {PARAM_HINTS[templateKey][i]}
-              </span>
-              <input
-                type="text"
-                className="h-[42px] min-w-0 flex-1 rounded-xl border px-3 text-[15px]"
-                style={{ borderColor: C.border, background: C.appBg }}
-                value={params[i] ?? ''}
-                onChange={(e) => setParams((prev) => prev.map((p, j) => (j === i ? e.target.value : p)))}
-              />
-            </label>
-          ))}
-          <button
-            type="button"
-            onClick={fillFromShift}
-            className="h-8 self-start rounded-[10px] px-3 text-[13px] font-bold"
-            style={{ background: C.subtleBg, color: C.primary }}
-          >
-            מילוי מהמשמרת הקרובה
-          </button>
-        </div>
+        {paramCount > 0 && (
+          <div className="flex flex-col gap-2">
+            <span className="text-[13px] font-semibold">ערכי התבנית</span>
+            {Array.from({ length: paramCount }, (_, i) => (
+              <label key={i} className="flex items-center gap-2">
+                <span className="w-24 shrink-0 text-xs font-bold" style={{ color: C.textMuted }}>
+                  {i + 1} · {PARAM_HINTS[templateKey][i]}
+                </span>
+                <input
+                  type="text"
+                  className="h-[42px] min-w-0 flex-1 rounded-xl border px-3 text-[15px]"
+                  style={{ borderColor: C.border, background: C.appBg }}
+                  value={params[i] ?? ''}
+                  onChange={(e) => setParams((prev) => prev.map((p, j) => (j === i ? e.target.value : p)))}
+                />
+              </label>
+            ))}
+            <button
+              type="button"
+              onClick={fillFromShift}
+              className="h-8 self-start rounded-[10px] px-3 text-[13px] font-bold"
+              style={{ background: C.subtleBg, color: C.primary }}
+            >
+              מילוי מהמשמרת הקרובה
+            </button>
+          </div>
+        )}
 
         {template && (
           <div className="flex flex-col gap-1.5 rounded-2xl p-3.5" style={{ background: '#E9E1D6' }}>
