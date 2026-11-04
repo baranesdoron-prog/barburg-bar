@@ -36,7 +36,7 @@ Shift actions never wait on WhatsApp. The triggers only add rows to the queue, a
    - `WHATSAPP_VERIFY_TOKEN`: any long random string you choose
    - `WHATSAPP_APP_SECRET`: App settings → Basic → App secret. Webhook signatures are checked with it; without it the webhook rejects everything.
    - `WHATSAPP_WABA_ID` (optional): the WhatsApp Business Account id. With it, template approval statuses sync from Meta automatically.
-   - `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`: from Supabase → Project settings → API.
+   - `SUPABASE_SERVICE_ROLE_KEY`: the **secret** service-role key, from Supabase → Project settings → API Keys. It's not the public anon key, and must never be a `VITE_` variable. The project address is taken from the existing `VITE_SUPABASE_URL`.
 7. **Deploy:** push to `master`; Netlify builds the functions. Then apply the migration with `npm run db:push`.
 8. **Webhook.** In WhatsApp → Configuration, set the callback URL to `https://barburg-bar.netlify.app/.netlify/functions/whatsapp-webhook` and the verify token to `WHATSAPP_VERIFY_TOKEN`. Then subscribe to **messages**.
 9. **Test.** On `/admin/whatsapp`, check that every status row is ✓, then send a test template to one of the test recipients and watch it go to *נמסר* (delivered) / *נקרא* (read).
