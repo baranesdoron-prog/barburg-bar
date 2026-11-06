@@ -29,6 +29,7 @@ export function ProductForm({ item, suppliers, categories, onSaved, onCancel }: 
   const [unitsPerBox, setUnitsPerBox] = useState(item?.units_per_box?.toString() ?? '')
   const [unitPrice, setUnitPrice] = useState(item?.unit_price?.toString() ?? '')
   const [minimumQuantity, setMinimumQuantity] = useState(item?.minimum_quantity?.toString() ?? '')
+  const [idealQuantity, setIdealQuantity] = useState(item?.ideal_quantity?.toString() ?? '')
   const [imageUrl, setImageUrl] = useState(item?.image_url ?? null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -74,6 +75,11 @@ export function ProductForm({ item, suppliers, categories, onSaved, onCancel }: 
       return
     }
 
+    if (minimumQuantity && idealQuantity && Number(idealQuantity) < Number(minimumQuantity)) {
+      setError('הכמות האידיאלית לא יכולה להיות קטנה מכמות המינימום')
+      return
+    }
+
     setSubmitting(true)
 
     const payload = {
@@ -87,6 +93,7 @@ export function ProductForm({ item, suppliers, categories, onSaved, onCancel }: 
       units_per_box: unitType === 'box' ? Number(unitsPerBox) : null,
       unit_price: unitPrice ? Number(unitPrice) : null,
       minimum_quantity: minimumQuantity ? Number(minimumQuantity) : null,
+      ideal_quantity: idealQuantity ? Number(idealQuantity) : null,
       image_url: imageUrl,
     }
 
@@ -217,13 +224,31 @@ export function ProductForm({ item, suppliers, categories, onSaved, onCancel }: 
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="product-minimum">כמות מינימום להתראה (לא חובה)</Label>
+            <Label htmlFor="product-minimum">כמות מינימום</Label>
             <Input
               id="product-minimum"
               type="number"
+              min={0}
               value={minimumQuantity}
               onChange={(e) => setMinimumQuantity(e.target.value)}
             />
+            <p className="text-muted-foreground text-xs">
+              כשהמלאי יורד מתחת לכמות הזו, סגירת המשמרת יוצרת הזמנת רכש. בלי מינימום המוצר לא מוזמן אוטומטית.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="product-ideal">כמות אידיאלית (לא חובה)</Label>
+            <Input
+              id="product-ideal"
+              type="number"
+              min={0}
+              value={idealQuantity}
+              onChange={(e) => setIdealQuantity(e.target.value)}
+            />
+            <p className="text-muted-foreground text-xs">
+              עד כמה להשלים בהזמנה. אם ריק, מזמינים עד כמות המינימום (מעוגל לקופסאות שלמות).
+            </p>
           </div>
 
           <div className="flex flex-col gap-2">

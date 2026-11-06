@@ -20,6 +20,7 @@ const CSV_TEMPLATE_HEADER = [
   'units_per_box',
   'unit_price',
   'minimum_quantity',
+  'ideal_quantity',
 ]
 
 export function InventoryItems() {
@@ -114,7 +115,7 @@ export function InventoryItems() {
   function handleDownloadTemplate() {
     const csv = toCsv([
       CSV_TEMPLATE_HEADER,
-      ['וודקה', 'בקבוקי אלכוהול', 'Absolut', 'ספק לדוגמה', 'SKU-001', 'בקבוקים', 'box', '12', '45.5', '10'],
+      ['וודקה', 'בקבוקי אלכוהול', 'Absolut', 'ספק לדוגמה', 'SKU-001', 'בקבוקים', 'box', '12', '45.5', '10', '24'],
     ])
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -179,6 +180,7 @@ export function InventoryItems() {
           units_per_box: unitType === 'box' && unitsPerBoxRaw ? Number(unitsPerBoxRaw) : null,
           unit_price: get('unit_price') ? Number(get('unit_price')) : null,
           minimum_quantity: get('minimum_quantity') ? Number(get('minimum_quantity')) : null,
+          ideal_quantity: get('ideal_quantity') ? Number(get('ideal_quantity')) : null,
         }
       })
       .filter((row) => row.name)
@@ -528,6 +530,15 @@ function ItemRow({
   // the middle: an item at the line reads as half full, and how far the
   // fill is from that tick shows how far stock is above or below it.
   const fill = minimum && minimum > 0 ? Math.min(item.current_stock / (minimum * 2), 1) : null
+  // Same conditions generate_reorder_purchase_orders() needs -- without
+  // them the product is never ordered automatically.
+  const reorderIssue = !item.active
+    ? null
+    : minimum === null
+      ? 'לא יוזמן אוטומטית: אין כמות מינימום'
+      : !item.resolved_supplier_id
+        ? 'לא יוזמן אוטומטית: אין ספק'
+        : null
 
   return (
     <div
@@ -566,6 +577,11 @@ function ItemRow({
               .filter(Boolean)
               .join(' · ')}
           </p>
+          {reorderIssue && (
+            <p className="mt-0.5 truncate text-xs font-semibold" style={{ color: C.warning }}>
+              {reorderIssue}
+            </p>
+          )}
           {fill !== null && (
             <div className="relative mt-1.5 h-1.5 overflow-hidden rounded-full" style={{ background: C.subtleBg }}>
               <div

@@ -21,6 +21,8 @@ const journalCategories = Object.keys(journalCategoryLabels) as JournalCategory[
 interface ReorderSummary {
   orders: { supplier_name: string; order_number: string; item_count: number }[]
   skipped_no_supplier: number
+  // Added with migration 106; absent if the database hasn't been updated.
+  skipped_names?: string[]
 }
 
 export function ShiftClosing() {
@@ -1006,9 +1008,17 @@ function ClosingComplete({
           </div>
         )}
         {reorderSummary && reorderSummary.skipped_no_supplier > 0 && (
-          <p className="text-amber-600 dark:text-amber-400">
-            {reorderSummary.skipped_no_supplier} פריטים דורשים הזמנה אך אין להם ספק משויך — לא הוזמנו אוטומטית.
-          </p>
+          <div className="text-amber-600 dark:text-amber-400">
+            <p>
+              {reorderSummary.skipped_no_supplier} פריטים מתחת למינימום לא הוזמנו כי אין להם ספק (גם לא בקטגוריה):
+            </p>
+            {reorderSummary.skipped_names && reorderSummary.skipped_names.length > 0 && (
+              <p className="font-medium">{reorderSummary.skipped_names.join(', ')}</p>
+            )}
+            <Link to="/inventory/items" className="underline underline-offset-2">
+              הוספת ספק בעמוד המוצרים
+            </Link>
+          </div>
         )}
       </CardContent>
       <CardFooter className="flex flex-col gap-2">
