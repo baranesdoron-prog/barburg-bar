@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { BottomNav } from '@/components/BottomNav'
 import { cn } from '@/lib/utils'
 
-const PREVIEWABLE_ROLES: AppRole[] = ['bartender', 'shift_manager']
+const PREVIEWABLE_ROLES: AppRole[] = ['bartender', 'shift_manager', 'customer']
 
 function SidebarContent({
   greetingName,

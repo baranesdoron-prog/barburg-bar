@@ -12,6 +12,8 @@ import {
   ROLES_REQUIRING_EMPLOYEE,
   ROLES_VIEWING_ALLOCATIONS,
   ROLES_VIEWING_SHIFTS,
+  ROLES_USING_PUNCHCARDS,
+  STAFF_ROLES,
 } from '@/lib/roleLabels'
 import { AppShell } from '@/components/AppShell'
 import { SignUp } from '@/pages/SignUp'
@@ -45,6 +47,11 @@ import { WeeklyChecklist } from '@/pages/WeeklyChecklist'
 import { Procedures } from '@/pages/Procedures'
 import { ShiftsPreview, ShiftsArchivePreview } from '@/pages/ShiftsPreview'
 import { SHIFTS_LEGACY_ACCESS_USER_IDS } from '@/lib/shiftsLegacyAccess'
+import { BarMenu } from '@/pages/BarMenu'
+import { CustomerMenu } from '@/pages/CustomerMenu'
+import { News } from '@/pages/News'
+import { AdminNews } from '@/pages/AdminNews'
+import { BuyPunchcard, MyPunchcards, OrderFromMenu, PunchcardOrderPage } from '@/pages/Punchcards'
 
 function RequireApproved() {
   const { loading, session, appUser, activeRole } = useAppUser()
@@ -63,7 +70,10 @@ function RequireRole({ roles }: { roles: AppRole[] }) {
   const { appUser, session } = useAppUserContext()
   const { effectiveRole } = useImpersonation()
 
-  if (!roles.includes(effectiveRole)) return <Navigate to="/dashboard" replace />
+  // Customers have their own home page; everyone else falls back to the dashboard.
+  if (!roles.includes(effectiveRole)) {
+    return <Navigate to={effectiveRole === 'customer' ? '/news' : '/dashboard'} replace />
+  }
   return <Outlet context={{ appUser, session, effectiveRole } satisfies AppOutletContext} />
 }
 
@@ -107,11 +117,21 @@ export function App() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route element={<RequireApproved />}>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/dashboard" element={<DashboardHome />} />
-        <Route path="/onboarding" element={<OnboardingWizard />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/procedures" element={<Procedures />} />
+        <Route element={<RequireRole roles={STAFF_ROLES} />}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/dashboard" element={<DashboardHome />} />
+          <Route path="/onboarding" element={<OnboardingWizard />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/procedures" element={<Procedures />} />
+        </Route>
+        <Route element={<RequireRole roles={ROLES_USING_PUNCHCARDS} />}>
+          <Route path="/news" element={<News />} />
+          <Route path="/menu" element={<CustomerMenu />} />
+          <Route path="/punchcards" element={<MyPunchcards />} />
+          <Route path="/punchcards/buy" element={<BuyPunchcard />} />
+          <Route path="/punchcards/order" element={<OrderFromMenu />} />
+          <Route path="/punchcards/orders/:id" element={<PunchcardOrderPage />} />
+        </Route>
         <Route element={<RequireRole roles={ROLES_REQUIRING_EMPLOYEE} />}>
           <Route path="/my-shifts" element={<MyShifts />} />
           <Route path="/my-shifts/assigned" element={<MyAssignedShifts />} />
@@ -149,6 +169,9 @@ export function App() {
           <Route path="/admin/approvals" element={<AdminApprovals />} />
           <Route path="/admin/users" element={<Users />} />
           <Route path="/admin/whatsapp" element={<AdminWhatsApp />} />
+          {/* Administrators only for now; bar managers later. */}
+          <Route path="/bar-menu" element={<BarMenu />} />
+          <Route path="/admin/news" element={<AdminNews />} />
         </Route>
       </Route>
     </Routes>

@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
-import { roleLabels } from '@/lib/roleLabels'
+import { roleLabels, STAFF_ROLES } from '@/lib/roleLabels'
 import { useRoleEmployeeAssignment, type Employee } from '@/hooks/useRoleEmployeeAssignment'
 import { RoleEmployeeFields } from '@/components/RoleEmployeeFields'
 import { PasswordField } from '@/components/PasswordField'
@@ -507,7 +507,7 @@ function InviteForm({ onDone, onCancel }: { onDone: () => void; onCancel: () => 
               <option value="" disabled>
                 בחר תפקיד
               </option>
-              {(Object.keys(roleLabels) as AppRole[]).map((r) => (
+              {STAFF_ROLES.map((r) => (
                 <option key={r} value={r}>
                   {roleLabels[r]}
                 </option>
@@ -830,7 +830,7 @@ function DelegationPanel({
           <option value="" disabled>
             בחר תפקיד
           </option>
-          {(Object.keys(roleLabels) as AppRole[]).map((r) => (
+          {STAFF_ROLES.map((r) => (
             <option key={r} value={r}>
               {roleLabels[r]}
             </option>

@@ -15,6 +15,10 @@ import {
   Users,
   Wand2,
   MessageCircle,
+  Wine,
+  Newspaper,
+  Ticket,
+  ShoppingBag,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -31,11 +35,32 @@ export interface NavItem {
 export function getNavItems(role: AppRole): NavItem[] {
   const items: NavItem[] = []
 
+  if (role === 'customer') {
+    return [
+      { to: '/news', label: 'חדשות ודגשים', icon: Newspaper },
+      { to: '/menu', label: 'תפריט הבר', icon: Wine },
+      {
+        label: 'כרטיסיות',
+        icon: Ticket,
+        children: [
+          { to: '/punchcards/buy', label: 'רכישת כרטיסייה', icon: ShoppingBag },
+          { to: '/punchcards', label: 'הכרטיסיות שלי', icon: Ticket },
+        ],
+      },
+    ]
+  }
+
   if (role !== 'bartender') {
     items.push({ to: '/dashboard', label: 'לוח בקרה', icon: LayoutDashboard })
   }
 
   items.push({ to: '/procedures', label: 'נהלים', icon: BookOpen })
+
+  // Bar menu and customer news: administrators only for now.
+  if (role === 'administrator') {
+    items.push({ to: '/bar-menu', label: 'תפריט הבר', icon: Wine })
+    items.push({ to: '/admin/news', label: 'חדשות ודגשים ללקוחות', icon: Newspaper })
+  }
 
   if (ROLES_VIEWING_SHIFTS.includes(role)) {
     if (ROLES_MANAGING_SHIFTS.includes(role)) {
@@ -89,6 +114,14 @@ export function getNavItems(role: AppRole): NavItem[] {
   if (role === 'administrator') {
     items.push({ to: '/admin/users', label: 'משתמשים', icon: Users })
     items.push({ to: '/admin/whatsapp', label: 'WhatsApp', icon: MessageCircle })
+    items.push({
+      label: 'כרטיסיות',
+      icon: Ticket,
+      children: [
+        { to: '/punchcards/buy', label: 'רכישת כרטיסייה', icon: ShoppingBag },
+        { to: '/punchcards', label: 'הכרטיסיות שלי', icon: Ticket },
+      ],
+    })
   }
 
   return items
