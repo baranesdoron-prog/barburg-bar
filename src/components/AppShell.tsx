@@ -139,6 +139,16 @@ export function AppShell({ appUser, session }: { appUser: AppUser; session: Sess
   const { effectiveRole } = useImpersonation()
 
   useEffect(() => {
+    // Customers keep their name in customer_profiles, staff in employees.
+    if (appUser.role === 'customer') {
+      supabase
+        .from('customer_profiles')
+        .select('full_name')
+        .eq('id', appUser.id)
+        .maybeSingle()
+        .then(({ data }) => setEmployeeName((data as { full_name: string | null } | null)?.full_name ?? null))
+      return
+    }
     if (!appUser.employee_id) return
     supabase
       .from('employees')
@@ -146,7 +156,7 @@ export function AppShell({ appUser, session }: { appUser: AppUser; session: Sess
       .eq('id', appUser.employee_id)
       .single()
       .then(({ data }) => setEmployeeName(data?.full_name ?? null))
-  }, [appUser.employee_id])
+  }, [appUser.id, appUser.role, appUser.employee_id])
 
   const greetingName = employeeName ?? session.user.email ?? null
 

@@ -121,9 +121,9 @@ export function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/dashboard" element={<DashboardHome />} />
           <Route path="/onboarding" element={<OnboardingWizard />} />
-          <Route path="/profile" element={<Profile />} />
           <Route path="/procedures" element={<Procedures />} />
         </Route>
+        <Route path="/profile" element={<Profile />} />
         <Route element={<RequireRole roles={ROLES_USING_PUNCHCARDS} />}>
           <Route path="/news" element={<News />} />
           <Route path="/menu" element={<CustomerMenu />} />

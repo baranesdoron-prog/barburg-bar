@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
 import { roleLabels } from '@/lib/roleLabels'
@@ -6,6 +7,7 @@ import { useAppUserContext } from '@/lib/outletContext'
 import { PasswordField } from '@/components/PasswordField'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { NotificationChoice, type NotificationChoiceValue } from '@/components/NotificationChoice'
 import { maskPhone } from '@/lib/notifications'
@@ -18,6 +20,11 @@ interface Employee {
 }
 
 export function Profile() {
+  const { appUser } = useAppUserContext()
+  return appUser.role === 'customer' ? <CustomerProfile /> : <StaffProfile />
+}
+
+function StaffProfile() {
   const { appUser, session, effectiveRole } = useAppUserContext()
   const [employee, setEmployee] = useState<Employee | null>(null)
 
@@ -200,5 +207,110 @@ function ChangePasswordSection() {
         </Button>
       </CardFooter>
     </form>
+  )
+}
+
+interface CustomerDetails {
+  full_name: string | null
+  phone: string | null
+}
+
+// Customers have no employee record: their name and phone live in
+// customer_profiles, which they edit themselves.
+function CustomerProfile() {
+  const { appUser, session } = useAppUserContext()
+  const [details, setDetails] = useState<CustomerDetails | null>(null)
+  const [fullName, setFullName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase
+      .from('customer_profiles')
+      .select('full_name, phone')
+      .eq('id', appUser.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        const row = (data as CustomerDetails | null) ?? { full_name: null, phone: null }
+        setDetails(row)
+        setFullName(row.full_name ?? '')
+        setPhone(row.phone ?? '')
+      })
+  }, [appUser.id])
+
+  async function save(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+    setSaved(false)
+    const digits = phone.replace(/\D/g, '')
+    if (phone.trim() && (digits.length < 9 || digits.length > 15)) {
+      setError('מספר הטלפון לא נראה תקין')
+      return
+    }
+    setSaving(true)
+    const { data, error: saveError } = await supabase
+      .from('customer_profiles')
+      .upsert({ id: appUser.id, full_name: fullName, phone }, { onConflict: 'id' })
+      .select('full_name, phone')
+      .single()
+    setSaving(false)
+    if (saveError) {
+      setError(saveError.message)
+      return
+    }
+    const row = data as CustomerDetails
+    setDetails(row)
+    setFullName(row.full_name ?? '')
+    setPhone(row.phone ?? '')
+    setSaved(true)
+  }
+
+  if (!details) return null
+
+  return (
+    <Card className="mx-auto max-w-md">
+      <CardHeader className="text-center">
+        <img src="/logo.png" alt="" className="mx-auto size-20 rounded-full object-cover" />
+        <CardTitle>{details.full_name ?? 'הפרופיל שלי'}</CardTitle>
+        <CardDescription>{roleLabels.customer}</CardDescription>
+      </CardHeader>
+      <form onSubmit={save}>
+        <CardContent className="flex flex-col gap-4">
+          <p className="text-sm">
+            <span className="text-muted-foreground">אימייל: </span>
+            <span dir="ltr">{session.user.email}</span>
+          </p>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="customer-name">שם</Label>
+            <Input id="customer-name" value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="customer-phone">טלפון (לא חובה)</Label>
+            <Input
+              id="customer-phone"
+              type="tel"
+              dir="ltr"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              autoComplete="tel"
+              placeholder="050-1234567"
+            />
+          </div>
+          {error && <p className="text-destructive text-sm">{error}</p>}
+          {saved && <p className="text-sm text-green-700">הפרטים נשמרו.</p>}
+        </CardContent>
+        <CardFooter className="flex flex-col gap-2">
+          <Button type="submit" disabled={saving} className="w-full">
+            שמירת פרטים
+          </Button>
+          <Link to="/punchcards" className="text-primary text-sm font-semibold underline-offset-2 hover:underline">
+            לכרטיסיות שלי
+          </Link>
+        </CardFooter>
+      </form>
+      <ChangePasswordSection />
+    </Card>
   )
 }

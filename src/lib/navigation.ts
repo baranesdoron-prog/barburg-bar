@@ -47,6 +47,7 @@ export function getNavItems(role: AppRole): NavItem[] {
           { to: '/punchcards', label: 'הכרטיסיות שלי', icon: Ticket },
         ],
       },
+      { to: '/profile', label: 'הפרופיל שלי', icon: User },
     ]
   }
 
