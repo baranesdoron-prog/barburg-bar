@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Copy, ImagePlus, Trash2 } from 'lucide-react'
+import { Copy, Eye, ImagePlus, Trash2 } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import { C } from '@/lib/designTokens'
 import { useAppUserContext } from '@/lib/outletContext'
-import { NewsCard, isShowing, type NewsPost } from '@/pages/News'
+import { CustomerHome, NewsCard, isShowing, type NewsPost } from '@/pages/News'
 
 const fieldClass = 'rounded-xl border px-3 text-base outline-none focus-visible:ring-2'
 
@@ -41,7 +41,7 @@ export function AdminNews() {
         </Link>
       </div>
 
-      <Composer onPublished={load} />
+      <Composer published={posts ?? []} onPublished={load} />
 
       {error && <p style={{ color: C.error }}>{error}</p>}
 
@@ -71,7 +71,11 @@ export function AdminNews() {
   )
 }
 
-function Composer({ onPublished }: { onPublished: () => void }) {
+function Composer({ published, onPublished }: { published: NewsPost[]; onPublished: () => void }) {
+  const { appUser } = useAppUserContext()
+  const [previewing, setPreviewing] = useState(false)
+  const [authorName, setAuthorName] = useState<string | null>(null)
+  const [balance, setBalance] = useState(0)
   const [kind, setKind] = useState<'news' | 'highlight'>('news')
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
@@ -80,6 +84,31 @@ function Composer({ onPublished }: { onPublished: () => void }) {
   const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.rpc('punchcard_balance').then(({ data }) => setBalance((data as number | null) ?? 0))
+    if (!appUser.employee_id) return
+    supabase
+      .from('employees')
+      .select('full_name')
+      .eq('id', appUser.employee_id)
+      .single()
+      .then(({ data }) => setAuthorName((data as { full_name: string } | null)?.full_name ?? null))
+  }, [appUser.employee_id])
+
+  const hasContent = !!(title.trim() || body.trim() || imageUrl)
+
+  // The draft as it would be stored, so the preview uses the real card.
+  const draft: NewsPost = {
+    id: 'draft',
+    kind,
+    title: title.trim() || null,
+    body: body.trim() || null,
+    image_url: imageUrl,
+    show_until: showUntil || null,
+    author_name: authorName,
+    created_at: new Date().toISOString(),
+  }
 
   async function upload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -96,9 +125,9 @@ function Composer({ onPublished }: { onPublished: () => void }) {
     setImageUrl(supabase.storage.from('news-images').getPublicUrl(path).data.publicUrl)
   }
 
-  async function publish(e: FormEvent) {
-    e.preventDefault()
-    if (!title.trim() && !body.trim() && !imageUrl) {
+  async function publish(e?: FormEvent) {
+    e?.preventDefault()
+    if (!hasContent) {
       setError('יש להוסיף כותרת, טקסט או תמונה')
       return
     }
@@ -120,6 +149,7 @@ function Composer({ onPublished }: { onPublished: () => void }) {
     setBody('')
     setImageUrl(null)
     setShowUntil('')
+    setPreviewing(false)
     onPublished()
   }
 
@@ -185,9 +215,72 @@ function Composer({ onPublished }: { onPublished: () => void }) {
 
       {error && <p className="text-sm" style={{ color: C.error }}>{error}</p>}
 
-      <button type="submit" disabled={saving || uploading} className="h-12 rounded-xl text-base font-bold text-white disabled:opacity-50" style={{ background: C.primary }}>
-        פרסום
-      </button>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={!hasContent || uploading}
+          onClick={() => {
+            setError(null)
+            setPreviewing(true)
+          }}
+          className="flex h-12 flex-1 items-center justify-center gap-1.5 rounded-xl border-2 text-base font-bold disabled:opacity-50"
+          style={{ borderColor: C.primary, color: C.primary }}
+        >
+          <Eye className="size-4" />
+          תצוגה מקדימה
+        </button>
+        <button
+          type="submit"
+          disabled={saving || uploading}
+          className="h-12 flex-1 rounded-xl text-base font-bold text-white disabled:opacity-50"
+          style={{ background: C.primary }}
+        >
+          פרסום
+        </button>
+      </div>
+
+      {previewing && (
+        <div className="fixed inset-0 z-50 overflow-y-auto" style={{ background: C.appBg }}>
+          <div dir="rtl" className="sticky top-0 z-10 flex flex-col gap-2.5 px-4 py-3 text-white" style={{ background: C.text }}>
+            <div className="flex items-center gap-2">
+              <Eye className="size-4" style={{ color: C.accent }} />
+              <span className="font-extrabold">תצוגה מקדימה: כך הלקוח יראה</span>
+            </div>
+            <span className="text-sm opacity-85">
+              {isShowing(draft)
+                ? 'עוד לא פורסם. המסומן במסגרת מקווקוות הוא הטיוטה שלך.'
+                : 'שימו לב: תאריך "מוצג עד" כבר עבר, ולכן לקוחות לא יראו את ההודעה.'}
+            </span>
+            {error && <span className="text-sm" style={{ color: '#FFB4B4' }}>{error}</span>}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPreviewing(false)}
+                className="h-11 flex-1 rounded-lg border border-white/50 text-base font-bold"
+              >
+                חזרה לעריכה
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => publish()}
+                className="h-11 flex-1 rounded-lg text-base font-extrabold disabled:opacity-50"
+                style={{ background: C.accent, color: '#2B1A02' }}
+              >
+                פרסום
+              </button>
+            </div>
+          </div>
+          <div className="px-4 pt-5">
+            <CustomerHome
+              posts={[draft, ...published.filter(isShowing)]}
+              balance={balance}
+              draftId="draft"
+              interactive={false}
+            />
+          </div>
+        </div>
+      )}
     </form>
   )
 }
