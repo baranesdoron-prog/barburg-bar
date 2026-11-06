@@ -19,6 +19,7 @@ const CUSTOMER_ITEMS: { label: string; icon: LucideIcon; to: string }[] = [
   { label: 'חדשות', icon: Newspaper, to: '/news' },
   { label: 'תפריט', icon: Wine, to: '/menu' },
   { label: 'כרטיסיות', icon: Ticket, to: '/punchcards' },
+  { label: 'פרופיל', icon: User, to: '/profile' },
 ]
 
 // Which tab a path belongs to. A shift's closing report lives under
