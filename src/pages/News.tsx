@@ -74,8 +74,40 @@ export function News() {
 
   if (posts === null) return null
 
+  return <CustomerHome posts={posts} balance={balance ?? 0} />
+}
+
+// The page itself, shared with the admin preview. In the preview the
+// tiles aren't links (leaving would lose the draft) and the draft post is
+// framed so it stands out.
+export function CustomerHome({
+  posts,
+  balance,
+  draftId,
+  interactive = true,
+}: {
+  posts: NewsPost[]
+  balance: number
+  draftId?: string
+  interactive?: boolean
+}) {
   const highlights = posts.filter((p) => p.kind === 'highlight')
   const news = posts.filter((p) => p.kind === 'news')
+
+  const renderPost = (p: NewsPost) =>
+    p.id === draftId ? (
+      <div key={p.id} className="relative rounded-2xl" style={{ outline: `3px dashed ${C.accent}`, outlineOffset: 4 }}>
+        <span
+          className="absolute -top-3.5 left-3 z-[1] rounded-full px-2.5 py-0.5 text-xs font-extrabold"
+          style={{ background: C.accent, color: '#2B1A02' }}
+        >
+          טיוטה
+        </span>
+        <NewsCard post={p} />
+      </div>
+    ) : (
+      <NewsCard key={p.id} post={p} />
+    )
 
   return (
     <div dir="rtl" className="mx-auto flex max-w-md flex-col gap-4 pb-24" style={{ color: C.text }}>
@@ -85,12 +117,12 @@ export function News() {
       </div>
 
       <div className="grid grid-cols-2 gap-2.5">
-        <Link to="/punchcards" className="flex flex-col gap-1 rounded-2xl p-3.5 text-white" style={{ background: C.primary }}>
+        <Tile interactive={interactive} to="/punchcards" className="flex flex-col gap-1 rounded-2xl p-3.5 text-white" style={{ background: C.primary }}>
           <span className="text-sm opacity-85">בכרטיסיות שלי</span>
-          <span className="text-3xl leading-none font-extrabold">{balance ?? 0}</span>
+          <span className="text-3xl leading-none font-extrabold">{balance}</span>
           <span className="text-sm font-bold">{balance ? 'ניקובים · להזמנה' : 'לקניית כרטיסייה'}</span>
-        </Link>
-        <Link to="/menu" className="flex flex-col gap-1 rounded-2xl border p-3.5" style={{ borderColor: C.border, background: C.card }}>
+        </Tile>
+        <Tile interactive={interactive} to="/menu" className="flex flex-col gap-1 rounded-2xl border p-3.5" style={{ borderColor: C.border, background: C.card }}>
           <span className="text-sm" style={{ color: C.textSecondary }}>
             מה שותים הערב?
           </span>
@@ -98,15 +130,13 @@ export function News() {
           <span className="text-sm font-bold" style={{ color: C.primary }}>
             לצפייה
           </span>
-        </Link>
+        </Tile>
       </div>
 
       {highlights.length > 0 && (
         <section className="flex flex-col gap-3">
           <h2 className="text-base font-extrabold">דגשים</h2>
-          {highlights.map((p) => (
-            <NewsCard key={p.id} post={p} />
-          ))}
+          {highlights.map(renderPost)}
         </section>
       )}
 
@@ -117,11 +147,32 @@ export function News() {
             עוד אין עדכונים.
           </p>
         )}
-        {news.map((p) => (
-          <NewsCard key={p.id} post={p} />
-        ))}
+        {news.map(renderPost)}
       </section>
+    </div>
+  )
+}
 
+function Tile({
+  interactive,
+  to,
+  className,
+  style,
+  children,
+}: {
+  interactive: boolean
+  to: string
+  className: string
+  style: React.CSSProperties
+  children: React.ReactNode
+}) {
+  return interactive ? (
+    <Link to={to} className={className} style={style}>
+      {children}
+    </Link>
+  ) : (
+    <div className={className} style={style}>
+      {children}
     </div>
   )
 }
