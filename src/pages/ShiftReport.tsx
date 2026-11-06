@@ -73,10 +73,11 @@ export function ShiftReport() {
       .from('shift_reports')
       .select('*')
       .eq('shift_id', id)
-      .single()
+      .maybeSingle()
 
     if (fetchError || !data) {
-      setError(fetchError?.message ?? 'הדוח לא נמצא')
+      // A shift closed by status only (no count) has no report.
+      setError(fetchError?.message ?? 'למשמרת הזו אין דוח: היא סומנה כסגורה בלי ספירת מלאי.')
       return
     }
     setReport(data as ShiftReportRow)

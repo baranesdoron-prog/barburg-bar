@@ -46,10 +46,12 @@ export const FETCH_FROM = toDateStr(addDays(activeWeekStart(), -7))
 // A week still needs to be shown even after rolling past ARCHIVE_CUTOFF if
 // it has a shift still waiting to be closed -- otherwise the "סגירת
 // משמרת" button becomes unreachable right when it's needed.
+//
+// Only the closing shift counts: closing the evening completes the closing
+// shift alone, so a past opening shift reads "waiting for closure" forever
+// and would otherwise make every past week look unclosed.
 export function weekNeedsClosing(shifts: WeekShifts) {
   return (
-    shifts.opening?.effective_status === 'waiting_for_closure' ||
-    shifts.opening?.effective_status === 'reopened' ||
     shifts.closing?.effective_status === 'waiting_for_closure' ||
     shifts.closing?.effective_status === 'reopened'
   )
