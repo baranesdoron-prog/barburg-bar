@@ -1,6 +1,18 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
-import { Calendar, Clock, Martini, Beer, ShieldCheck, Users, Phone, ChevronLeft, type LucideIcon } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import {
+  Calendar,
+  Clock,
+  Martini,
+  Beer,
+  ShieldCheck,
+  Users,
+  Phone,
+  ChevronLeft,
+  Lock,
+  RotateCcw,
+  type LucideIcon,
+} from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import { C } from '@/lib/designTokens'
@@ -22,9 +34,8 @@ import {
   mergeDutyPeople,
   friendlyAssignmentError,
   type Duty,
-  weekNeedsClosing,
   ARCHIVE_CUTOFF,
-  FETCH_FROM,
+  weekNeedsClosing,
   AREA_SUPERVISOR_HOURS,
   type WeekShifts,
   type ShiftCountInfo,
@@ -942,6 +953,8 @@ export function WeekSection({
   isAdmin,
   onSaved,
   selfServiceDuty,
+  closingProgress,
+  archived,
 }: {
   week: string
   shifts: WeekShifts
@@ -966,6 +979,10 @@ export function WeekSection({
   // only sign themselves up for (or off) this one duty -- every other
   // card is read-only.
   selfServiceDuty?: Duty
+  // Archive only: how far an unfinished closing got, for "המשך סגירה".
+  closingProgress?: { counted: number; total: number }
+  // Archive: a past evening, read-only for anyone who can't manage shifts.
+  archived?: boolean
 }) {
   const canManage = canManageProp && !selfServiceDuty
   const [error, setError] = useState<string | null>(null)
@@ -1001,7 +1018,7 @@ export function WeekSection({
   // can only remove their own assignment for a strictly-future week.
   const canSelfRemove = week > toDateStr(activeWeekStart())
   const canManageAreaManagers = canManage || (!selfServiceDuty && supervisesArea && week >= toDateStr(activeWeekStart()))
-  const readOnlyFor = (duty: Duty) => !!selfServiceDuty && selfServiceDuty !== duty
+  const readOnlyFor = (duty: Duty) => (!!selfServiceDuty && selfServiceDuty !== duty) || (!!archived && !canManage)
 
   const bartenderMax = activeOpening?.required_staff_count ?? activeClosing?.required_staff_count ?? 3
   const eveningHours =
@@ -1227,6 +1244,22 @@ export function WeekSection({
   const weekdayLabel = new Intl.DateTimeFormat('he-IL', { weekday: 'long' }).format(shiftDateOfWeek(week))
   const cardStatus = activeOpening?.effective_status ?? activeClosing?.effective_status ?? 'published'
 
+  // Same conditions as always (the closing page itself only opens for these
+  // statuses); the button just sits at the top of the card now. Orange once
+  // the evening is over and still waiting to be closed.
+  const closingStatus = shifts.closing?.effective_status
+  const closeHref =
+    canManage &&
+    shifts.closing &&
+    (closingStatus === 'active' || closingStatus === 'waiting_for_closure' || closingStatus === 'reopened')
+      ? `/shifts/${shifts.closing.id}/close`
+      : null
+  const closeIsLate = closingStatus === 'waiting_for_closure' || closingStatus === 'reopened'
+  const closeInProgress = !!closingProgress && closingProgress.counted > 0
+  const closeNote = closeInProgress
+    ? `ספירת מלאי: ${closingProgress!.counted} מתוך ${closingProgress!.total} נספרו`
+    : null
+
   return (
     <div
       className={cn('flex flex-col rounded-3xl border', compact ? 'gap-5 p-3 pt-4' : 'gap-6 p-4 pt-5')}
@@ -1267,6 +1300,22 @@ export function WeekSection({
             </span>
           ))}
         </div>
+      )}
+
+      {closeHref && (
+        <Link
+          to={closeHref}
+          className="flex min-h-12 items-center justify-center gap-2 rounded-xl text-base font-bold"
+          style={closeIsLate ? { background: C.accent, color: '#2B1A02' } : { background: C.primary, color: '#fff' }}
+        >
+          {closeInProgress ? <RotateCcw className="size-5" /> : <Lock className="size-5" />}
+          {closeInProgress ? 'המשך סגירה' : 'סגירת משמרת'}
+        </Link>
+      )}
+      {closeHref && closeNote && (
+        <p className="-mt-3 px-1 text-sm" style={{ color: C.textSecondary }}>
+          {closeNote}
+        </p>
       )}
 
       {weekFullyCancelled ? (
@@ -1402,20 +1451,6 @@ export function WeekSection({
 
       {error && <p className="text-xs" style={{ color: C.error }}>{error}</p>}
 
-      {canManage &&
-        shifts.closing &&
-        (shifts.closing.effective_status === 'active' ||
-          shifts.closing.effective_status === 'waiting_for_closure' ||
-          shifts.closing.effective_status === 'reopened') && (
-          <Link
-            to={`/shifts/${shifts.closing.id}/close`}
-            className="flex items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-white"
-            style={{ background: C.primary }}
-          >
-            סגירת משמרת
-          </Link>
-        )}
-
       {canManage && cancellableShiftIds.length > 0 && cancelledShiftIds.length === 0 && !showCancelForm && (
         <button
           type="button"
@@ -1505,6 +1540,48 @@ export function useEmployeePhones() {
   return employeePhones
 }
 
+export interface UnclosedEvening {
+  id: string
+  week_start: string
+  start_time: string
+  end_time: string
+}
+
+// Closing shifts whose evening is over but that nobody has closed yet
+// (waiting_for_closure, or reopened after closing). Oldest first.
+export function useUnclosedEvenings(enabled: boolean) {
+  const [rows, setRows] = useState<UnclosedEvening[]>([])
+
+  useEffect(() => {
+    if (!enabled) return
+    let isMounted = true
+    supabase
+      .from('shifts_with_effective_status')
+      .select('id, week_start, start_time, end_time')
+      .eq('shift_type', 'closing')
+      .neq('status', 'cancelled')
+      .in('effective_status', ['waiting_for_closure', 'reopened'])
+      .gte('week_start', EARLIEST_WEEK_START)
+      .order('start_time')
+      .then(({ data }) => {
+        if (isMounted) setRows((data as UnclosedEvening[]) ?? [])
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [enabled])
+
+  return rows
+}
+
+const unclosedDateFormatter = new Intl.DateTimeFormat('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric' })
+
+function unclosedLabel(evening: UnclosedEvening) {
+  const days = Math.max(0, Math.floor((Date.now() - new Date(evening.end_time).getTime()) / 86_400_000))
+  const ago = days === 0 ? 'היום' : days === 1 ? 'אתמול' : `לפני ${days} ימים`
+  return `${unclosedDateFormatter.format(new Date(evening.start_time))} · ${ago}`
+}
+
 export function ShiftsPreview() {
   const { appUser, effectiveRole } = useAppUserContext()
   const [year, setYear] = useState(currentYear)
@@ -1515,7 +1592,7 @@ export function ShiftsPreview() {
   const myEmployeeId = appUser.employee_id
   const weeks = sundaysInYear(year)
     .map(toDateStr)
-    .filter((w) => w >= EARLIEST_WEEK_START && w >= FETCH_FROM)
+    .filter((w) => w >= EARLIEST_WEEK_START && w >= ARCHIVE_CUTOFF)
 
   const {
     shiftsByWeek,
@@ -1532,7 +1609,10 @@ export function ShiftsPreview() {
 
   const employeePhones = useEmployeePhones()
 
-  const visibleWeeks = weeks.filter((w) => w >= ARCHIVE_CUTOFF || weekNeedsClosing(shiftsByWeek.get(w) ?? {}))
+  // Past weeks always live in the archive, closed or not; the KPI below
+  // points to the ones still waiting to be closed.
+  const visibleWeeks = weeks.filter((w) => w >= ARCHIVE_CUTOFF)
+  const unclosed = useUnclosedEvenings(canManage)
   const canSeeLegacy = SHIFTS_LEGACY_ACCESS_USER_IDS.includes(appUser.id)
 
   return (
@@ -1563,14 +1643,44 @@ export function ShiftsPreview() {
           </h1>
         </div>
 
+        {canManage && unclosed.length > 0 && (
+          <Link
+            to="/shifts/archive?filter=unclosed"
+            className="flex items-center gap-3 rounded-2xl border p-3.5"
+            style={{ background: C.card, borderColor: C.accent, color: C.text }}
+          >
+            <div
+              className="flex size-13 shrink-0 items-center justify-center rounded-xl text-2xl font-extrabold"
+              style={{ background: C.warningBg, color: '#7A4A0A' }}
+            >
+              {unclosed.length}
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className="text-base font-extrabold">
+                {unclosed.length === 1 ? 'משמרת שעברה ולא נסגרה' : 'משמרות שעברו ולא נסגרו'}
+              </span>
+              <span className="text-sm" style={{ color: C.textSecondary }}>
+                {unclosed.length === 1 ? '' : 'הוותיקה: '}
+                {unclosedLabel(unclosed[0])}
+              </span>
+            </div>
+            <ChevronLeft className="size-5 shrink-0" style={{ color: '#7A4A0A' }} />
+          </Link>
+        )}
+
         {canManage && (
           <div className="flex items-center gap-2">
             <Link
               to="/shifts/archive"
-              className="flex-1 rounded-xl border py-2 text-center text-sm font-semibold"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border py-2 text-center text-sm font-semibold"
               style={{ borderColor: C.border, color: C.textSecondary }}
             >
               ארכיון
+              {unclosed.length > 0 && (
+                <span className="rounded-full px-1.5 text-xs font-bold" style={{ background: C.warningBg, color: '#7A4A0A' }}>
+                  {unclosed.length}
+                </span>
+              )}
             </Link>
             <Link
               to="/shifts/new"
@@ -1639,6 +1749,215 @@ export function ShiftsPreview() {
             onSaved={reload}
           />
         ))}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------
+// Archive: past weeks, in the same cards as /shifts. Evenings still
+// waiting to be closed are always on top (oldest first, whatever year is
+// picked), with the close button at the top of their card.
+// ---------------------------------------------------------------------
+
+type ArchiveFilter = 'unclosed' | 'all' | 'closed'
+
+function useClosingProgress(shiftIds: string[]) {
+  const [progress, setProgress] = useState<Record<string, { counted: number; total: number }>>({})
+  const key = shiftIds.join(',')
+
+  useEffect(() => {
+    if (shiftIds.length === 0) return
+    let isMounted = true
+    Promise.all([
+      supabase.from('inventory_counts').select('shift_id').in('shift_id', shiftIds),
+      supabase.from('shift_inventory_exclusions').select('shift_id').in('shift_id', shiftIds),
+      supabase.from('inventory_items').select('id', { count: 'exact', head: true }).eq('active', true),
+    ]).then(([countsRes, exclusionsRes, itemsRes]) => {
+      if (!isMounted) return
+      const tally = (rows: { shift_id: string }[] | null) => {
+        const m = new Map<string, number>()
+        for (const r of rows ?? []) m.set(r.shift_id, (m.get(r.shift_id) ?? 0) + 1)
+        return m
+      }
+      const counted = tally(countsRes.data as { shift_id: string }[] | null)
+      const excluded = tally(exclusionsRes.data as { shift_id: string }[] | null)
+      const items = itemsRes.count ?? 0
+      setProgress(
+        Object.fromEntries(
+          shiftIds.map((id) => [
+            id,
+            { counted: counted.get(id) ?? 0, total: Math.max(counted.get(id) ?? 0, items - (excluded.get(id) ?? 0)) },
+          ]),
+        ),
+      )
+    })
+    return () => {
+      isMounted = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
+
+  return progress
+}
+
+export function ShiftsArchivePreview() {
+  const { appUser, effectiveRole } = useAppUserContext()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [year, setYear] = useState(currentYear)
+  const [compact, setCompact] = useState(false)
+
+  const canManage = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
+  const isAdmin = effectiveRole === 'administrator'
+  const myEmployeeId = appUser.employee_id
+  const filterParam = searchParams.get('filter')
+  const filter: ArchiveFilter = filterParam === 'unclosed' || filterParam === 'closed' ? filterParam : 'all'
+
+  const unclosed = useUnclosedEvenings(canManage)
+  const unclosedWeeks = [...new Set(unclosed.map((u) => u.week_start))].filter((w) => w < ARCHIVE_CUTOFF)
+
+  const yearWeeks = sundaysInYear(year)
+    .map(toDateStr)
+    .filter((w) => w >= EARLIEST_WEEK_START && w < ARCHIVE_CUTOFF)
+  const weeks = [...new Set([...unclosedWeeks, ...yearWeeks])].sort()
+
+  const {
+    shiftsByWeek,
+    assignmentsByShift,
+    teamByWeek,
+    shiftManagers,
+    dutyEligible,
+    areaSupervisorEligible,
+    supervisesAreaIds,
+    employeeNames,
+    shiftCounts,
+    loaded,
+    reload,
+  } = useShiftWeeksData({ weeks, canManage, callEnsureUpcoming: false })
+  const employeePhones = useEmployeePhones()
+
+  const needsClosing = (w: string) => weekNeedsClosing(shiftsByWeek.get(w) ?? {})
+  // Oldest unclosed first, then the rest of the picked year, newest first.
+  const openWeeks = weeks.filter(needsClosing)
+  const closedWeeks = yearWeeks.filter((w) => !needsClosing(w)).reverse()
+  const visibleWeeks =
+    filter === 'unclosed' ? openWeeks : filter === 'closed' ? closedWeeks : [...openWeeks, ...closedWeeks]
+
+  const openClosingIds = openWeeks
+    .map((w) => shiftsByWeek.get(w)?.closing?.id)
+    .filter((v): v is string => !!v)
+  const progress = useClosingProgress(openClosingIds)
+
+  function setFilter(next: ArchiveFilter) {
+    setSearchParams(next === 'all' ? {} : { filter: next }, { replace: true })
+  }
+
+  const chip = (value: ArchiveFilter, label: string, warn = false) => {
+    const active = filter === value
+    return (
+      <button
+        key={value}
+        type="button"
+        onClick={() => setFilter(value)}
+        className="h-9 rounded-full border px-3.5 text-sm font-semibold"
+        style={
+          active
+            ? warn
+              ? { background: C.accent, borderColor: C.accent, color: '#2B1A02' }
+              : { background: C.primary, borderColor: C.primary, color: '#fff' }
+            : { background: C.card, borderColor: C.border, color: C.textSecondary }
+        }
+      >
+        {label}
+      </button>
+    )
+  }
+
+  return (
+    <div dir="rtl" className="min-h-svh pb-24" style={{ background: C.appBg, color: C.text }}>
+      <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 pt-5">
+        <div className="flex items-center justify-between gap-2">
+          <h1 className="text-2xl font-bold">ארכיון משמרות</h1>
+          <Link to="/shifts" className="flex items-center gap-1 text-sm font-semibold" style={{ color: C.primary }}>
+            חזרה למשמרות
+            <ChevronLeft className="size-4" />
+          </Link>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {canManage && chip('unclosed', `לא נסגרו · ${openWeeks.length}`, true)}
+          {chip('all', 'הכל')}
+          {chip('closed', 'נסגרו')}
+        </div>
+
+        <div className="flex items-center justify-between gap-2">
+          <select
+            className="h-10 rounded-xl border px-3 text-base font-medium"
+            style={{ borderColor: C.border, background: C.card }}
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+            disabled={filter === 'unclosed'}
+            aria-label="שנה"
+          >
+            {YEAR_OPTIONS.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+
+          <div className="flex rounded-full p-1" style={{ background: C.subtleBg }}>
+            <button
+              type="button"
+              onClick={() => setCompact(false)}
+              className="rounded-full px-4 py-1.5 text-sm font-semibold transition"
+              style={!compact ? { background: C.primary, color: '#fff' } : { color: C.textSecondary }}
+            >
+              מורחב
+            </button>
+            <button
+              type="button"
+              onClick={() => setCompact(true)}
+              className="rounded-full px-4 py-1.5 text-sm font-semibold transition"
+              style={compact ? { background: C.primary, color: '#fff' } : { color: C.textSecondary }}
+            >
+              קומפקטי
+            </button>
+          </div>
+        </div>
+
+        {loaded && visibleWeeks.length === 0 && (
+          <p style={{ color: C.textMuted }}>
+            {filter === 'unclosed' ? 'כל המשמרות שעברו נסגרו.' : 'אין שבועות להצגה בשנה זו.'}
+          </p>
+        )}
+
+        {visibleWeeks.map((week) => {
+          const closingId = shiftsByWeek.get(week)?.closing?.id
+          return (
+            <WeekSection
+              key={week}
+              week={week}
+              shifts={shiftsByWeek.get(week) ?? {}}
+              assignmentsByShift={assignmentsByShift}
+              teamByWeek={teamByWeek}
+              shiftManagers={shiftManagers}
+              dutyEligible={dutyEligible}
+              areaSupervisorEligible={areaSupervisorEligible}
+              employeeNames={employeeNames}
+              shiftCounts={shiftCounts}
+              employeePhones={employeePhones}
+              myEmployeeId={myEmployeeId}
+              compact={compact}
+              canManage={canManage}
+              supervisesArea={!!myEmployeeId && supervisesAreaIds.has(myEmployeeId)}
+              isAdmin={isAdmin}
+              onSaved={reload}
+              closingProgress={closingId ? progress[closingId] : undefined}
+              archived
+            />
+          )
+        })}
       </div>
     </div>
   )

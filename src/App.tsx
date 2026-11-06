@@ -43,7 +43,7 @@ import { Reports } from '@/pages/Reports'
 import { Users } from '@/pages/Users'
 import { WeeklyChecklist } from '@/pages/WeeklyChecklist'
 import { Procedures } from '@/pages/Procedures'
-import { ShiftsPreview } from '@/pages/ShiftsPreview'
+import { ShiftsPreview, ShiftsArchivePreview } from '@/pages/ShiftsPreview'
 import { SHIFTS_LEGACY_ACCESS_USER_IDS } from '@/lib/shiftsLegacyAccess'
 
 function RequireApproved() {
@@ -121,9 +121,10 @@ export function App() {
         </Route>
         <Route element={<RequireShiftsLegacyAccess />}>
           <Route path="/shifts-legacy" element={<Shifts />} />
+          <Route path="/shifts-legacy/archive" element={<ShiftsArchive />} />
         </Route>
         <Route element={<RequireRole roles={ROLES_VIEWING_SHIFTS} />}>
-          <Route path="/shifts/archive" element={<ShiftsArchive />} />
+          <Route path="/shifts/archive" element={<ShiftsArchivePreview />} />
           <Route path="/shifts/:id" element={<ShiftDetail />} />
           <Route path="/shifts/:id/attendance" element={<AttendanceForm />} />
           <Route path="/shifts/:id/close" element={<ShiftClosing />} />

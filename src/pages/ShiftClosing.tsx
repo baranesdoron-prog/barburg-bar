@@ -1,12 +1,12 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
-import { X } from 'lucide-react'
+import { Check, RotateCcw, WifiOff, X } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import { AttendanceStep } from '@/components/AttendanceStep'
 import { journalCategoryLabels } from '@/lib/journalLabels'
 import { shiftTypeLabel } from '@/lib/shiftLabels'
-import { formatDateTime } from '@/lib/utils'
+import { cn, formatDateTime } from '@/lib/utils'
 import { useAppUserContext } from '@/lib/outletContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -335,14 +335,62 @@ function JournalEntryRow({ entry, onChanged }: { entry: JournalEntry; onChanged:
   )
 }
 
+// Counts typed but not yet confirmed by the server, kept on the phone so a
+// lock screen, a reload or a dropped connection never loses them. '' means
+// "clear this count".
+function pendingKey(shiftId: string) {
+  return `shift-closing:${shiftId}:pending-counts`
+}
+
+function readPending(shiftId: string): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(pendingKey(shiftId))
+    const parsed = raw ? JSON.parse(raw) : {}
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {}
+  } catch {
+    return {}
+  }
+}
+
+function writePending(shiftId: string, pending: Record<string, string>) {
+  try {
+    if (Object.keys(pending).length === 0) localStorage.removeItem(pendingKey(shiftId))
+    else localStorage.setItem(pendingKey(shiftId), JSON.stringify(pending))
+  } catch {
+    // Storage unavailable (private mode): the server save still happens.
+  }
+}
+
+function isValidCount(value: string) {
+  const n = Number(value)
+  return value.trim() !== '' && Number.isFinite(n) && n >= 0
+}
+
+type RowState = 'saving' | 'saved' | 'waiting' | 'invalid'
+type CountFilter = 'all' | 'todo' | 'done'
+
+const AUTOSAVE_DELAY_MS = 600
+
 function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () => void }) {
   const [items, setItems] = useState<InventoryItem[]>([])
   const [categories, setCategories] = useState<ProductCategory[]>([])
   const [quantities, setQuantities] = useState<Record<string, string>>({})
   const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set())
   const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const [rowState, setRowState] = useState<Record<string, RowState>>({})
+  const [waitingCount, setWaitingCount] = useState(0)
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
+  const [resumeCount, setResumeCount] = useState(0)
+  const [filter, setFilter] = useState<CountFilter>('all')
+  const [, setTick] = useState(0)
+
+  const pendingRef = useRef<Record<string, string>>({})
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const flushingRef = useRef(false)
+  const mountedRef = useRef(true)
+  const excludedRef = useRef<Set<string>>(new Set())
+  excludedRef.current = excludedIds
 
   const [newItemName, setNewItemName] = useState('')
   const [newItemQuantity, setNewItemQuantity] = useState('')
@@ -359,15 +407,116 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
 
     setItems((itemsRes.data as InventoryItem[]) ?? [])
     setCategories((categoriesRes.data as ProductCategory[]) ?? [])
-    setExcludedIds(
-      new Set(((exclusionsRes.data as { inventory_item_id: string }[]) ?? []).map((r) => r.inventory_item_id)),
+    const excluded = new Set(
+      ((exclusionsRes.data as { inventory_item_id: string }[]) ?? []).map((r) => r.inventory_item_id),
     )
+    setExcludedIds(excluded)
 
     const initial: Record<string, string> = {}
+    const states: Record<string, RowState> = {}
     for (const count of countsRes.data ?? []) {
       initial[count.inventory_item_id] = String(count.quantity_counted)
+      states[count.inventory_item_id] = 'saved'
+    }
+    // Anything typed on this phone that never reached the server wins over
+    // the server copy, then goes up right away.
+    const pending = { ...readPending(shiftId), ...pendingRef.current }
+    pendingRef.current = pending
+    for (const [itemId, value] of Object.entries(pending)) {
+      initial[itemId] = value
+      states[itemId] = 'saving'
     }
     setQuantities(initial)
+    setRowState(states)
+    setLoaded(true)
+    return { initial, excluded, hadPending: Object.keys(pending).length > 0 }
+  }
+
+  async function flush() {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    if (flushingRef.current) return
+    const batch = { ...pendingRef.current }
+    const entries = Object.entries(batch).filter(([, value]) => value === '' || isValidCount(value))
+    if (entries.length === 0) return
+    flushingRef.current = true
+
+    const upserts = entries
+      .filter(([itemId, value]) => value !== '' && !excludedRef.current.has(itemId))
+      .map(([itemId, value]) => ({ shift_id: shiftId, inventory_item_id: itemId, quantity_counted: Number(value) }))
+    const clears = entries.filter(([, value]) => value === '').map(([itemId]) => itemId)
+
+    setRowState((prev) => {
+      const next = { ...prev }
+      for (const [itemId] of entries) next[itemId] = 'saving'
+      return next
+    })
+
+    const results = await Promise.all([
+      upserts.length
+        ? supabase.from('inventory_counts').upsert(upserts, { onConflict: 'shift_id,inventory_item_id' })
+        : Promise.resolve({ error: null }),
+      clears.length
+        ? supabase.from('inventory_counts').delete().eq('shift_id', shiftId).in('inventory_item_id', clears)
+        : Promise.resolve({ error: null }),
+    ])
+    flushingRef.current = false
+    const failed = results.find((r) => r.error)
+
+    if (failed) {
+      // Most likely no connection: keep everything on the phone and retry.
+      setRowState((prev) => {
+        const next = { ...prev }
+        for (const [itemId] of entries) next[itemId] = 'waiting'
+        return next
+      })
+      setWaitingCount(Object.keys(pendingRef.current).length)
+      if (navigator.onLine) setError(failed.error?.message ?? 'השמירה נכשלה')
+      if (mountedRef.current) timerRef.current = setTimeout(flush, 15_000)
+      return
+    }
+
+    setError(null)
+    // Only drop what was saved; a value edited meanwhile stays pending.
+    const remaining = { ...pendingRef.current }
+    for (const [itemId, value] of entries) {
+      if (remaining[itemId] === value) delete remaining[itemId]
+    }
+    pendingRef.current = remaining
+    writePending(shiftId, remaining)
+    setWaitingCount(0)
+    setRowState((prev) => {
+      const next = { ...prev }
+      for (const [itemId, value] of entries) {
+        if (remaining[itemId] !== undefined) continue
+        if (value === '') delete next[itemId]
+        else next[itemId] = 'saved'
+      }
+      return next
+    })
+    setLastSavedAt(new Date())
+    onSaved()
+    if (Object.keys(remaining).length > 0 && mountedRef.current) scheduleFlush()
+  }
+
+  function scheduleFlush() {
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(flush, AUTOSAVE_DELAY_MS)
+  }
+
+  function handleChange(itemId: string, value: string) {
+    setQuantities((prev) => ({ ...prev, [itemId]: value }))
+    setResumeCount(0)
+    if (value.trim() !== '' && !isValidCount(value)) {
+      setRowState((prev) => ({ ...prev, [itemId]: 'invalid' }))
+      return
+    }
+    pendingRef.current = { ...pendingRef.current, [itemId]: value.trim() }
+    writePending(shiftId, pendingRef.current)
+    setRowState((prev) => ({ ...prev, [itemId]: 'saving' }))
+    scheduleFlush()
   }
 
   async function handleExclude(itemId: string) {
@@ -403,7 +552,35 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
   }
 
   useEffect(() => {
-    load()
+    let cancelled = false
+    mountedRef.current = true
+    load().then(({ initial, excluded, hadPending }) => {
+      if (cancelled) return
+      const already = Object.entries(initial).filter(([itemId, v]) => v !== '' && !excluded.has(itemId)).length
+      setResumeCount(already)
+      if (hadPending) flush()
+    })
+
+    // Phone locked or app switched: send what's waiting right now. Back
+    // online or back on screen: retry anything still waiting.
+    const onVisibility = () => {
+      if (Object.keys(pendingRef.current).length > 0) flush()
+    }
+    window.addEventListener('online', onVisibility)
+    window.addEventListener('pagehide', onVisibility)
+    document.addEventListener('visibilitychange', onVisibility)
+    const clock = setInterval(() => setTick((t) => t + 1), 30_000)
+    return () => {
+      cancelled = true
+      window.removeEventListener('online', onVisibility)
+      window.removeEventListener('pagehide', onVisibility)
+      document.removeEventListener('visibilitychange', onVisibility)
+      clearInterval(clock)
+      if (timerRef.current) clearTimeout(timerRef.current)
+      mountedRef.current = false
+      // Leaving the page: send what's waiting (it also stays on the phone).
+      if (Object.keys(pendingRef.current).length > 0) flush()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shiftId])
 
@@ -454,32 +631,9 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
     onSaved()
   }
 
-  async function handleSave() {
-    setSaving(true)
-    setError(null)
-    setSaved(false)
-
-    const payload = Object.entries(quantities)
-      .filter(([itemId, value]) => value.trim() !== '' && !excludedIds.has(itemId))
-      .map(([itemId, value]) => ({
-        shift_id: shiftId,
-        inventory_item_id: itemId,
-        quantity_counted: Number(value),
-      }))
-
-    const { error: saveError } = await supabase
-      .from('inventory_counts')
-      .upsert(payload, { onConflict: 'shift_id,inventory_item_id' })
-
-    setSaving(false)
-
-    if (saveError) {
-      setError(saveError.message)
-      return
-    }
-
-    setSaved(true)
-    onSaved()
+  async function handleFinish() {
+    await flush()
+    document.getElementById('closing-summary')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   const categorySortOrder = new Map(categories.map((c) => [c.id, c.sort_order]))
@@ -497,8 +651,45 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
       })
   }
 
+  const isCounted = (itemId: string) => (quantities[itemId] ?? '').trim() !== ''
   const sortedItems = sortByCategory(items.filter((i) => !excludedIds.has(i.id)))
   const excludedItems = sortByCategory(items.filter((i) => excludedIds.has(i.id)))
+  const countedTotal = sortedItems.filter(({ item }) => isCounted(item.id)).length
+  const shownItems = sortedItems.filter(({ item }) =>
+    filter === 'todo' ? !isCounted(item.id) : filter === 'done' ? isCounted(item.id) : true,
+  )
+  const nextItem = sortedItems.find(({ item }) => !isCounted(item.id))?.item
+  const anySaving = Object.values(rowState).some((s) => s === 'saving')
+
+  function jumpToNext() {
+    if (!nextItem) return
+    const input = document.getElementById(`count-${nextItem.id}`) as HTMLInputElement | null
+    input?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    input?.focus({ preventScroll: true })
+    setResumeCount(0)
+  }
+
+  function savedAgo() {
+    if (!lastSavedAt) return null
+    const seconds = Math.round((Date.now() - lastSavedAt.getTime()) / 1000)
+    if (seconds < 45) return 'לפני רגע'
+    const minutes = Math.round(seconds / 60)
+    return minutes === 1 ? 'לפני דקה' : `לפני ${minutes} דקות`
+  }
+
+  const filterChip = (value: CountFilter, label: string) => (
+    <button
+      key={value}
+      type="button"
+      onClick={() => setFilter(value)}
+      className={cn(
+        'h-8 rounded-full border px-3 text-xs font-semibold',
+        filter === value ? 'border-primary bg-primary text-primary-foreground' : 'text-muted-foreground',
+      )}
+    >
+      {label}
+    </button>
+  )
 
   return (
     <Card>
@@ -506,45 +697,123 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
         <CardTitle className="text-base">שלב 3: ספירת מלאי</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
-        {items.length === 0 && (
+        {items.length === 0 && loaded && (
           <p className="text-muted-foreground text-sm">
             אין פריטי מלאי מוגדרים. ניתן להוסיף בעמוד "פריטי מלאי".
           </p>
         )}
-        {sortedItems.map(({ item, categoryName }, index) => (
-          <div key={item.id}>
-            {categoryName !== sortedItems[index - 1]?.categoryName && (
-              <p className="text-muted-foreground mt-2 text-xs font-semibold first:mt-0">
-                {categoryName ?? 'ללא קטגוריה'}
-              </p>
+
+        {resumeCount > 0 && nextItem && (
+          <div className="flex flex-col gap-2 rounded-xl bg-[#174D3B] p-3 text-white">
+            <div className="flex items-center gap-2 font-bold">
+              <RotateCcw className="size-4 text-[#E9A23B]" />
+              ממשיכים מאיפה שעצרת
+            </div>
+            <p className="text-sm text-white/85">
+              {resumeCount} פריטים כבר נספרו ונשמרו. נשארו {sortedItems.length - countedTotal}.
+            </p>
+            <button
+              type="button"
+              onClick={jumpToNext}
+              className="h-11 rounded-lg bg-[#E9A23B] text-sm font-bold text-[#2B1A02]"
+            >
+              לפריט הבא: {nextItem.name}
+            </button>
+          </div>
+        )}
+
+        {sortedItems.length > 0 && (
+          <div
+            className={cn(
+              'sticky top-0 z-10 flex items-center gap-2 rounded-xl px-3 py-2 text-sm',
+              waitingCount > 0 ? 'bg-[#FBEBD2] text-[#7A4A0A]' : 'bg-[#E3EFE9] text-[#174D3B]',
             )}
-            <div className="flex items-center gap-2">
-              <span className="flex-1 text-sm">
-                {item.name}
-                {item.unit && <span className="text-muted-foreground"> ({item.unit})</span>}
+          >
+            {waitingCount > 0 ? <WifiOff className="size-4 shrink-0" /> : <Check className="size-4 shrink-0" />}
+            <div className="flex flex-col">
+              <span className="font-bold">
+                {waitingCount > 0
+                  ? 'שמור בטלפון · ממתין לחיבור'
+                  : anySaving
+                    ? 'שומר…'
+                    : lastSavedAt
+                      ? `נשמר אוטומטית · ${savedAgo()}`
+                      : 'כל מספר נשמר אוטומטית'}
               </span>
-              <Input
-                type="number"
-                className="w-24"
-                value={quantities[item.id] ?? ''}
-                onChange={(e) => setQuantities((prev) => ({ ...prev, [item.id]: e.target.value }))}
-              />
-              <button
-                type="button"
-                title="הסרת הפריט מספירת המלאי של משמרת זו"
-                onClick={() => handleExclude(item.id)}
-                className="text-muted-foreground hover:text-destructive shrink-0"
-              >
-                <X className="size-4" />
-              </button>
+              <span className="text-xs">
+                {waitingCount > 0
+                  ? `${waitingCount} פריטים יישלחו כשהחיבור יחזור`
+                  : `${countedTotal} מתוך ${sortedItems.length} פריטים נספרו`}
+              </span>
             </div>
           </div>
-        ))}
+        )}
+
+        {sortedItems.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {filterChip('all', `הכל · ${sortedItems.length}`)}
+            {filterChip('todo', `טרם נספרו · ${sortedItems.length - countedTotal}`)}
+            {filterChip('done', `נספרו · ${countedTotal}`)}
+          </div>
+        )}
+
+        {shownItems.map(({ item, categoryName }, index) => {
+          const state = rowState[item.id]
+          return (
+            <div key={item.id}>
+              {categoryName !== shownItems[index - 1]?.categoryName && (
+                <p className="text-muted-foreground mt-2 text-xs font-semibold first:mt-0">
+                  {categoryName ?? 'ללא קטגוריה'}
+                </p>
+              )}
+              <div className={cn('flex items-center gap-2 rounded-md', item.id === nextItem?.id && resumeCount > 0 && 'bg-[#FFF7EA]')}>
+                <label htmlFor={`count-${item.id}`} className="flex-1 text-sm">
+                  {item.name}
+                  {item.unit && <span className="text-muted-foreground"> ({item.unit})</span>}
+                </label>
+                <Input
+                  id={`count-${item.id}`}
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  className={cn('w-24', state === 'invalid' && 'border-destructive')}
+                  value={quantities[item.id] ?? ''}
+                  onChange={(e) => handleChange(item.id, e.target.value)}
+                  onBlur={() => {
+                    if (pendingRef.current[item.id] !== undefined) flush()
+                  }}
+                />
+                <span className="w-12 shrink-0 text-[11px]">
+                  {state === 'saved' && (
+                    <span className="flex items-center gap-0.5 text-[#174D3B]">
+                      <Check className="size-3" />
+                      נשמר
+                    </span>
+                  )}
+                  {state === 'saving' && <span className="text-muted-foreground">שומר…</span>}
+                  {state === 'waiting' && <span className="text-[#7A4A0A]">בטלפון</span>}
+                  {state === 'invalid' && <span className="text-destructive">לא תקין</span>}
+                </span>
+                <button
+                  type="button"
+                  title="הסרת הפריט מספירת המלאי של משמרת זו"
+                  aria-label={`הסרת ${item.name} מספירת המלאי`}
+                  onClick={() => handleExclude(item.id)}
+                  className="text-muted-foreground hover:text-destructive shrink-0"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            </div>
+          )
+        })}
+        {filter !== 'all' && shownItems.length === 0 && (
+          <p className="text-muted-foreground text-sm">{filter === 'todo' ? 'הכל נספר.' : 'עוד לא נספר שום פריט.'}</p>
+        )}
         {error && <p className="text-destructive text-sm">{error}</p>}
-        {saved && <p className="text-sm text-green-600">ספירת המלאי נשמרה בהצלחה.</p>}
-        {items.length > 0 && (
-          <Button disabled={saving} onClick={handleSave}>
-            שמירת ספירה
+        {sortedItems.length > 0 && (
+          <Button onClick={handleFinish} className="mt-1">
+            סיום ספירה והמשך
           </Button>
         )}
 
@@ -679,7 +948,7 @@ function SummarySection({
   const canFinish = !missingJournal && !missingInventory
 
   return (
-    <Card>
+    <Card id="closing-summary">
       <CardHeader>
         <CardTitle className="text-base">שלב 4: סיכום</CardTitle>
         <CardDescription>
