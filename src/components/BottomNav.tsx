@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, CalendarClock, FileText, Package, User, type LucideIcon } from 'lucide-react'
+import { LayoutDashboard, CalendarClock, FileText, Package, User, Newspaper, Wine, Ticket, type LucideIcon } from 'lucide-react'
 
 import { C } from '@/lib/designTokens'
 import { useImpersonation } from '@/lib/impersonation'
@@ -15,10 +15,19 @@ const ITEMS: { label: string; icon: LucideIcon; to: string; managersOnly?: boole
   { label: 'הפרופיל שלי', icon: User, to: '/profile' },
 ]
 
+const CUSTOMER_ITEMS: { label: string; icon: LucideIcon; to: string }[] = [
+  { label: 'חדשות', icon: Newspaper, to: '/news' },
+  { label: 'תפריט', icon: Wine, to: '/menu' },
+  { label: 'כרטיסיות', icon: Ticket, to: '/punchcards' },
+]
+
 // Which tab a path belongs to. A shift's closing report lives under
 // /shifts/:id/report but is reached from the reports list, so it lights
 // up reports rather than shifts.
 function activeTab(pathname: string): string | null {
+  if (pathname.startsWith('/news')) return '/news'
+  if (pathname.startsWith('/menu')) return '/menu'
+  if (pathname.startsWith('/punchcards')) return '/punchcards'
   if (pathname === '/' || pathname.startsWith('/dashboard')) return '/dashboard'
   if (pathname === '/reports' || /^\/shifts\/[^/]+\/report$/.test(pathname)) return '/reports'
   if (pathname.startsWith('/shifts') || pathname.startsWith('/my-shifts')) return '/shifts'
@@ -33,7 +42,8 @@ export function BottomNav() {
   const active = activeTab(pathname)
   const { effectiveRole } = useImpersonation()
   const isManager = ROLES_MANAGING_SHIFTS.includes(effectiveRole)
-  const items = ITEMS.filter((item) => !item.managersOnly || isManager)
+  const items =
+    effectiveRole === 'customer' ? CUSTOMER_ITEMS : ITEMS.filter((item) => !item.managersOnly || isManager)
 
   return (
     <nav

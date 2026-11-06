@@ -4,7 +4,16 @@ export const roleLabels: Record<AppRole, string> = {
   administrator: 'מנהל/ת מערכת',
   shift_manager: 'מנהל/ת בר',
   bartender: 'ברמן/ית',
+  customer: 'לקוח/ה',
 }
+
+// Staff roles: everything except customers. Roles an administrator can
+// give through the invite and role pickers (customers sign up themselves).
+export const STAFF_ROLES: AppRole[] = ['administrator', 'shift_manager', 'bartender']
+
+// Customer area (news, menu, punchcards): admins only for now, plus the
+// customers themselves.
+export const ROLES_USING_PUNCHCARDS: AppRole[] = ['administrator', 'customer']
 
 export const ROLES_REQUIRING_EMPLOYEE: AppRole[] = ['bartender', 'shift_manager']
 

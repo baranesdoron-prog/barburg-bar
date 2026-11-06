@@ -18,7 +18,7 @@ const selectClass =
 // flag together; picking plain "ברמן/ית" clears the flag. Administrator
 // and shift_manager are already auto-eligible for that duty regardless
 // of the flag, so switching to/from those leaves it untouched.
-type RoleFieldValue = AppRole | 'area_supervisor'
+type RoleFieldValue = Exclude<AppRole, 'customer'> | 'area_supervisor'
 
 const roleFieldLabels: Record<RoleFieldValue, string> = {
   administrator: roleLabels.administrator,
@@ -69,7 +69,9 @@ export function RoleEmployeeFields({
     }
   }, [employeeMode, employeeId, employees, setNewName, setNewPhone, setNewPhotoUrl, setCanSuperviseArea])
 
-  const roleFieldValue: RoleFieldValue | '' = role === '' ? '' : role === 'bartender' && canSuperviseArea ? 'area_supervisor' : role
+  // Customers aren't managed here; such a user shows no staff role.
+  const roleFieldValue: RoleFieldValue | '' =
+    role === '' || role === 'customer' ? '' : role === 'bartender' && canSuperviseArea ? 'area_supervisor' : role
 
   function handleRoleFieldChange(value: RoleFieldValue) {
     if (value === 'area_supervisor') {
