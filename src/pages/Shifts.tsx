@@ -391,7 +391,7 @@ function AllocationsList() {
         {canManage && (
           <div className="flex gap-2">
             <Button asChild variant="outline">
-              <Link to="/shifts/archive">ארכיון</Link>
+              <Link to="/shifts-legacy/archive">ארכיון</Link>
             </Button>
             <Button asChild>
               <Link to="/shifts/new">משמרת חדשה</Link>
@@ -1877,7 +1877,7 @@ function ArchiveList() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">ארכיון משמרות</h1>
         <Button asChild variant="outline">
-          <Link to="/shifts">חזרה למשמרות</Link>
+          <Link to="/shifts-legacy">חזרה למשמרות</Link>
         </Button>
       </div>
 
