@@ -35,6 +35,9 @@ export interface PunchcardOrder {
   created_at: string
   confirmed_at: string | null
   cancelled_at: string | null
+  // Set when the customer closes the card after showing it; from then on
+  // the card shows the order time frozen instead of a live clock.
+  closed_at: string | null
 }
 
 export interface CustomerMenuRow {
