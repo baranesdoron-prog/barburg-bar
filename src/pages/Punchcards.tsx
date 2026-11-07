@@ -586,7 +586,18 @@ export function PunchcardOrderPage() {
     )
   }
 
-  // Confirmed: the full-screen card in tonight's colour.
+  // Confirmed: the full-screen card in tonight's colour. Live (running
+  // seconds, blinking dot) until the customer closes it; after that the
+  // date and time are frozen at when the order was placed.
+  const closed = !!order.closed_at
+  const shownTime = closed ? new Date(order.created_at) : now
+
+  async function closeCard() {
+    if (!order) return
+    if (!order.closed_at) await supabase.rpc('close_punchcard_order', { p_order_id: order.id })
+    navigate('/punchcards')
+  }
+
   return (
     <div dir="rtl" className="fixed inset-0 z-50 flex flex-col gap-3 overflow-y-auto p-5 text-white" style={{ background: order.night_color }}>
       <style>{'@keyframes livepulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}'}</style>
@@ -596,18 +607,22 @@ export function PunchcardOrderPage() {
           <span className="text-lg font-extrabold">ברבורג</span>
         </div>
         <span className="flex items-center gap-1.5 rounded-full bg-black/25 px-3 py-1.5 text-sm font-bold">
-          <span className="size-2.5 rounded-full" style={{ background: '#7CF29A', animation: 'livepulse 1.2s ease-in-out infinite' }} />
+          <span
+            className="size-2.5 rounded-full"
+            style={closed ? { background: 'rgba(255,255,255,.45)' } : { background: '#7CF29A', animation: 'livepulse 1.2s ease-in-out infinite' }}
+          />
           הזמנה #{order.order_number}
         </span>
       </div>
 
       <div className="flex flex-col items-center rounded-2xl bg-black/25 px-4 py-3">
         <span className="text-3xl font-extrabold">
-          {weekdayFormatter.format(now)} {dayMonthFormatter.format(now)}
+          {weekdayFormatter.format(shownTime)} {dayMonthFormatter.format(shownTime)}
         </span>
         <span dir="ltr" className="text-6xl leading-none font-extrabold tabular-nums">
-          {formatTime(now)}
+          {formatTime(shownTime)}
         </span>
+        {closed && <span className="mt-1 text-sm font-bold opacity-90">הזמנה סגורה · השעה שבה הוזמנה</span>}
       </div>
 
       <div className="mt-2 flex flex-col gap-1">
@@ -630,12 +645,12 @@ export function PunchcardOrderPage() {
       <div className="flex-1" />
       <button
         type="button"
-        onClick={() => navigate('/punchcards')}
+        onClick={closeCard}
         className="flex h-12 items-center justify-center gap-2 rounded-xl bg-white/90 text-base font-extrabold"
         style={{ color: order.night_color }}
       >
         <RotateCcw className="size-4" />
-        סגירה (ההזמנה נשמרת)
+        {closed ? 'חזרה לכרטיסיות' : 'סגירה (ההזמנה נשמרת)'}
       </button>
     </div>
   )
