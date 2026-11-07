@@ -5,6 +5,30 @@ export const SHEKELS_PER_TOKEN = 5
 export const PUNCHCARD_AMOUNTS = [25, 50, 100] as const
 // How long a customer can still cancel an order before it's punched.
 export const CANCEL_WINDOW_MS = 60_000
+// How long the confirmed card stays live (running clock) for the bartender.
+// After that, or once the customer leaves the page, it's stamped "used".
+export const SHOW_WINDOW_MS = 60_000
+
+// Marks an order closed even while the page is being left or the phone
+// locked: a keepalive request survives the page going away, which the
+// regular client call doesn't.
+export function closeOrderInBackground(orderId: string, accessToken: string | null) {
+  if (!accessToken) return
+  try {
+    fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/close_punchcard_order`, {
+      method: 'POST',
+      keepalive: true,
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ p_order_id: orderId }),
+    }).catch(() => {})
+  } catch {
+    // Best effort: the card also freezes on its own once the minute is up.
+  }
+}
 
 export interface Punchcard {
   id: string

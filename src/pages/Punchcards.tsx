@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Minus, Plus, RotateCcw, AlertTriangle } from 'lucide-react'
 
@@ -8,6 +8,8 @@ import { useAppUserContext } from '@/lib/outletContext'
 import { PunchcardView } from '@/components/PunchcardView'
 import {
   CANCEL_WINDOW_MS,
+  SHOW_WINDOW_MS,
+  closeOrderInBackground,
   PUNCHCARD_AMOUNTS,
   SHEKELS_PER_TOKEN,
   formatDate,
@@ -509,6 +511,62 @@ export function PunchcardOrderPage() {
     if (order?.status === 'pending' && msLeft <= 0 && !busy) confirm()
   }, [order?.status, msLeft, busy, confirm])
 
+  // The confirmed card is live for a minute. After that, or as soon as the
+  // customer leaves the page, it's closed: the clock stops and it's
+  // stamped as used, so it can't be shown again as a new order.
+  const showMsLeft =
+    order?.status === 'confirmed' && order.confirmed_at
+      ? new Date(order.confirmed_at).getTime() + SHOW_WINDOW_MS - now.getTime()
+      : 0
+  const live = order?.status === 'confirmed' && !order.closed_at && showMsLeft > 0
+
+  const tokenRef = useRef<string | null>(null)
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      tokenRef.current = data.session?.access_token ?? null
+    })
+  }, [])
+
+  const markClosed = useCallback(() => {
+    setOrder((prev) => (prev && !prev.closed_at ? { ...prev, closed_at: new Date().toISOString() } : prev))
+  }, [])
+
+  // The minute is up while the card is open.
+  useEffect(() => {
+    if (order?.status === 'confirmed' && !order.closed_at && showMsLeft <= 0) {
+      supabase.rpc('close_punchcard_order', { p_order_id: order.id })
+      markClosed()
+    }
+  }, [order?.status, order?.closed_at, order?.id, showMsLeft, markClosed])
+
+  // Leaving: the phone locks, the tab is closed, or the customer moves to
+  // another page in the app.
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    if (!live || !order) return
+    const orderId = order.id
+    mountedRef.current = true
+    const leave = () => {
+      closeOrderInBackground(orderId, tokenRef.current)
+      markClosed()
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') leave()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('pagehide', leave)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('pagehide', leave)
+      mountedRef.current = false
+      // Checked a tick later, so a re-render that only re-runs this effect
+      // doesn't count as leaving.
+      setTimeout(() => {
+        if (!mountedRef.current) closeOrderInBackground(orderId, tokenRef.current)
+      }, 0)
+    }
+  }, [live, order, markClosed])
+
   if (error && !order) return <p style={{ color: C.error }}>{error}</p>
   if (!order) return null
 
@@ -587,9 +645,10 @@ export function PunchcardOrderPage() {
   }
 
   // Confirmed: the full-screen card in tonight's colour. Live (running
-  // seconds, blinking dot) until the customer closes it; after that the
-  // date and time are frozen at when the order was placed.
-  const closed = !!order.closed_at
+  // seconds, blinking dot) for a minute; after that, or once closed, the
+  // date and time are frozen at when the order was placed and it's
+  // stamped as used.
+  const closed = !live
   const shownTime = closed ? new Date(order.created_at) : now
 
   async function closeCard() {
@@ -600,6 +659,16 @@ export function PunchcardOrderPage() {
 
   return (
     <div dir="rtl" className="fixed inset-0 z-50 flex flex-col gap-3 overflow-y-auto p-5 text-white" style={{ background: order.night_color }}>
+      {closed && (
+        <div className="pointer-events-none fixed inset-0 z-10 flex items-center justify-center" aria-hidden="true">
+          <span
+            className="-rotate-[20deg] rounded-3xl border-[10px] px-8 py-3 text-[7rem] leading-none font-extrabold"
+            style={{ borderColor: 'rgba(255,255,255,.55)', color: 'rgba(255,255,255,.55)' }}
+          >
+            מומש
+          </span>
+        </div>
+      )}
       <style>{'@keyframes livepulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}'}</style>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -622,7 +691,11 @@ export function PunchcardOrderPage() {
         <span dir="ltr" className="text-6xl leading-none font-extrabold tabular-nums">
           {formatTime(shownTime)}
         </span>
-        {closed && <span className="mt-1 text-sm font-bold opacity-90">הזמנה סגורה · השעה שבה הוזמנה</span>}
+        {closed ? (
+          <span className="mt-1 text-sm font-bold opacity-90">ההזמנה מומשה · השעה שבה הוזמנה</span>
+        ) : (
+          <span className="mt-1 text-sm font-bold opacity-90">מוצג עוד 0:{String(Math.ceil(showMsLeft / 1000)).padStart(2, '0')}</span>
+        )}
       </div>
 
       <div className="mt-2 flex flex-col gap-1">
