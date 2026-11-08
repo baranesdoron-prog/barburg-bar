@@ -4,6 +4,7 @@ import { ChevronDown, MessageCircle, Plus, Search, Truck } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { C, CATEGORY_COLORS } from '@/lib/designTokens'
 import type { Supplier } from '@/lib/types'
+import { whatsappDigits } from '@/lib/phone'
 
 const fieldClass = 'h-10 w-full min-w-0 rounded-xl border px-3 text-sm outline-none'
 const fieldStyle = { borderColor: C.border, background: C.card, color: C.text }
@@ -18,12 +19,11 @@ interface SupplierFormFields {
   averageDeliveryDays: string
 }
 
-// Supplier phones are free text (unlike employee phones, which are
-// normalized to +972...), so a local 05X number has its leading 0 swapped
-// for the country code before going to wa.me, which wants digits only.
+// Supplier phones are free text; whatsappDigits() turns any common way of
+// typing an Israeli number into what wa.me expects.
 function whatsappHref(phone: string) {
-  const digits = phone.replace(/\D/g, '')
-  return `https://wa.me/${digits.startsWith('0') ? `972${digits.slice(1)}` : digits}`
+  const digits = whatsappDigits(phone)
+  return digits ? `https://wa.me/${digits}` : undefined
 }
 
 function deliveryLabel(days: number) {
