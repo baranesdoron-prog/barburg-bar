@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { Minus, Plus, RotateCcw, AlertTriangle } from 'lucide-react'
+import { Minus, Plus, PlusCircle, RotateCcw, AlertTriangle } from 'lucide-react'
 
 import { supabase } from '@/lib/supabase'
 import { C } from '@/lib/designTokens'
@@ -14,6 +14,7 @@ import {
   SHEKELS_PER_TOKEN,
   formatDate,
   formatTime,
+  orderSummary,
   friendlyPunchcardError,
   isUsable,
   tokensLabel,
@@ -115,23 +116,21 @@ export function MyPunchcards() {
 
   return (
     <Page title="הכרטיסיות שלי" subtitle={<>נשארו <b style={{ color: C.primary }}>{tokensLabel(balance)}</b> בכל הכרטיסיות</>}>
-      <div className="flex gap-2">
-        <Link
-          to={balance > 0 ? '/punchcards/order' : '/punchcards/buy'}
-          className={`${primaryButton} flex-1`}
-          style={{ background: C.primary }}
-        >
-          {balance > 0 ? 'להזמנה מהתפריט' : 'קניית כרטיסייה'}
-        </Link>
+      <div className="flex flex-col gap-2">
         {balance > 0 && (
-          <Link
-            to="/punchcards/buy"
-            className="flex h-13 flex-1 items-center justify-center rounded-xl border text-base font-semibold"
-            style={{ borderColor: C.border, background: C.card }}
-          >
-            כרטיסייה נוספת
-          </Link>
+          <div className="flex gap-2">
+            <Link to="/punchcards/order" className={`${primaryButton} flex-1`} style={{ background: C.primary }}>
+              להזמנה מהתפריט
+            </Link>
+            <Link to="/punchcards/tokens" className={`${primaryButton} flex-1 gap-1.5`} style={{ background: C.primary }}>
+              <PlusCircle className="size-5" />
+              ניקוב לפי מספר
+            </Link>
+          </div>
         )}
+        <Link to="/punchcards/buy" className={primaryButton} style={{ background: C.primary }}>
+          {balance > 0 ? 'כרטיסייה נוספת' : 'קניית כרטיסייה'}
+        </Link>
       </div>
 
       <div className="flex gap-1 rounded-full p-1" style={{ background: C.subtleBg }}>
@@ -187,7 +186,7 @@ export function MyPunchcards() {
             >
               <span className="size-4 shrink-0 rounded-full" style={{ background: o.night_color }} />
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-                {o.items.map((l) => `${l.qty} × ${l.name}`).join(', ')}
+                {orderSummary(o)}
               </span>
               <span className="text-sm whitespace-nowrap" style={{ color: C.textSecondary }}>
                 {formatDate(o.created_at)}
@@ -207,7 +206,8 @@ export function MyPunchcards() {
 export function BuyPunchcard() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const returnToOrder = searchParams.get('return') === 'order'
+  const returnTo = searchParams.get('return')
+  const returnToOrder = returnTo === 'order' || returnTo === 'tokens'
   const [amount, setAmount] = useState<number>(100)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -221,7 +221,7 @@ export function BuyPunchcard() {
       setError(friendlyPunchcardError(buyError.message))
       return
     }
-    navigate(returnToOrder ? '/punchcards/order' : '/punchcards')
+    navigate(returnTo === 'order' ? '/punchcards/order' : returnTo === 'tokens' ? '/punchcards/tokens' : '/punchcards')
   }
 
   return (
@@ -451,6 +451,169 @@ export function OrderFromMenu() {
 }
 
 // ---------------------------------------------------------------------
+// Punch a number of tokens, without the menu (easier for older customers)
+// ---------------------------------------------------------------------
+
+const TOKEN_COUNT_KEY = 'punchcard-token-count'
+const MAX_TOKENS_AT_ONCE = 20
+const QUICK_COUNTS = [1, 2, 3, 4, 5, 6]
+
+export function TokenOrder() {
+  const navigate = useNavigate()
+  const [balance, setBalance] = useState<number | null>(null)
+  const [count, setCount] = useState(() => {
+    try {
+      const saved = Number(sessionStorage.getItem(TOKEN_COUNT_KEY))
+      return saved >= 1 && saved <= MAX_TOKENS_AT_ONCE ? saved : 1
+    } catch {
+      return 1
+    }
+  })
+  const [showNotEnough, setShowNotEnough] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    supabase.rpc('punchcard_balance').then(({ data }) => setBalance((data as number | null) ?? 0))
+  }, [])
+
+  function set(next: number) {
+    const value = Math.max(1, Math.min(MAX_TOKENS_AT_ONCE, next))
+    setCount(value)
+    try {
+      sessionStorage.setItem(TOKEN_COUNT_KEY, String(value))
+    } catch {
+      // Not kept; fine.
+    }
+  }
+
+  if (balance === null) return null
+  const enough = count <= balance
+
+  async function place() {
+    if (!enough) {
+      setShowNotEnough(true)
+      return
+    }
+    setBusy(true)
+    setError(null)
+    const { data, error: placeError } = await supabase.rpc('place_punchcard_token_order', { p_tokens: count })
+    setBusy(false)
+    if (placeError || !data) {
+      if (placeError?.message.includes('not_enough_tokens')) setShowNotEnough(true)
+      else setError(friendlyPunchcardError(placeError?.message))
+      return
+    }
+    try {
+      sessionStorage.removeItem(TOKEN_COUNT_KEY)
+    } catch {
+      // ignore
+    }
+    navigate(`/punchcards/orders/${(data as PunchcardOrder).id}`, { replace: true })
+  }
+
+  return (
+    <Page title="כמה ניקובים לנקב?" subtitle={<span className="text-base">יש לך <b style={{ color: C.primary }}>{tokensLabel(balance)}</b></span>}>
+      <div className="flex items-center justify-between gap-3 rounded-3xl border px-4 py-5" style={{ borderColor: C.border, background: C.card }}>
+        <button
+          type="button"
+          aria-label="פחות"
+          onClick={() => set(count - 1)}
+          disabled={count <= 1}
+          className="flex size-19 shrink-0 items-center justify-center rounded-full border-2 disabled:opacity-40"
+          style={{ borderColor: '#CFC8BD', background: C.card }}
+        >
+          <Minus className="size-9" />
+        </button>
+        <div className="flex flex-col items-center">
+          <span className="text-[5.5rem] leading-none font-extrabold tabular-nums">{count}</span>
+          <span className="text-lg font-bold" style={{ color: C.textSecondary }}>
+            {count === 1 ? 'ניקוב' : 'ניקובים'} · {count * SHEKELS_PER_TOKEN} ₪
+          </span>
+        </div>
+        <button
+          type="button"
+          aria-label="עוד"
+          onClick={() => set(count + 1)}
+          disabled={count >= MAX_TOKENS_AT_ONCE}
+          className="flex size-19 shrink-0 items-center justify-center rounded-full text-white disabled:opacity-40"
+          style={{ background: C.primary }}
+        >
+          <Plus className="size-9" />
+        </button>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <span className="text-base font-bold">בחירה מהירה</span>
+        <div className="grid grid-cols-3 gap-2.5">
+          {QUICK_COUNTS.map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => set(n)}
+              className="h-16 rounded-2xl border-2 text-3xl font-extrabold"
+              style={
+                n === count
+                  ? { background: C.primary, borderColor: C.primary, color: '#fff' }
+                  : { background: C.card, borderColor: C.border, color: C.text }
+              }
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex justify-between px-1 text-lg" style={{ color: C.textSecondary }}>
+        <span>יישארו בכרטיסיות</span>
+        <b style={{ color: enough ? C.text : C.error }}>{enough ? balance - count : 'לא מספיק'}</b>
+      </div>
+
+      {error && <p style={{ color: C.error }}>{error}</p>}
+
+      <button
+        type="button"
+        disabled={busy}
+        onClick={place}
+        className="flex h-16 items-center justify-center rounded-2xl text-xl font-extrabold text-white disabled:opacity-50"
+        style={{ background: C.primary }}
+      >
+        ניקוב {tokensLabel(count)}
+      </button>
+      <p className="text-center text-sm" style={{ color: C.textSecondary }}>
+        אחרי הלחיצה יש דקה לביטול, ואז מוצג כרטיס לברמן/ית, בדיוק כמו בהזמנה מהתפריט.
+      </p>
+
+      {showNotEnough && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center p-4" style={{ background: 'rgba(32,42,38,.55)' }}>
+          <div dir="rtl" className="flex w-full max-w-md flex-col gap-3 rounded-2xl bg-white p-5">
+            <div className="flex size-14 items-center justify-center self-center rounded-full" style={{ background: C.warningBg }}>
+              <AlertTriangle className="size-7" style={{ color: C.warning }} />
+            </div>
+            <h2 className="text-center text-xl font-extrabold">אין מספיק ניקובים</h2>
+            <p className="text-center" style={{ color: C.textSecondary }}>
+              ביקשת <b style={{ color: C.text }}>{tokensLabel(count)}</b>, ובכרטיסיות נשארו <b style={{ color: C.text }}>{balance}</b>.
+              חסרים {count - balance}.
+            </p>
+            <Link to="/punchcards/buy?return=tokens" className={primaryButton} style={{ background: C.primary }}>
+              טעינה: קניית כרטיסייה חדשה
+            </Link>
+            <button
+              type="button"
+              onClick={() => setShowNotEnough(false)}
+              className="h-12 rounded-xl border text-base font-semibold"
+              style={{ borderColor: C.border }}
+            >
+              חזרה לבחירה
+            </button>
+          </div>
+        </div>
+      )}
+    </Page>
+  )
+}
+
+// ---------------------------------------------------------------------
 // One order: the cancel minute, then the card to show the bartender
 // ---------------------------------------------------------------------
 
@@ -570,7 +733,8 @@ export function PunchcardOrderPage() {
   if (error && !order) return <p style={{ color: C.error }}>{error}</p>
   if (!order) return null
 
-  const lines = order.items.map((l) => `${l.qty} × ${l.name}`)
+  const isTokens = order.kind === 'tokens'
+  const lines = isTokens ? [orderSummary(order)] : order.items.map((l) => `${l.qty} × ${l.name}`)
 
   if (order.status === 'cancelled') {
     return (
@@ -582,7 +746,12 @@ export function PunchcardOrderPage() {
             </p>
           ))}
         </div>
-        <button type="button" onClick={() => navigate('/punchcards/order')} className={primaryButton} style={{ background: C.primary }}>
+        <button
+          type="button"
+          onClick={() => navigate(isTokens ? '/punchcards/tokens' : '/punchcards/order')}
+          className={primaryButton}
+          style={{ background: C.primary }}
+        >
           הזמנה חדשה
         </button>
       </Page>
@@ -600,7 +769,7 @@ export function PunchcardOrderPage() {
         >
           <div className="flex size-36 flex-col items-center justify-center rounded-full" style={{ background: C.appBg }}>
             <span dir="ltr" className="text-5xl leading-none font-extrabold tabular-nums">
-              0:{String(seconds).padStart(2, '0')}
+              {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
             </span>
             <span className="text-sm" style={{ color: C.textSecondary }}>
               אפשר עוד לבטל
@@ -609,6 +778,11 @@ export function PunchcardOrderPage() {
         </div>
 
         <div className="flex flex-col gap-2 rounded-2xl border p-4" style={{ borderColor: C.border, background: C.card }}>
+          {isTokens && (
+            <div className="flex justify-between text-lg">
+              <span>ניקוב ללא פריטים מהתפריט</span>
+            </div>
+          )}
           {order.items.map((l) => (
             <div key={l.item_id} className="flex justify-between text-lg">
               <span>
@@ -694,22 +868,33 @@ export function PunchcardOrderPage() {
         {closed ? (
           <span className="mt-1 text-sm font-bold opacity-90">ההזמנה מומשה · השעה שבה הוזמנה</span>
         ) : (
-          <span className="mt-1 text-sm font-bold opacity-90">מוצג עוד 0:{String(Math.ceil(showMsLeft / 1000)).padStart(2, '0')}</span>
+          <span className="mt-1 text-sm font-bold opacity-90">מוצג עוד {Math.floor(Math.ceil(showMsLeft / 1000) / 60)}:{String(Math.ceil(showMsLeft / 1000) % 60).padStart(2, '0')}</span>
         )}
       </div>
 
-      <div className="mt-2 flex flex-col gap-1">
-        {lines.map((l) => (
-          <span key={l} className="text-4xl leading-tight font-extrabold">
-            {l}
-          </span>
-        ))}
-      </div>
+      {isTokens ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
+          <span className="rounded-full bg-white/20 px-3.5 py-1.5 text-sm font-extrabold">ניקוב ללא פריטים מהתפריט</span>
+          <span className="text-[7.5rem] leading-none font-extrabold">{order.total_tokens}</span>
+          <span className="text-4xl leading-none font-extrabold">{order.total_tokens === 1 ? 'ניקוב נוקב' : 'ניקובים נוקבו'}</span>
+          <span className="text-lg opacity-90">= {order.total_tokens * SHEKELS_PER_TOKEN} ₪</span>
+        </div>
+      ) : (
+        <>
+          <div className="mt-2 flex flex-col gap-1">
+            {lines.map((l) => (
+              <span key={l} className="text-4xl leading-tight font-extrabold">
+                {l}
+              </span>
+            ))}
+          </div>
 
-      <div className="flex items-center justify-between rounded-2xl bg-white/15 px-4 py-3">
-        <span className="text-xl font-bold">נוקבו</span>
-        <span className="text-4xl font-extrabold">{tokensLabel(order.total_tokens)}</span>
-      </div>
+          <div className="flex items-center justify-between rounded-2xl bg-white/15 px-4 py-3">
+            <span className="text-xl font-bold">נוקבו</span>
+            <span className="text-4xl font-extrabold">{tokensLabel(order.total_tokens)}</span>
+          </div>
+        </>
+      )}
       <span className="text-center text-sm opacity-90">
         הוזמן ב־{formatTime(order.created_at)}
         {order.confirmed_at && ` · אושר ב־${formatTime(order.confirmed_at)}`}

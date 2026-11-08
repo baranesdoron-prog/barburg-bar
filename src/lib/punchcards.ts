@@ -62,6 +62,8 @@ export interface PunchcardOrder {
   // Set when the customer closes the card after showing it; from then on
   // the card shows the order time frozen instead of a live clock.
   closed_at: string | null
+  // 'tokens': a number of tokens punched without choosing from the menu.
+  kind: 'menu' | 'tokens'
 }
 
 export interface CustomerMenuRow {
@@ -82,6 +84,12 @@ export function tokensLeft(card: Punchcard) {
 
 export function isUsable(card: Punchcard, now = Date.now()) {
   return tokensLeft(card) > 0 && new Date(card.expires_at).getTime() > now
+}
+
+// One-line summary for lists: the items, or "ניקוב של 4 ניקובים".
+export function orderSummary(order: { kind: 'menu' | 'tokens'; items: OrderLine[]; total_tokens: number }) {
+  if (order.kind === 'tokens') return `ניקוב של ${tokensLabel(order.total_tokens)}`
+  return order.items.map((l) => `${l.qty} × ${l.name}`).join(', ')
 }
 
 export function tokensLabel(n: number) {

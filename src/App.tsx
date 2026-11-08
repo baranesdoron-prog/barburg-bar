@@ -51,7 +51,7 @@ import { BarMenu } from '@/pages/BarMenu'
 import { CustomerMenu } from '@/pages/CustomerMenu'
 import { News } from '@/pages/News'
 import { AdminNews } from '@/pages/AdminNews'
-import { BuyPunchcard, MyPunchcards, OrderFromMenu, PunchcardOrderPage } from '@/pages/Punchcards'
+import { BuyPunchcard, MyPunchcards, OrderFromMenu, PunchcardOrderPage, TokenOrder } from '@/pages/Punchcards'
 
 function RequireApproved() {
   const { loading, session, appUser, activeRole } = useAppUser()
@@ -130,6 +130,7 @@ export function App() {
           <Route path="/punchcards" element={<MyPunchcards />} />
           <Route path="/punchcards/buy" element={<BuyPunchcard />} />
           <Route path="/punchcards/order" element={<OrderFromMenu />} />
+          <Route path="/punchcards/tokens" element={<TokenOrder />} />
           <Route path="/punchcards/orders/:id" element={<PunchcardOrderPage />} />
         </Route>
         <Route element={<RequireRole roles={ROLES_REQUIRING_EMPLOYEE} />}>
