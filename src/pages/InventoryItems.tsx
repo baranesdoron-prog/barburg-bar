@@ -567,9 +567,16 @@ function ItemRow({
   return (
     <div
       className="relative flex items-center gap-2.5 rounded-2xl border px-2.5 py-2.5"
-      style={{ background: C.card, borderColor: C.border, opacity: item.active ? 1 : 0.65 }}
+      // Only the details fade for an inactive product: opacity on the whole
+      // row would fade its menu too and trap it under later content, so taps
+      // went to the buttons below. The open menu's row sits above the rest.
+      style={{ background: C.card, borderColor: C.border, zIndex: menuOpen ? 30 : undefined }}
     >
-      <Link to={`/inventory/items/${item.id}/edit`} className="flex min-w-0 flex-1 items-center gap-2.5">
+      <Link
+        to={`/inventory/items/${item.id}/edit`}
+        className="flex min-w-0 flex-1 items-center gap-2.5"
+        style={{ opacity: item.active ? 1 : 0.65 }}
+      >
         {item.image_url ? (
           <img src={item.image_url} alt={item.name} className="size-10 shrink-0 rounded-xl object-cover" />
         ) : (
