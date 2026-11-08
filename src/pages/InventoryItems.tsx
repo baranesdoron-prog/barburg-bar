@@ -38,6 +38,7 @@ export function InventoryItems() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [openMenuId, setOpenMenuId] = useState<string | null>(null)
+  const [reactivating, setReactivating] = useState<InventoryItem | null>(null)
 
   const [importSummary, setImportSummary] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -90,8 +91,25 @@ export function InventoryItems() {
   }
 
   async function handleToggleActive(item: InventoryItem) {
-    await supabase.from('inventory_items').update({ active: !item.active }).eq('id', item.id)
+    // Bringing a product back: its stock figure is stale, so ask for the
+    // real quantity first (see ReactivateDialog).
+    if (!item.active) {
+      setReactivating(item)
+      return
+    }
+    await supabase.from('inventory_items').update({ active: false }).eq('id', item.id)
     search()
+  }
+
+  async function handleReactivate(item: InventoryItem, quantity: number) {
+    const { error: updateError } = await supabase
+      .from('inventory_items')
+      .update({ active: true, current_stock: quantity })
+      .eq('id', item.id)
+    if (updateError) return updateError.message
+    setReactivating(null)
+    search()
+    return null
   }
 
   async function handleDelete(item: InventoryItem) {
@@ -268,6 +286,9 @@ export function InventoryItems() {
 
   return (
     <div dir="rtl" className="min-h-svh pb-40" style={{ background: C.appBg, color: C.text }}>
+      {reactivating && (
+        <ReactivateDialog item={reactivating} onCancel={() => setReactivating(null)} onConfirm={handleReactivate} />
+      )}
       <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 pt-5">
         <div className="flex items-center gap-3 rounded-2xl p-3" style={{ background: C.primaryLight }}>
           <div className="flex size-12 shrink-0 items-center justify-center rounded-xl" style={{ background: C.primary }}>
@@ -394,7 +415,7 @@ export function InventoryItems() {
           return (
             <div
               key={group.key}
-              className="overflow-hidden rounded-3xl border"
+              className="rounded-3xl border"
               style={{ background: C.card, borderColor: C.border }}
             >
               <button
@@ -427,7 +448,10 @@ export function InventoryItems() {
               </button>
 
               {!isCollapsed && (
-                <div className="flex flex-col gap-2 border-t p-2.5" style={{ background: C.subtleBg, borderColor: C.border }}>
+                <div
+                  className="flex flex-col gap-2 rounded-b-3xl border-t p-2.5"
+                  style={{ background: C.subtleBg, borderColor: C.border }}
+                >
                   {group.items.map((item) => (
                     <ItemRow
                       key={item.id}
@@ -632,6 +656,91 @@ function ItemRow({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// Reactivating a product: its stock figure is from when it was switched
+// off, so the current quantity is required before it's back in the list
+// (and in the low-stock checks and automatic orders).
+function ReactivateDialog({
+  item,
+  onCancel,
+  onConfirm,
+}: {
+  item: InventoryItem
+  onCancel: () => void
+  onConfirm: (item: InventoryItem, quantity: number) => Promise<string | null>
+}) {
+  const [quantity, setQuantity] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    const value = Number(quantity)
+    if (quantity.trim() === '' || !Number.isFinite(value) || value < 0) {
+      setError('יש להזין כמות (0 ומעלה)')
+      return
+    }
+    setSaving(true)
+    const result = await onConfirm(item, value)
+    setSaving(false)
+    if (result) setError(result)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center" style={{ background: 'rgba(32,42,38,.55)' }}>
+      <form
+        onSubmit={submit}
+        dir="rtl"
+        className="flex w-full max-w-sm flex-col gap-3 rounded-2xl p-5"
+        style={{ background: C.card, color: C.text }}
+      >
+        <h2 className="text-lg font-extrabold">הפעלה מחדש: {item.name}</h2>
+        <p className="text-sm" style={{ color: C.textSecondary }}>
+          כמה יש עכשיו במלאי? הכמות הזו תהיה המלאי הנוכחי של המוצר.
+          {item.unit && ` (${item.unit})`}
+        </p>
+        <label htmlFor="reactivate-quantity" className="text-sm font-bold">
+          כמות קיימת
+        </label>
+        <input
+          id="reactivate-quantity"
+          type="number"
+          inputMode="decimal"
+          min={0}
+          step="any"
+          autoFocus
+          value={quantity}
+          onChange={(e) => setQuantity(e.target.value)}
+          className="h-12 rounded-xl border px-3 text-lg"
+          style={{ borderColor: C.border }}
+        />
+        {error && (
+          <p className="text-sm" style={{ color: C.error }}>
+            {error}
+          </p>
+        )}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="h-11 flex-1 rounded-xl border text-sm font-semibold"
+            style={{ borderColor: C.border }}
+          >
+            ביטול
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="h-11 flex-1 rounded-xl text-sm font-bold text-white disabled:opacity-50"
+            style={{ background: C.primary }}
+          >
+            הפעלה
+          </button>
+        </div>
+      </form>
     </div>
   )
 }
