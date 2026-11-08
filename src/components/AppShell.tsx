@@ -106,6 +106,8 @@ function SidebarContent({
         </div>
       )}
 
+      <BuildStamp className="hidden md:block" />
+
       <Button
         variant="outline"
         className="justify-start gap-3"
@@ -115,6 +117,24 @@ function SidebarContent({
         התנתקות
       </Button>
     </div>
+  )
+}
+
+const buildTimeFormatter = new Intl.DateTimeFormat('he-IL', {
+  timeZone: 'Asia/Jerusalem',
+  day: 'numeric',
+  month: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+})
+
+// Which deploy is on screen: commit and build time (Israel time).
+function BuildStamp({ className }: { className?: string }) {
+  return (
+    <span dir="ltr" className={cn('text-muted-foreground text-[11px] leading-tight tabular-nums', className)}>
+      {__BUILD_SHA__} · {buildTimeFormatter.format(new Date(__BUILD_TIME__))}
+    </span>
   )
 }
 
@@ -202,6 +222,7 @@ export function AppShell({ appUser, session }: { appUser: AppUser; session: Sess
           </Button>
           <img src="/logo.png" alt="ברבורג" className="size-8 shrink-0 rounded-full object-cover" />
           <span className="font-semibold">ברבורג</span>
+          <BuildStamp className="ms-auto" />
         </header>
 
         {/* Bottom padding keeps the last content clear of the fixed BottomNav. */}

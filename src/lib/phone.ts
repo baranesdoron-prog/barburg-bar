@@ -8,6 +8,11 @@ export function whatsappDigits(phone: string | null | undefined): string | null 
   let digits = phone.replace(/\D/g, '')
   if (digits.startsWith('00')) digits = digits.slice(2)
 
+  // Typed into a right-to-left field, "+972 54..." can end up saved with
+  // the country code at the end ("542609623972"): put it back in front.
+  if (digits.length === 12 && digits.endsWith('972') && digits.startsWith('5')) return `972${digits.slice(0, 9)}`
+  if (digits.length === 13 && digits.endsWith('972') && digits.startsWith('05')) return `972${digits.slice(1, 10)}`
+
   if (digits.startsWith('972')) {
     const national = digits.slice(3).replace(/^0/, '')
     return national.length === 8 || national.length === 9 ? `972${national}` : null

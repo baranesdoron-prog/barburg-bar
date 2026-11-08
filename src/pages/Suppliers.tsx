@@ -45,6 +45,9 @@ function Field({
   value: string
   onChange: (value: string) => void
 }) {
+  // Phone numbers are typed left to right, so "+972 54..." is saved in
+  // that order and not mixed up by the right-to-left page.
+  const isPhone = type === 'tel'
   return (
     <div className="flex flex-col gap-1.5">
       <label htmlFor={id} className="text-xs font-semibold" style={{ color: C.textSecondary }}>
@@ -53,6 +56,8 @@ function Field({
       <input
         id={id}
         type={type}
+        dir={isPhone ? 'ltr' : undefined}
+        inputMode={isPhone ? 'tel' : undefined}
         min={type === 'number' ? 0 : undefined}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -89,6 +94,7 @@ function SupplierFields({
       <Field
         id={`${idPrefix}-bar-contact-phone`}
         label="טלפון איש הקשר בברבורג (לא חובה)"
+        type="tel"
         value={fields.barContactPhone}
         onChange={(barContactPhone) => onChange({ ...fields, barContactPhone })}
       />
@@ -101,6 +107,7 @@ function SupplierFields({
       <Field
         id={`${idPrefix}-supplier-contact-phone`}
         label="טלפון איש הקשר אצל הספק (לא חובה)"
+        type="tel"
         value={fields.supplierContactPhone}
         onChange={(supplierContactPhone) => onChange({ ...fields, supplierContactPhone })}
       />
