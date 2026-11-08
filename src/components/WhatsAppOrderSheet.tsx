@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { X } from 'lucide-react'
 
 import { C } from '@/lib/designTokens'
+import { formatWhatsappNumber, whatsappDigits } from '@/lib/phone'
 
 export const WHATSAPP_GREEN = '#25D366'
 // Dark text on WhatsApp green: white on it is too low-contrast to read.
@@ -21,13 +22,6 @@ export function WhatsAppIcon({ className }: { className?: string }) {
       />
     </svg>
   )
-}
-
-// Supplier phones are free text: a local 05X number gets the country code
-// instead of its leading 0, since wa.me wants digits only.
-export function whatsappDigits(phone: string) {
-  const digits = phone.replace(/\D/g, '')
-  return digits.startsWith('0') ? `972${digits.slice(1)}` : digits
 }
 
 const DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי']
@@ -60,6 +54,7 @@ export function WhatsAppOrderSheet({
   const [day, setDay] = useState(DEFAULT_DAY)
   const [message, setMessage] = useState(() => buildMessage(DEFAULT_DAY, lines))
   const [markOrdered, setMarkOrdered] = useState(true)
+  const digits = whatsappDigits(phone)
 
   function pickDay(next: string) {
     setDay(next)
@@ -68,8 +63,8 @@ export function WhatsAppOrderSheet({
   }
 
   function send() {
-    if (!phone) return
-    window.open(`https://wa.me/${whatsappDigits(phone)}?text=${encodeURIComponent(message)}`, '_blank', 'noopener')
+    if (!digits) return
+    window.open(`https://wa.me/${digits}?text=${encodeURIComponent(message)}`, '_blank', 'noopener')
     if (isDraft && markOrdered) onMarkOrdered()
     onClose()
   }
@@ -95,13 +90,21 @@ export function WhatsAppOrderSheet({
           </button>
         </div>
 
-        {phone ? (
+        {digits ? (
           <p className="text-sm" style={{ color: C.textSecondary }}>
-            אל: {contactName ?? supplierName} · <span dir="ltr">{phone}</span>
+            אל: {contactName ?? supplierName} · <span dir="ltr">{formatWhatsappNumber(digits)}</span>
           </p>
         ) : (
           <div className="flex flex-col gap-1 rounded-xl p-3 text-sm" style={{ background: C.warningBg, color: '#7A4A0A' }}>
-            <span className="font-bold">אין טלפון של איש קשר אצל הספק.</span>
+            <span className="font-bold">
+              {phone ? (
+                <>
+                  הטלפון של איש הקשר (<span dir="ltr">{phone}</span>) לא נראה כמו מספר תקין.
+                </>
+              ) : (
+                'אין טלפון של איש קשר אצל הספק.'
+              )}
+            </span>
             <Link to="/suppliers" className="font-semibold underline underline-offset-2">
               הוספת טלפון בעמוד הספקים
             </Link>
@@ -152,7 +155,7 @@ export function WhatsAppOrderSheet({
 
         <button
           type="button"
-          disabled={!phone || !message.trim()}
+          disabled={!digits || !message.trim()}
           onClick={send}
           className="flex h-13 items-center justify-center gap-2 rounded-xl text-lg font-extrabold disabled:opacity-50"
           style={{ background: WHATSAPP_GREEN, color: WHATSAPP_TEXT }}
