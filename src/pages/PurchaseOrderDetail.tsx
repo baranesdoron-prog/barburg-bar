@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import { formatMoney, purchaseOrderStatusLabels, purchaseOrderStatusTone } from '@/lib/purchaseOrderLabels'
 import { formatDateTime } from '@/lib/utils'
 import { C } from '@/lib/designTokens'
+import { WHATSAPP_GREEN, WHATSAPP_TEXT, WhatsAppIcon, WhatsAppOrderSheet } from '@/components/WhatsAppOrderSheet'
 import type { InventoryItem, ProductCategory, PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus, Supplier } from '@/lib/types'
 
 const STEPS: PurchaseOrderStatus[] = ['draft', 'ordered', 'received']
@@ -24,6 +25,10 @@ export function PurchaseOrderDetail() {
   const [quantities, setQuantities] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [showWhatsApp, setShowWhatsApp] = useState(false)
+  // Names of every line's product, inactive ones included (the catalog
+  // below only has active products, for the add-item picker).
+  const [itemNames, setItemNames] = useState<Record<string, string>>({})
 
   async function load() {
     const { data, error: fetchError } = await supabase
@@ -60,6 +65,11 @@ export function PurchaseOrderDetail() {
     })
 
     const loadedItems = (itemsRes.data as PurchaseOrderItem[]) ?? []
+    const ids = [...new Set(loadedItems.map((i) => i.inventory_item_id))]
+    if (ids.length > 0) {
+      const { data: names } = await supabase.from('inventory_items').select('id, name').in('id', ids)
+      setItemNames(Object.fromEntries(((names as { id: string; name: string }[]) ?? []).map((n) => [n.id, n.name])))
+    }
     setSupplier(supplierRes.data as Supplier)
     setItems(loadedItems)
     setCatalog(sortedCatalog)
@@ -194,7 +204,7 @@ export function PurchaseOrderDetail() {
   const actionButtonClass = 'flex h-11 items-center justify-center rounded-xl px-4 text-sm font-bold'
 
   return (
-    <div dir="rtl" className="min-h-svh pb-48" style={{ background: C.appBg, color: C.text }}>
+    <div dir="rtl" className="min-h-svh pb-64" style={{ background: C.appBg, color: C.text }}>
       <div className="mx-auto flex max-w-xl flex-col gap-4 px-4 pt-5">
         <Link
           to="/purchase-orders"
@@ -452,55 +462,75 @@ export function PurchaseOrderDetail() {
           bottom: 'calc(55px + max(8px, env(safe-area-inset-bottom, 0px)))',
         }}
       >
-        <div className="mx-auto flex max-w-xl items-center gap-2 px-4 py-2.5">
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold" style={{ color: C.textMuted }}>
-              סה"כ · {items.length} פריטים
-            </p>
-            <p className="text-lg font-bold tabular-nums">{formatMoney(total)}</p>
+        <div className="mx-auto flex max-w-xl flex-col gap-2.5 px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold" style={{ color: C.textMuted }}>
+                סה"כ · {items.length} פריטים
+              </p>
+              <p className="text-lg font-bold tabular-nums">{formatMoney(total)}</p>
+            </div>
+            {(order.status === 'draft' || order.status === 'ordered') && (
+              <button
+                type="button"
+                onClick={() => handleSetStatus('cancelled')}
+                className={`${actionButtonClass} border`}
+                style={{ borderColor: C.border, color: C.error }}
+              >
+                ביטול הזמנה
+              </button>
+            )}
+            {order.status === 'cancelled' && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                className={`${actionButtonClass} text-white`}
+                style={{ background: C.error }}
+              >
+                מחיקת הזמנה
+              </button>
+            )}
           </div>
           {(order.status === 'draft' || order.status === 'ordered') && (
-            <button
-              type="button"
-              onClick={() => handleSetStatus('cancelled')}
-              className={`${actionButtonClass} border`}
-              style={{ borderColor: C.border, color: C.error }}
-            >
-              ביטול הזמנה
-            </button>
-          )}
-          {order.status === 'draft' && (
-            <button
-              type="button"
-              onClick={() => handleSetStatus('ordered')}
-              className={`${actionButtonClass} text-white`}
-              style={{ background: C.primary }}
-            >
-              סימון כהוזמן
-            </button>
-          )}
-          {order.status === 'ordered' && (
-            <button
-              type="button"
-              onClick={() => handleSetStatus('received')}
-              className={`${actionButtonClass} text-white`}
-              style={{ background: C.primary }}
-            >
-              סימון כהתקבל
-            </button>
-          )}
-          {order.status === 'cancelled' && (
-            <button
-              type="button"
-              onClick={handleDelete}
-              className={`${actionButtonClass} text-white`}
-              style={{ background: C.error }}
-            >
-              מחיקת הזמנה
-            </button>
+            <div className="flex gap-2">
+              {items.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowWhatsApp(true)}
+                  className={`${actionButtonClass} flex-1 gap-2 text-base font-extrabold`}
+                  style={{ background: WHATSAPP_GREEN, color: WHATSAPP_TEXT }}
+                >
+                  <WhatsAppIcon className="size-5" />
+                  שליחה בוואטסאפ
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => handleSetStatus(order.status === 'draft' ? 'ordered' : 'received')}
+                className={`${actionButtonClass} flex-1 text-base text-white`}
+                style={{ background: C.primary }}
+              >
+                {order.status === 'draft' ? 'סימון כהוזמן' : 'סימון כהתקבל'}
+              </button>
+            </div>
           )}
         </div>
       </div>
+
+      {showWhatsApp && (
+        <WhatsAppOrderSheet
+          supplierName={supplier.name}
+          contactName={supplier.supplier_contact_name}
+          phone={supplier.supplier_contact_phone}
+          lines={items.map((item) => ({
+            name: itemNames[item.inventory_item_id] ?? catalogById.get(item.inventory_item_id)?.name ?? '—',
+            quantity: item.quantity,
+          }))}
+          isDraft={order.status === 'draft'}
+          onClose={() => setShowWhatsApp(false)}
+          onMarkOrdered={() => handleSetStatus('ordered')}
+        />
+      )}
     </div>
   )
 }
