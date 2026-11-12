@@ -76,8 +76,9 @@ export function ShiftClosing() {
 
   // Open for prep (attendance, journal, inventory counts) once the closing
   // shift has actually started, not only once it's already over -- lets
-  // staff record things as the night happens. finish_shift_closing() still
-  // refuses to actually complete the shift before its scheduled end time.
+  // staff record things as the night happens. Since migration 113 the shift
+  // can also be finished before its scheduled end time (the bar may close
+  // early).
   if (
     shift.shift_type !== 'closing' ||
     !['active', 'waiting_for_closure', 'reopened'].includes(shift.effective_status)
