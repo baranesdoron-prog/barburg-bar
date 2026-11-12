@@ -12,6 +12,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { NotificationChoice, type NotificationChoiceValue } from '@/components/NotificationChoice'
 import { maskPhone } from '@/lib/notifications'
 import { E164, useNotificationPrefs } from '@/hooks/useNotificationPrefs'
+import { PasskeysSection } from '@/components/Passkeys'
 
 interface Employee {
   full_name: string
@@ -65,6 +66,7 @@ function StaffProfile() {
         )}
       </CardContent>
       {appUser.employee_id && <NotificationsSection employeeId={appUser.employee_id} />}
+      <PasskeysSection />
       <ChangePasswordSection />
     </Card>
   )
@@ -310,6 +312,7 @@ function CustomerProfile() {
           </Link>
         </CardFooter>
       </form>
+      <PasskeysSection />
       <ChangePasswordSection />
     </Card>
   )
