@@ -11,6 +11,7 @@ import type { AppOutletContext } from '@/lib/outletContext'
 import type { AppRole, AppUser } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { BottomNav } from '@/components/BottomNav'
+import { PasskeyOffer } from '@/components/Passkeys'
 import { cn } from '@/lib/utils'
 
 const PREVIEWABLE_ROLES: AppRole[] = ['bartender', 'shift_manager', 'customer']
@@ -229,6 +230,7 @@ export function AppShell({ appUser, session }: { appUser: AppUser; session: Sess
         <main className="flex-1 p-4 pb-24 print:pb-4">
           <ImpersonationBanner />
           <Outlet context={{ appUser, session, effectiveRole } satisfies AppOutletContext} />
+          <PasskeyOffer userId={appUser.id} />
         </main>
       </div>
 

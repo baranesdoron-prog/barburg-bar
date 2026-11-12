@@ -9,4 +9,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
   )
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Passkeys (Face ID / fingerprint login) are still an experimental
+// Supabase Auth feature, so the client has to opt in.
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: { experimental: { passkey: true } },
+})

@@ -2,6 +2,8 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 
 import { supabase } from '@/lib/supabase'
+import { devicePasskeyId, friendlyPasskeyError, passkeysSupported, rememberDevicePasskey } from '@/lib/passkeys'
+import { FaceIdIcon } from '@/components/FaceIdIcon'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,6 +22,22 @@ export function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // Only on a device where Face ID login was turned on.
+  const [showPasskey] = useState(() => passkeysSupported() && !!devicePasskeyId())
+
+  async function handlePasskey() {
+    setError(null)
+    setSubmitting(true)
+    const { error: passkeyError } = await supabase.auth.signInWithPasskey()
+    setSubmitting(false)
+    if (passkeyError) {
+      // The passkey was removed (from the profile, or from the phone).
+      if (/not found|unknown credential|no passkey/i.test(passkeyError.message)) rememberDevicePasskey(null)
+      setError(friendlyPasskeyError(passkeyError.message))
+      return
+    }
+    navigate('/', { replace: true })
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -48,6 +66,19 @@ export function Login() {
         </CardHeader>
         <form onSubmit={handleSubmit}>
           <CardContent className="flex flex-col gap-4">
+            {showPasskey && (
+              <>
+                <Button type="button" className="h-14 w-full gap-2.5 text-base" disabled={submitting} onClick={handlePasskey}>
+                  <FaceIdIcon className="size-6" />
+                  כניסה עם Face ID / טביעת אצבע
+                </Button>
+                <div className="text-muted-foreground flex items-center gap-2.5 text-sm">
+                  <span className="bg-border h-px flex-1" />
+                  או עם אימייל וסיסמה
+                  <span className="bg-border h-px flex-1" />
+                </div>
+              </>
+            )}
             <div className="flex flex-col gap-2">
               <Label htmlFor="email">אימייל</Label>
               <Input
@@ -73,7 +104,7 @@ export function Login() {
             {error && <p className="text-destructive text-sm">{error}</p>}
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full" disabled={submitting}>
+            <Button type="submit" variant={showPasskey ? 'outline' : 'default'} className="w-full" disabled={submitting}>
               {submitting ? 'מתחבר/ת...' : 'התחברות'}
             </Button>
             <p className="text-muted-foreground text-sm">
