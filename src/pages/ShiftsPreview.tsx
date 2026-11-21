@@ -2,6 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Calendar,
+  Minus,
+  Plus,
   Clock,
   Martini,
   Beer,
@@ -1021,6 +1023,28 @@ export function WeekSection({
   const readOnlyFor = (duty: Duty) => (!!selfServiceDuty && selfServiceDuty !== duty) || (!!archived && !canManage)
 
   const bartenderMax = activeOpening?.required_staff_count ?? activeClosing?.required_staff_count ?? 3
+  // The bar manager can shrink (or restore) the bartender places for one
+  // evening, e.g. when 2 are enough; self sign-up on /shifts and in the
+  // wizard then stops at the new number (the database enforces it too).
+  const MAX_BARTENDER_PLACES = 3
+  const minBartenderPlaces = Math.max(1, bartenders.opening.length, bartenders.closing.length)
+  const canChangePlaces =
+    canManage && !weekFullyCancelled && week >= toDateStr(activeWeekStart()) && !!(activeOpening || activeClosing)
+  const [savingPlaces, setSavingPlaces] = useState(false)
+
+  async function changeBartenderPlaces(next: number) {
+    const ids = [activeOpening?.id, activeClosing?.id].filter((v): v is string => !!v)
+    if (ids.length === 0) return
+    setSavingPlaces(true)
+    setError(null)
+    const { error: updateError } = await supabase.from('shifts').update({ required_staff_count: next }).in('id', ids)
+    setSavingPlaces(false)
+    if (updateError) {
+      setError(updateError.message)
+      return
+    }
+    onSaved()
+  }
   const eveningHours =
     activeOpening && activeClosing
       ? `${formatTime(activeOpening.start_time)}–${formatTime(activeClosing.end_time)}`
@@ -1351,6 +1375,37 @@ export function WeekSection({
             status={cardStatus}
             compact={compact}
           >
+            {canChangePlaces && (
+              <div className="flex items-center justify-between gap-2 rounded-xl px-2.5 py-1.5" style={{ background: C.subtleBg }}>
+                <span className="text-xs font-semibold" style={{ color: C.textSecondary }}>
+                  מקומות לברמנים/יות בערב הזה
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    aria-label="פחות מקומות"
+                    disabled={savingPlaces || bartenderMax <= minBartenderPlaces}
+                    title={bartenderMax <= minBartenderPlaces ? 'כל המקומות תפוסים: קודם להסיר ברמן/ית' : undefined}
+                    onClick={() => changeBartenderPlaces(bartenderMax - 1)}
+                    className="flex size-8 items-center justify-center rounded-full border disabled:opacity-40"
+                    style={{ borderColor: C.border, background: C.card }}
+                  >
+                    <Minus className="size-4" />
+                  </button>
+                  <span className="w-5 text-center text-base font-bold tabular-nums">{bartenderMax}</span>
+                  <button
+                    type="button"
+                    aria-label="עוד מקום"
+                    disabled={savingPlaces || bartenderMax >= MAX_BARTENDER_PLACES}
+                    onClick={() => changeBartenderPlaces(bartenderMax + 1)}
+                    className="flex size-8 items-center justify-center rounded-full border disabled:opacity-40"
+                    style={{ borderColor: C.border, background: C.card }}
+                  >
+                    <Plus className="size-4" />
+                  </button>
+                </div>
+              </div>
+            )}
             <DutyListBody
               role="bartender"
               readOnly={readOnlyFor('bartender')}
