@@ -1386,15 +1386,19 @@ export function WeekSection({
                   <button
                     type="button"
                     aria-label="פחות מקומות"
-                    disabled={savingPlaces || bartenderMax <= minBartenderPlaces}
-                    title={
-                      bartenderMax <= MIN_BARTENDER_PLACES
-                        ? 'מינימום 2 ברמנים/יות בערב'
-                        : bartenderMax <= minBartenderPlaces
-                          ? 'כל המקומות תפוסים: קודם להסיר ברמן/ית'
-                          : undefined
-                    }
-                    onClick={() => changeBartenderPlaces(bartenderMax - 1)}
+                    disabled={savingPlaces || bartenderMax <= MIN_BARTENDER_PLACES}
+                    title={bartenderMax <= MIN_BARTENDER_PLACES ? 'מינימום 2 ברמנים/יות בערב' : undefined}
+                    onClick={() => {
+                      // Every place is taken: explain instead of silently refusing.
+                      if (bartenderMax <= minBartenderPlaces) {
+                        showInfo({
+                          title: 'אי אפשר להוריד מקום',
+                          body: `כבר משובצים ${minBartenderPlaces} ברמנים/יות לערב הזה. אי אפשר להגדיר מספר מקומות נמוך ממספר המשובצים. כדי להוריד מקום, קודם צריך להסיר ברמן/ית מהערב.`,
+                        })
+                        return
+                      }
+                      changeBartenderPlaces(bartenderMax - 1)
+                    }}
                     className="flex size-8 items-center justify-center rounded-full border disabled:opacity-40"
                     style={{ borderColor: C.border, background: C.card }}
                   >
