@@ -1027,7 +1027,9 @@ export function WeekSection({
   // evening, e.g. when 2 are enough; self sign-up on /shifts and in the
   // wizard then stops at the new number (the database enforces it too).
   const MAX_BARTENDER_PLACES = 3
-  const minBartenderPlaces = Math.max(1, bartenders.opening.length, bartenders.closing.length)
+  // Never fewer than 2 bartender places, nor fewer than those already signed up.
+  const MIN_BARTENDER_PLACES = 2
+  const minBartenderPlaces = Math.max(MIN_BARTENDER_PLACES, bartenders.opening.length, bartenders.closing.length)
   const canChangePlaces =
     canManage && !weekFullyCancelled && week >= toDateStr(activeWeekStart()) && !!(activeOpening || activeClosing)
   const [savingPlaces, setSavingPlaces] = useState(false)
@@ -1385,7 +1387,13 @@ export function WeekSection({
                     type="button"
                     aria-label="פחות מקומות"
                     disabled={savingPlaces || bartenderMax <= minBartenderPlaces}
-                    title={bartenderMax <= minBartenderPlaces ? 'כל המקומות תפוסים: קודם להסיר ברמן/ית' : undefined}
+                    title={
+                      bartenderMax <= MIN_BARTENDER_PLACES
+                        ? 'מינימום 2 ברמנים/יות בערב'
+                        : bartenderMax <= minBartenderPlaces
+                          ? 'כל המקומות תפוסים: קודם להסיר ברמן/ית'
+                          : undefined
+                    }
                     onClick={() => changeBartenderPlaces(bartenderMax - 1)}
                     className="flex size-8 items-center justify-center rounded-full border disabled:opacity-40"
                     style={{ borderColor: C.border, background: C.card }}
