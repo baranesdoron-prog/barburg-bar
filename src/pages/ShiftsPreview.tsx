@@ -48,6 +48,8 @@ import { useConfirmAssign, type ConfirmAssignState } from '@/hooks/useConfirmAss
 import { ConfirmAssignDialog } from '@/components/ConfirmAssignDialog'
 import { useInfoDialog, type InfoDialogState } from '@/hooks/useInfoDialog'
 import { InfoDialog } from '@/components/InfoDialog'
+import { TeamReminderSheet } from '@/components/TeamReminder'
+import { WHATSAPP_GREEN, WHATSAPP_TEXT, WhatsAppIcon } from '@/components/WhatsAppOrderSheet'
 import { SHIFTS_LEGACY_ACCESS_USER_IDS } from '@/lib/shiftsLegacyAccess'
 import type { Shift, ShiftAssignment, ShiftAssignmentRole, EffectiveShiftStatus } from '@/lib/types'
 
@@ -937,6 +939,15 @@ function DutyCard({
 
 // Also rendered by the onboarding wizard's shift list, so the wizard shows
 // each evening exactly as this page does.
+const reminderSentFormatter = new Intl.DateTimeFormat('he-IL', {
+  timeZone: 'Asia/Jerusalem',
+  day: 'numeric',
+  month: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+})
+
 export function WeekSection({
   week,
   shifts,
@@ -989,6 +1000,7 @@ export function WeekSection({
   const canManage = canManageProp && !selfServiceDuty
   const [error, setError] = useState<string | null>(null)
   const [showCancelForm, setShowCancelForm] = useState(false)
+  const [showReminder, setShowReminder] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
   const [cancelling, setCancelling] = useState(false)
   const [restoring, setRestoring] = useState(false)
@@ -1338,6 +1350,43 @@ export function WeekSection({
           {closeInProgress ? 'המשך סגירה' : 'סגירת משמרת'}
         </Link>
       )}
+      {canManage && !weekFullyCancelled && week >= toDateStr(activeWeekStart()) && bartenderPeople.length > 0 && (
+        <div className="flex flex-col gap-1">
+          <button
+            type="button"
+            onClick={() => setShowReminder(true)}
+            className="flex min-h-12 items-center justify-center gap-2 rounded-xl text-base font-extrabold"
+            style={{ background: WHATSAPP_GREEN, color: WHATSAPP_TEXT }}
+          >
+            <WhatsAppIcon className="size-5" />
+            שליחת תזכורת לצוות
+          </button>
+          <span className="px-1 text-xs" style={{ color: C.textSecondary }}>
+            {primaryShift?.team_reminder_sent_at
+              ? `תזכורת נשלחה ${reminderSentFormatter.format(new Date(primaryShift.team_reminder_sent_at))}${
+                  primaryShift.team_reminder_sent_by_name ? ` ע״י ${primaryShift.team_reminder_sent_by_name}` : ''
+                }`
+              : 'תזכורת עוד לא נשלחה'}
+          </span>
+        </div>
+      )}
+      {showReminder && (
+        <TeamReminderSheet
+          shiftIds={[activeOpening?.id, activeClosing?.id].filter((v): v is string => !!v)}
+          recipients={bartenderPeople.map((p) => ({
+            employeeId: p.employee_id,
+            name: employeeNames[p.employee_id] ?? '—',
+            phone: employeePhones[p.employee_id],
+          }))}
+          dayLabel={`${weekdayLabel} ${dateLabel}`}
+          hoursLabel={eveningHours}
+          barManagerName={barManagerId ? (employeeNames[barManagerId] ?? null) : null}
+          senderName={myEmployeeId ? (employeeNames[myEmployeeId] ?? null) : null}
+          onClose={() => setShowReminder(false)}
+          onSent={onSaved}
+        />
+      )}
+
       {closeHref && closeNote && (
         <p className="-mt-3 px-1 text-sm" style={{ color: C.textSecondary }}>
           {closeNote}
