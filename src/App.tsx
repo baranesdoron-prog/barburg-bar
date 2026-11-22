@@ -122,6 +122,7 @@ export function App() {
           <Route path="/dashboard" element={<DashboardHome />} />
           <Route path="/onboarding" element={<OnboardingWizard />} />
           <Route path="/procedures" element={<Procedures />} />
+          <Route path="/bar-menu" element={<BarMenu />} />
         </Route>
         <Route path="/profile" element={<Profile />} />
         <Route element={<RequireRole roles={ROLES_USING_PUNCHCARDS} />}>
@@ -171,7 +172,6 @@ export function App() {
           <Route path="/admin/users" element={<Users />} />
           <Route path="/admin/whatsapp" element={<AdminWhatsApp />} />
           {/* Administrators only for now; bar managers later. */}
-          <Route path="/bar-menu" element={<BarMenu />} />
           <Route path="/admin/news" element={<AdminNews />} />
         </Route>
       </Route>

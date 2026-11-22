@@ -57,9 +57,10 @@ export function getNavItems(role: AppRole): NavItem[] {
 
   items.push({ to: '/procedures', label: 'נהלים', icon: BookOpen })
 
-  // Bar menu and customer news: administrators only for now.
+  // The bar menu (with preparation steps) is for all staff; editing it is
+  // for administrators and bar managers. Customer news: administrators only.
+  items.push({ to: '/bar-menu', label: 'תפריט הבר', icon: Wine })
   if (role === 'administrator') {
-    items.push({ to: '/bar-menu', label: 'תפריט הבר', icon: Wine })
     items.push({ to: '/admin/news', label: 'חדשות ודגשים ללקוחות', icon: Newspaper })
   }
 

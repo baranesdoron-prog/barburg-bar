@@ -6,6 +6,7 @@ import { C } from '@/lib/designTokens'
 import { useAppUserContext } from '@/lib/outletContext'
 import { ROLES_MANAGING_SHIFTS } from '@/lib/roleLabels'
 import { SHEKELS_PER_TOKEN, formatDate, tokensLabel } from '@/lib/punchcards'
+import { PrepStepsEditor, PrepStepsStrip, type PrepSteps } from '@/components/PrepSteps'
 
 interface MenuCategory {
   id: string
@@ -26,6 +27,8 @@ interface MenuItem {
   one_shift: boolean
   expired_at: string | null
   created_at: string
+  // Step-by-step drawing data (migration 117); absent before it's applied.
+  prep_steps?: PrepSteps | null
 }
 
 const fieldClass = 'rounded-xl border px-3 text-base outline-none focus-visible:ring-2'
@@ -39,6 +42,7 @@ export function BarMenu() {
   const [categories, setCategories] = useState<MenuCategory[]>([])
   const [items, setItems] = useState<MenuItem[] | null>(null)
   const [tab, setTab] = useState<'menu' | 'expired'>('menu')
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
   const [editing, setEditing] = useState<MenuItem | 'new' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -85,8 +89,28 @@ export function BarMenu() {
     <div dir="rtl" className="mx-auto flex max-w-md flex-col gap-3 pb-24" style={{ color: C.text }}>
       <h1 className="text-2xl font-extrabold">תפריט הבר</h1>
       <p className="text-sm" style={{ color: C.textSecondary }}>
-        תצוגת צוות: כולל הוראות הגשה והכנה (בירוק). לקוחות רואים רק את שם המשקה, מה יש בו ומספר הניקובים.
+        תצוגת צוות: כולל הוראות הגשה והכנה ושלבי הכנה בציור. לקוחות רואים רק את שם המשקה, מה יש בו ומספר הניקובים.
       </p>
+
+      {tab === 'menu' && (
+        <div className="flex flex-wrap gap-1.5">
+          {[{ id: null as string | null, name: 'הכל' }, ...categories.map((c) => ({ id: c.id as string | null, name: c.name }))].map((c) => (
+            <button
+              key={c.id ?? 'all'}
+              type="button"
+              onClick={() => setCategoryFilter(c.id)}
+              className="h-8 rounded-full border px-3 text-xs font-bold"
+              style={
+                categoryFilter === c.id
+                  ? { background: C.primary, borderColor: C.primary, color: '#fff' }
+                  : { background: C.card, borderColor: C.border, color: C.text }
+              }
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {canManage && (
         <div className="flex gap-2">
@@ -145,7 +169,7 @@ export function BarMenu() {
           ))}
         </>
       ) : (
-        categories.map((cat) => {
+        categories.filter((cat) => !categoryFilter || cat.id === categoryFilter).map((cat) => {
           const catItems = active.filter((i) => i.category_id === cat.id)
           if (catItems.length === 0) return null
           return (
@@ -221,6 +245,7 @@ function ItemBody({ item, category }: { item: MenuItem; category: MenuCategory |
           {item.description}
         </span>
       )}
+      {item.prep_steps && item.prep_steps.pours?.length > 0 && <PrepStepsStrip steps={item.prep_steps} idPrefix={item.id} />}
       {item.staff_notes && (
         <div className="rounded-md px-2 py-1.5 text-sm" style={{ background: C.primaryLight, color: C.primary }}>
           <b>הכנה:</b> {item.staff_notes}
@@ -237,6 +262,7 @@ function ItemForm({ item, categories, onDone }: { item: MenuItem | null; categor
   const [staffNotes, setStaffNotes] = useState(item?.staff_notes ?? '')
   const [tokens, setTokens] = useState(item?.tokens ?? categories.find((c) => c.id === categoryId)?.default_tokens ?? 4)
   const [oneShift, setOneShift] = useState(item?.one_shift ?? true)
+  const [prepSteps, setPrepSteps] = useState<PrepSteps | null>(item?.prep_steps ?? null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -254,6 +280,8 @@ function ItemForm({ item, categories, onDone }: { item: MenuItem | null; categor
       staff_notes: staffNotes.trim() || null,
       tokens,
       one_shift: oneShift,
+      // Pours without an ingredient name are left out.
+      prep_steps: prepSteps ? { ...prepSteps, pours: prepSteps.pours.filter((p) => p.ingredient.trim()) } : null,
     }
     const { error: saveError } = item
       ? await supabase.from('menu_items').update(payload).eq('id', item.id)
@@ -346,6 +374,11 @@ function ItemForm({ item, categories, onDone }: { item: MenuItem | null; categor
           </button>
           <span style={{ color: C.textSecondary }}>= {tokens * SHEKELS_PER_TOKEN} ₪</span>
         </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-bold">שלבי הכנה בציור (רק לצוות)</span>
+        <PrepStepsEditor value={prepSteps} onChange={setPrepSteps} />
       </div>
 
       <label className="flex items-start gap-3 rounded-xl border p-3.5" style={{ borderColor: C.accent, background: C.accentLight }}>

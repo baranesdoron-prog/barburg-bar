@@ -10,6 +10,10 @@ import { WHATSAPP_GREEN, WHATSAPP_TEXT, WhatsAppIcon } from '@/components/WhatsA
 export const BARTENDER_PROCEDURES_URL =
   'https://docs.google.com/document/d/19cRzgAZq7P-wgCyD-7c4HrbOhGm0zeBvRJLypba3Qkc/edit?tab=t.0'
 
+// The staff bar menu, with the cocktails' step-by-step drawings. Bartenders
+// open it after logging in.
+export const BAR_MENU_URL = 'https://barburg-bar.netlify.app/bar-menu'
+
 export interface ReminderRecipient {
   employeeId: string
   name: string
@@ -27,20 +31,26 @@ function buildMessage({
   teamNames: string[]
   barManagerName: string | null
 }) {
-  const team = [teamNames.length ? `בצוות: ${teamNames.join(', ')}` : null, barManagerName ? `מנהל/ת בר: ${barManagerName}` : null]
+  const team = [
+    teamNames.length ? `הצוות שלך: ${teamNames.join(', ')}` : null,
+    barManagerName ? `מנהל/ת בר: ${barManagerName}` : null,
+  ]
     .filter(Boolean)
     .join(' · ')
   return [
-    'היי, תזכורת למשמרת שלך בברבורג',
+    'היי! מה קורה?',
     // Hours wrapped in left-to-right isolate marks, so "19:30–0:30" isn't
     // flipped inside the Hebrew line in WhatsApp/SMS.
-    `${dayLabel}${hoursLabel ? ` · \u2066${hoursLabel}\u2069` : ''}`,
+    `מחכים לך ב${dayLabel} בברבורג${hoursLabel ? `, \u2066${hoursLabel}\u2069` : ''}.`,
     team,
     '',
-    'לפני המשמרת כדאי לעבור על נוהל הברמנים ותפריט הבר:',
+    'כדי להגיע מוכנים:',
+    'תפריט הבר, כולל שלבי הכנה לקוקטיילים:',
+    BAR_MENU_URL,
+    'נוהל ברמנים:',
     BARTENDER_PROCEDURES_URL,
     '',
-    'נתראה!',
+    'נתראה בבר!',
   ]
     .filter((line, i, all) => line !== '' || (all[i - 1] !== '' && i > 0))
     .join('\n')
