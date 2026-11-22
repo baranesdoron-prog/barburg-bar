@@ -199,6 +199,7 @@ export interface InventoryCount {
   shift_id: string
   inventory_item_id: string
   quantity_counted: number
+  kept_as_stock: boolean
   recorded_by: string
   created_at: string
   updated_at: string
@@ -232,6 +233,9 @@ export interface ShiftReportRow {
       item_name: string
       unit: string | null
       quantity_counted: number
+      // Kept at the current stock with "כמו במלאי" instead of counted.
+      // Missing on reports from before this existed, and after a correction.
+      kept_as_stock?: boolean
       previous_quantity: number | null
       unit_price: number | null
       used_quantity: number | null

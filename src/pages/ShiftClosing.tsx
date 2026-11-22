@@ -369,6 +369,12 @@ function isValidCount(value: string) {
   return value.trim() !== '' && Number.isFinite(n) && n >= 0
 }
 
+// A count value that starts with '=' was kept at the current stock with the
+// "כמו במלאי" button instead of being counted (e.g. '=12').
+const KEPT_PREFIX = '='
+const isKept = (value: string | undefined) => (value ?? '').startsWith(KEPT_PREFIX)
+const countNumber = (value: string) => (isKept(value) ? value.slice(KEPT_PREFIX.length) : value)
+
 type RowState = 'saving' | 'saved' | 'waiting' | 'invalid'
 type CountFilter = 'all' | 'todo' | 'done'
 
@@ -418,7 +424,7 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
     const initial: Record<string, string> = {}
     const states: Record<string, RowState> = {}
     for (const count of countsRes.data ?? []) {
-      initial[count.inventory_item_id] = String(count.quantity_counted)
+      initial[count.inventory_item_id] = (count.kept_as_stock ? KEPT_PREFIX : '') + String(count.quantity_counted)
       states[count.inventory_item_id] = 'saved'
     }
     // Anything typed on this phone that never reached the server wins over
@@ -442,13 +448,18 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
     }
     if (flushingRef.current) return
     const batch = { ...pendingRef.current }
-    const entries = Object.entries(batch).filter(([, value]) => value === '' || isValidCount(value))
+    const entries = Object.entries(batch).filter(([, value]) => value === '' || isValidCount(countNumber(value)))
     if (entries.length === 0) return
     flushingRef.current = true
 
     const upserts = entries
       .filter(([itemId, value]) => value !== '' && !excludedRef.current.has(itemId))
-      .map(([itemId, value]) => ({ shift_id: shiftId, inventory_item_id: itemId, quantity_counted: Number(value) }))
+      .map(([itemId, value]) => ({
+        shift_id: shiftId,
+        inventory_item_id: itemId,
+        quantity_counted: Number(countNumber(value)),
+        kept_as_stock: isKept(value),
+      }))
     const clears = entries.filter(([, value]) => value === '').map(([itemId]) => itemId)
 
     setRowState((prev) => {
@@ -512,7 +523,7 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
   function handleChange(itemId: string, value: string) {
     setQuantities((prev) => ({ ...prev, [itemId]: value }))
     setResumeCount(0)
-    if (value.trim() !== '' && !isValidCount(value)) {
+    if (value.trim() !== '' && !isValidCount(countNumber(value))) {
       setRowState((prev) => ({ ...prev, [itemId]: 'invalid' }))
       return
     }
@@ -520,6 +531,10 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
     writePending(shiftId, pendingRef.current)
     setRowState((prev) => ({ ...prev, [itemId]: 'saving' }))
     scheduleFlush()
+  }
+
+  function handleKeepAsStock(item: InventoryItem) {
+    handleChange(item.id, `${KEPT_PREFIX}${item.current_stock ?? 0}`)
   }
 
   async function handleExclude(itemId: string) {
@@ -658,6 +673,7 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
   const sortedItems = sortByCategory(items.filter((i) => !excludedIds.has(i.id)))
   const excludedItems = sortByCategory(items.filter((i) => excludedIds.has(i.id)))
   const countedTotal = sortedItems.filter(({ item }) => isCounted(item.id)).length
+  const keptTotal = sortedItems.filter(({ item }) => isKept(quantities[item.id])).length
   const shownItems = sortedItems.filter(({ item }) =>
     filter === 'todo' ? !isCounted(item.id) : filter === 'done' ? isCounted(item.id) : true,
   )
@@ -746,7 +762,9 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
               <span className="text-xs">
                 {waitingCount > 0
                   ? `${waitingCount} פריטים יישלחו כשהחיבור יחזור`
-                  : `${countedTotal} מתוך ${sortedItems.length} פריטים נספרו`}
+                  : `${countedTotal} מתוך ${sortedItems.length} פריטים טופלו${
+                      keptTotal > 0 ? ` (${countedTotal - keptTotal} נספרו, ${keptTotal} כמו במלאי)` : ''
+                    }`}
               </span>
             </div>
           </div>
@@ -755,13 +773,15 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
         {sortedItems.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {filterChip('all', `הכל · ${sortedItems.length}`)}
-            {filterChip('todo', `טרם נספרו · ${sortedItems.length - countedTotal}`)}
-            {filterChip('done', `נספרו · ${countedTotal}`)}
+            {filterChip('todo', `טרם טופלו · ${sortedItems.length - countedTotal}`)}
+            {filterChip('done', `טופלו · ${countedTotal}`)}
           </div>
         )}
 
         {shownItems.map(({ item, categoryName }, index) => {
           const state = rowState[item.id]
+          const value = quantities[item.id] ?? ''
+          const kept = isKept(value)
           return (
             <div key={item.id}>
               {categoryName !== shownItems[index - 1]?.categoryName && (
@@ -779,14 +799,43 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
                   type="number"
                   inputMode="decimal"
                   min={0}
-                  className={cn('w-24', state === 'invalid' && 'border-destructive')}
-                  value={quantities[item.id] ?? ''}
+                  className={cn(
+                    'w-20 placeholder:text-[#9AA39E]',
+                    kept && 'border-[#E3C9A8] font-bold text-[#7A5230]',
+                    state === 'invalid' && 'border-destructive',
+                  )}
+                  // The current stock shows in grey as a hint; it isn't saved
+                  // until the bar manager types a count or keeps it as is.
+                  placeholder={String(item.current_stock ?? 0)}
+                  value={countNumber(value)}
                   onChange={(e) => handleChange(item.id, e.target.value)}
                   onBlur={() => {
                     if (pendingRef.current[item.id] !== undefined) flush()
                   }}
                 />
-                <span className="w-12 shrink-0 text-[11px]">
+                {value.trim() === '' && (
+                  <button
+                    type="button"
+                    onClick={() => handleKeepAsStock(item)}
+                    aria-label={`${item.name}: כמו במלאי (${item.current_stock ?? 0})`}
+                    className="h-9 shrink-0 rounded-lg border border-[#B9D8C6] bg-[#E8F3EC] px-2 text-xs font-bold whitespace-nowrap text-[#174D3B]"
+                  >
+                    ✓ כמו במלאי
+                  </button>
+                )}
+                {kept && state !== 'saving' && state !== 'waiting' && (
+                  <span className="flex shrink-0 flex-col text-[11px] leading-tight font-bold text-[#7A5230]">
+                    כמו במלאי
+                    <button
+                      type="button"
+                      onClick={() => handleChange(item.id, '')}
+                      className="text-start font-normal underline"
+                    >
+                      ביטול
+                    </button>
+                  </span>
+                )}
+                <span className={cn('shrink-0 text-[11px]', value.trim() === '' || (kept && state !== 'saving' && state !== 'waiting') ? 'hidden' : 'w-12')}>
                   {state === 'saved' && (
                     <span className="flex items-center gap-0.5 text-[#174D3B]">
                       <Check className="size-3" />
@@ -811,7 +860,7 @@ function InventorySection({ shiftId, onSaved }: { shiftId: string; onSaved: () =
           )
         })}
         {filter !== 'all' && shownItems.length === 0 && (
-          <p className="text-muted-foreground text-sm">{filter === 'todo' ? 'הכל נספר.' : 'עוד לא נספר שום פריט.'}</p>
+          <p className="text-muted-foreground text-sm">{filter === 'todo' ? 'הכל טופל.' : 'עוד לא טופל שום פריט.'}</p>
         )}
         {error && <p className="text-destructive text-sm">{error}</p>}
         {sortedItems.length > 0 && (
@@ -882,6 +931,7 @@ function SummarySection({
   const [journalCount, setJournalCount] = useState(0)
   const [followUpCount, setFollowUpCount] = useState(0)
   const [inventoryCount, setInventoryCount] = useState(0)
+  const [keptCount, setKeptCount] = useState(0)
   const [activeItemCount, setActiveItemCount] = useState(0)
   const [excludedCount, setExcludedCount] = useState(0)
   const [error, setError] = useState<string | null>(null)
@@ -900,7 +950,7 @@ function SummarySection({
         ? supabase.from('attendance_records').select('*').in('shift_assignment_id', assignmentIds)
         : Promise.resolve({ data: [] as AttendanceRecord[] }),
       supabase.from('journal_entries').select('requires_follow_up').eq('shift_id', shift.id),
-      supabase.from('inventory_counts').select('id').eq('shift_id', shift.id),
+      supabase.from('inventory_counts').select('id, kept_as_stock').eq('shift_id', shift.id),
       supabase.from('inventory_items').select('id').eq('active', true),
       supabase.from('shift_inventory_exclusions').select('inventory_item_id').eq('shift_id', shift.id),
     ])
@@ -909,7 +959,9 @@ function SummarySection({
     const journalRows = (journalRes.data as { requires_follow_up: boolean }[]) ?? []
     setJournalCount(journalRows.length)
     setFollowUpCount(journalRows.filter((r) => r.requires_follow_up).length)
-    setInventoryCount((inventoryRes.data as { id: string }[] | null)?.length ?? 0)
+    const countRows = (inventoryRes.data as { id: string; kept_as_stock: boolean }[] | null) ?? []
+    setInventoryCount(countRows.length)
+    setKeptCount(countRows.filter((r) => r.kept_as_stock).length)
     setActiveItemCount((activeItemsRes.data as { id: string }[] | null)?.length ?? 0)
     setExcludedCount((exclusionsRes.data as { inventory_item_id: string }[] | null)?.length ?? 0)
   }
@@ -964,13 +1016,16 @@ function SummarySection({
           רשומות יומן: {journalCount} (מתוכן {followUpCount} דורשות מעקב)
         </p>
         <p>
-          פריטי מלאי שנספרו: {inventoryCount} מתוך {requiredInventoryCount}
+          פריטי מלאי שטופלו: {inventoryCount} מתוך {requiredInventoryCount}
           {excludedCount > 0 && ` (${excludedCount} הוסרו מהספירה)`}
+        </p>
+        <p>
+          מתוכם נספרו: {inventoryCount - keptCount} · כמו במלאי: {keptCount}
         </p>
         {missingJournal && (
           <p className="text-destructive">יש להוסיף לפחות רשומת יומן אחת (מה עבד טוב, מה השתבש וכו') לפני הסיום.</p>
         )}
-        {missingInventory && <p className="text-destructive">יש להשלים ספירה של כל פריטי המלאי הפעילים לפני הסיום.</p>}
+        {missingInventory && <p className="text-destructive">יש לספור או לסמן ״כמו במלאי״ את כל פריטי המלאי הפעילים לפני הסיום.</p>}
         {error && <p className="text-destructive">{error}</p>}
       </CardContent>
       <CardFooter>

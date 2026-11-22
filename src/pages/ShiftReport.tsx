@@ -376,8 +376,16 @@ export function ShiftReport() {
               ) : (
                 <Row key={i}>
                   <span>{c.item_name}</span>
-                  <span style={{ color: C.textMuted }}>
+                  <span className="flex items-center gap-1.5" style={{ color: C.textMuted }}>
                     {c.quantity_counted} {c.unit}
+                    {c.kept_as_stock && (
+                      <span
+                        className="rounded-full px-2 py-0.5 text-[11px] font-bold"
+                        style={{ background: '#F6EBDD', color: '#7A5230' }}
+                      >
+                        כמו במלאי
+                      </span>
+                    )}
                   </span>
                 </Row>
               ),
