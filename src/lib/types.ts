@@ -84,6 +84,9 @@ export interface Shift {
   updated_at: string
   effective_status: EffectiveShiftStatus
   assigned_count: number
+  // Last "שליחת תזכורת לצוות" (migration 116); absent before it's applied.
+  team_reminder_sent_at?: string | null
+  team_reminder_sent_by_name?: string | null
 }
 
 export interface ShiftManagerAssignment {
