@@ -6,7 +6,7 @@ import { C } from '@/lib/designTokens'
 import { useAppUserContext } from '@/lib/outletContext'
 import { ROLES_MANAGING_SHIFTS } from '@/lib/roleLabels'
 import { SHEKELS_PER_TOKEN, formatDate, tokensLabel } from '@/lib/punchcards'
-import { PrepStepsEditor, PrepStepsStrip, type PrepSteps } from '@/components/PrepSteps'
+import { emptyPrepSteps, PrepStepsEditor, PrepStepsStrip, type PrepSteps } from '@/components/PrepSteps'
 
 interface MenuCategory {
   id: string
@@ -262,14 +262,38 @@ function ItemForm({ item, categories, onDone }: { item: MenuItem | null; categor
   const [staffNotes, setStaffNotes] = useState(item?.staff_notes ?? '')
   const [tokens, setTokens] = useState(item?.tokens ?? categories.find((c) => c.id === categoryId)?.default_tokens ?? 4)
   const [oneShift, setOneShift] = useState(item?.one_shift ?? true)
-  const [prepSteps, setPrepSteps] = useState<PrepSteps | null>(item?.prep_steps ?? null)
+  // A cocktail must have instructions, a glass and at least one step, so
+  // bartenders always get the drawings. Other categories: optional.
+  const isCocktailCategory = (id: string) => categories.find((c) => c.id === id)?.name.includes('קוקטייל') ?? false
+  const isCocktail = isCocktailCategory(categoryId)
+  const [prepSteps, setPrepSteps] = useState<PrepSteps | null>(
+    item?.prep_steps ?? (isCocktailCategory(item?.category_id ?? categoryId) ? emptyPrepSteps() : null),
+  )
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [tried, setTried] = useState(false)
+
+  // Instructions are required for new cocktails (and items moved into
+  // cocktails); the existing ones rely on the category's serving note.
+  const notesRequired = isCocktail && (!item || !isCocktailCategory(item.category_id))
+  const notesMissing = notesRequired && !staffNotes.trim()
+  const stepsMissing = isCocktail && (!prepSteps || prepSteps.pours.every((p) => !p.ingredient.trim()))
+
+  function changeCategory(id: string) {
+    setCategoryId(id)
+    if (isCocktailCategory(id) && !prepSteps) setPrepSteps(emptyPrepSteps())
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
     if (!name.trim()) {
       setError('יש להזין שם לפריט')
+      return
+    }
+    if (notesMissing || stepsMissing) {
+      setTried(true)
+      setError('כדי להוסיף קוקטייל לתפריט צריך הוראות הכנה, כוס ולפחות שלב אחד.')
+      document.getElementById('cocktail-required')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return
     }
     setSaving(true)
@@ -291,6 +315,44 @@ function ItemForm({ item, categories, onDone }: { item: MenuItem | null; categor
     else onDone()
   }
 
+  const staffNotesField = (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor="menu-staff" className="text-sm font-bold">
+        {isCocktail ? `1. הוראות הכנה${notesRequired ? ' *' : ''}` : 'הוראות הכנה (רק לצוות)'}
+      </label>
+      <textarea
+        id="menu-staff"
+        value={staffNotes}
+        onChange={(e) => setStaffNotes(e.target.value)}
+        className={`${fieldClass} min-h-20 py-2`}
+        style={{ borderColor: tried && notesMissing ? C.error : '#9CC7B0', borderWidth: tried && notesMissing ? 2 : 1, background: C.primaryLight }}
+      />
+      {tried && notesMissing ? (
+        <span className="text-xs font-bold" style={{ color: C.error }}>
+          חסר: איך מכינים את הקוקטייל
+        </span>
+      ) : (
+        !isCocktail && (
+          <span className="text-xs" style={{ color: C.textSecondary }}>
+            לקוחות לא רואים את השדה הזה. אפשר להשאיר ריק כשההגשה היא כמו של הקטגוריה.
+          </span>
+        )
+      )}
+    </div>
+  )
+
+  const stepsField = (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm font-bold">{isCocktail ? '2. כוס, קרח ושלבים לפי הסדר *' : 'שלבי הכנה בציור (רק לצוות)'}</span>
+      <PrepStepsEditor value={prepSteps} onChange={setPrepSteps} required={isCocktail} />
+      {tried && stepsMissing && (
+        <span className="text-xs font-bold" style={{ color: C.error }}>
+          חסר: לפחות שלב אחד (רכיב וכמות)
+        </span>
+      )}
+    </div>
+  )
+
   return (
     <form onSubmit={submit} dir="rtl" className="mx-auto flex max-w-md flex-col gap-4 pb-24" style={{ color: C.text }}>
       <h1 className="text-2xl font-extrabold">{item ? 'עריכת פריט' : 'פריט חדש בתפריט'}</h1>
@@ -309,7 +371,7 @@ function ItemForm({ item, categories, onDone }: { item: MenuItem | null; categor
         <select
           id="menu-category"
           value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
+          onChange={(e) => changeCategory(e.target.value)}
           className={`${fieldClass} h-12`}
           style={{ borderColor: C.border, background: C.card }}
         >
@@ -332,22 +394,6 @@ function ItemForm({ item, categories, onDone }: { item: MenuItem | null; categor
           className={`${fieldClass} min-h-20 py-2`}
           style={{ borderColor: C.border, background: C.card }}
         />
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="menu-staff" className="text-sm font-bold">
-          הוראות הכנה (רק לצוות)
-        </label>
-        <textarea
-          id="menu-staff"
-          value={staffNotes}
-          onChange={(e) => setStaffNotes(e.target.value)}
-          className={`${fieldClass} min-h-20 py-2`}
-          style={{ borderColor: '#9CC7B0', background: C.primaryLight }}
-        />
-        <span className="text-xs" style={{ color: C.textSecondary }}>
-          לקוחות לא רואים את השדה הזה. אפשר להשאיר ריק כשההגשה היא כמו של הקטגוריה.
-        </span>
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -376,10 +422,23 @@ function ItemForm({ item, categories, onDone }: { item: MenuItem | null; categor
         </div>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <span className="text-sm font-bold">שלבי הכנה בציור (רק לצוות)</span>
-        <PrepStepsEditor value={prepSteps} onChange={setPrepSteps} />
-      </div>
+      {isCocktail ? (
+        <section id="cocktail-required" className="flex scroll-mt-4 flex-col gap-3 rounded-2xl border p-3.5" style={{ borderColor: C.accent, background: C.accentLight }}>
+          <div className="flex flex-col gap-0.5">
+            <span className="font-extrabold">חובה לקוקטייל (רק לצוות)</span>
+            <span className="text-xs" style={{ color: C.textSecondary }}>
+              הוראות הכנה, כוס ולפחות שלב אחד. מהשלבים נוצרים הציורים בתפריט.
+            </span>
+          </div>
+          {staffNotesField}
+          {stepsField}
+        </section>
+      ) : (
+        <>
+          {staffNotesField}
+          {stepsField}
+        </>
+      )}
 
       <label className="flex items-start gap-3 rounded-xl border p-3.5" style={{ borderColor: C.accent, background: C.accentLight }}>
         <input type="checkbox" checked={oneShift} onChange={(e) => setOneShift(e.target.checked)} className="mt-1 size-5" />
