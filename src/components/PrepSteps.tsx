@@ -6,7 +6,7 @@ import { C } from '@/lib/designTokens'
 // the glass, the ice, then the pours in order. The bar menu draws one glass
 // per step from it, so nobody has to photograph anything. Staff only.
 
-export type Glass = 'highball' | 'lowball' | 'wine' | 'shot'
+export type Glass = 'highball' | 'lowball' | 'wine' | 'martini' | 'shot'
 export type Ice = 'none' | 'three_quarters' | 'full' | 'on_request'
 export type Amount = 'half' | 'one' | 'two' | 'top'
 
@@ -26,6 +26,7 @@ export const GLASS_LABELS: Record<Glass, string> = {
   highball: 'כוס הייבול',
   lowball: 'כוס לואו בול',
   wine: 'כוס יין',
+  martini: 'כוס מרטיני',
   shot: 'כוס צ׳ייסר',
 }
 
@@ -56,13 +57,30 @@ interface GlassShape {
   bottom: number
   left: number
   right: number
+  // The bowl the liquid fills, when the outline also draws a stem and base.
+  bowl?: string
 }
 
 // viewBox 0 0 60 90 for every glass.
 const SHAPES: Record<Glass, GlassShape> = {
   highball: { outline: 'M12 6 L48 6 L45 84 L15 84 Z', top: 6, bottom: 84, left: 12, right: 48 },
   lowball: { outline: 'M8 34 L52 34 L49 84 L11 84 Z', top: 34, bottom: 84, left: 8, right: 52 },
-  wine: { outline: 'M14 8 L46 8 Q48 40 30 50 Q12 40 14 8 Z M30 50 L30 78 M20 84 L40 84', top: 8, bottom: 48, left: 14, right: 46 },
+  wine: {
+    outline: 'M14 8 L46 8 Q48 40 30 50 Q12 40 14 8 Z M30 50 L30 78 M20 84 L40 84',
+    bowl: 'M14 8 L46 8 Q48 40 30 50 Q12 40 14 8 Z',
+    top: 8,
+    bottom: 48,
+    left: 14,
+    right: 46,
+  },
+  martini: {
+    outline: 'M6 10 L54 10 L30 44 Z M30 44 L30 80 M18 84 L42 84',
+    bowl: 'M6 10 L54 10 L30 44 Z',
+    top: 10,
+    bottom: 44,
+    left: 6,
+    right: 54,
+  },
   shot: { outline: 'M20 50 L40 50 L38 84 L22 84 Z', top: 50, bottom: 84, left: 20, right: 40 },
 }
 
@@ -120,7 +138,7 @@ function GlassDrawing({ glass, step, id }: { glass: Glass; step: DrawnStep; id: 
     <svg width="56" height="80" viewBox="-2 -4 64 94" role="img" aria-label={`${step.title} ${step.detail}`}>
       <defs>
         <clipPath id={clipId}>
-          <path d={glass === 'wine' ? 'M14 8 L46 8 Q48 40 30 50 Q12 40 14 8 Z' : shape.outline} />
+          <path d={shape.bowl ?? shape.outline} />
         </clipPath>
       </defs>
       <g clipPath={`url(#${clipId})`}>
@@ -166,7 +184,16 @@ export function emptyPrepSteps(): PrepSteps {
 
 // The editor in the item form: glass, ice, and the pours in order, with a
 // live preview of the drawings.
-export function PrepStepsEditor({ value, onChange }: { value: PrepSteps | null; onChange: (next: PrepSteps | null) => void }) {
+export function PrepStepsEditor({
+  value,
+  onChange,
+  required = false,
+}: {
+  value: PrepSteps | null
+  onChange: (next: PrepSteps | null) => void
+  // Cocktails must have steps: no "remove" link.
+  required?: boolean
+}) {
   if (!value) {
     return (
       <button
@@ -309,9 +336,11 @@ export function PrepStepsEditor({ value, onChange }: { value: PrepSteps | null; 
         <PrepStepsStrip steps={value} idPrefix="editor" />
       </div>
 
-      <button type="button" onClick={() => onChange(null)} className="self-start text-xs font-semibold underline" style={{ color: C.textSecondary }}>
-        הסרת שלבי ההכנה
-      </button>
+      {!required && (
+        <button type="button" onClick={() => onChange(null)} className="self-start text-xs font-semibold underline" style={{ color: C.textSecondary }}>
+          הסרת שלבי ההכנה
+        </button>
+      )}
     </div>
   )
 }
