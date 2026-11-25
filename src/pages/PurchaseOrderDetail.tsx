@@ -6,10 +6,40 @@ import { supabase } from '@/lib/supabase'
 import { formatMoney, purchaseOrderStatusLabels, purchaseOrderStatusTone } from '@/lib/purchaseOrderLabels'
 import { formatDateTime } from '@/lib/utils'
 import { C } from '@/lib/designTokens'
-import { WHATSAPP_GREEN, WHATSAPP_TEXT, WhatsAppIcon, WhatsAppOrderSheet } from '@/components/WhatsAppOrderSheet'
+import { WHATSAPP_GREEN, WHATSAPP_TEXT, WhatsAppIcon, WhatsAppOrderSheet, type OrderUpdate } from '@/components/WhatsAppOrderSheet'
 import type { InventoryItem, ProductCategory, PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus, Supplier } from '@/lib/types'
 
 const STEPS: PurchaseOrderStatus[] = ['draft', 'ordered', 'received']
+
+// Quantity per product, to compare an order already sent to the supplier
+// with what it looks like after editing.
+function quantitiesByProduct(items: PurchaseOrderItem[]) {
+  const totals: Record<string, number> = {}
+  for (const item of items) totals[item.inventory_item_id] = (totals[item.inventory_item_id] ?? 0) + item.quantity
+  return totals
+}
+
+interface OrderChanges {
+  changed: { productId: string; from: number; to: number }[]
+  added: { productId: string; to: number }[]
+  removed: { productId: string; from: number }[]
+}
+
+function diffOrder(before: Record<string, number>, items: PurchaseOrderItem[]): OrderChanges {
+  const after = quantitiesByProduct(items)
+  const changes: OrderChanges = { changed: [], added: [], removed: [] }
+  for (const [productId, to] of Object.entries(after)) {
+    const from = before[productId]
+    if (from === undefined) changes.added.push({ productId, to })
+    else if (from !== to) changes.changed.push({ productId, from, to })
+  }
+  for (const [productId, from] of Object.entries(before)) {
+    if (after[productId] === undefined) changes.removed.push({ productId, from })
+  }
+  return changes
+}
+
+const changeCount = (c: OrderChanges) => c.changed.length + c.added.length + c.removed.length
 
 export function PurchaseOrderDetail() {
   const { id } = useParams()
@@ -26,6 +56,12 @@ export function PurchaseOrderDetail() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [showWhatsApp, setShowWhatsApp] = useState(false)
+  // Editing an order that was already marked as ordered: the quantities it
+  // was sent with, so changes can be shown and sent to the supplier.
+  const [editBaseline, setEditBaseline] = useState<Record<string, number> | null>(null)
+  const [finishedChanges, setFinishedChanges] = useState<OrderChanges | null>(null)
+  const [sendingUpdate, setSendingUpdate] = useState(false)
+  const [baselineNames, setBaselineNames] = useState<Record<string, string>>({})
   // Names of every line's product, inactive ones included (the catalog
   // below only has active products, for the add-item picker).
   const [itemNames, setItemNames] = useState<Record<string, string>>({})
@@ -195,9 +231,41 @@ export function PurchaseOrderDetail() {
   }
   if (!order || !supplier) return null
 
+  const editing = editBaseline !== null
+
+  function startEditing() {
+    setEditBaseline(quantitiesByProduct(items))
+    setBaselineNames({ ...itemNames })
+    setFinishedChanges(null)
+    setError(null)
+  }
+
+  function finishEditing() {
+    if (!editBaseline) return
+    const changes = diffOrder(editBaseline, items)
+    setEditBaseline(null)
+    setFinishedChanges(changeCount(changes) > 0 ? changes : null)
+  }
+
   const catalogById = new Map(catalog.map((c) => [c.id, c]))
   const total = items.reduce((sum, item) => sum + item.quantity * (item.unit_price ?? 0), 0)
   const isDraft = order.status === 'draft'
+  // Lines can be changed on a draft, or on an ordered one in edit mode.
+  const canEditLines = isDraft || (editing && order.status === 'ordered')
+  const nameOf = (productId: string) =>
+    itemNames[productId] ?? baselineNames[productId] ?? catalogById.get(productId)?.name ?? '—'
+  const liveChanges = editBaseline ? diffOrder(editBaseline, items) : null
+  const summaryChanges = finishedChanges
+  const update: OrderUpdate | undefined =
+    sendingUpdate && summaryChanges
+      ? { orderNumber: order.order_number, removed: summaryChanges.removed.map((r) => nameOf(r.productId)) }
+      : undefined
+  const lineNote = (productId: string) => {
+    if (!sendingUpdate || !summaryChanges) return undefined
+    if (summaryChanges.added.some((a) => a.productId === productId)) return 'חדש'
+    const changed = summaryChanges.changed.find((c) => c.productId === productId)
+    return changed ? `היה ${changed.from}` : undefined
+  }
   const tone = purchaseOrderStatusTone[order.status]
   const stepIndex = order.status === 'draft' ? 0 : order.status === 'ordered' ? 1 : 2
 
@@ -290,6 +358,54 @@ export function PurchaseOrderDetail() {
           </div>
         )}
 
+        {editing && (
+          <div className="flex flex-col gap-1 rounded-2xl border px-3 py-2.5" style={{ background: C.accentLight, borderColor: C.accent }}>
+            <p className="text-sm font-extrabold" style={{ color: '#7A4A0A' }}>
+              מצב עריכה
+            </p>
+            <p className="text-xs leading-relaxed" style={{ color: C.textSecondary }}>
+              ההזמנה כבר נשלחה לספק. השינויים נשמרים באפליקציה, ובסוף אפשר לשלוח לספק את ההזמנה המעודכנת.
+            </p>
+          </div>
+        )}
+
+        {summaryChanges && !editing && order.status === 'ordered' && (
+          <div className="flex flex-col gap-2 rounded-2xl px-3 py-3" style={{ background: C.primaryLight }}>
+            <p className="text-sm font-extrabold" style={{ color: C.primary }}>
+              ההזמנה עודכנה · {changeCount(summaryChanges)} שינויים
+            </p>
+            <p className="text-xs leading-relaxed" style={{ color: C.primary }}>
+              {[
+                ...summaryChanges.changed.map((c) => `${nameOf(c.productId)} ${c.from} ← ${c.to}`),
+                ...summaryChanges.added.map((a) => `${nameOf(a.productId)} (חדש) ${a.to}`),
+                ...summaryChanges.removed.map((r) => `${nameOf(r.productId)} הוסר`),
+              ].join(' · ')}
+            </p>
+            {items.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSendingUpdate(true)
+                  setShowWhatsApp(true)
+                }}
+                className="flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-extrabold"
+                style={{ background: WHATSAPP_GREEN, color: WHATSAPP_TEXT }}
+              >
+                <WhatsAppIcon className="size-5" />
+                שליחת ההזמנה המעודכנת בוואטסאפ
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setFinishedChanges(null)}
+              className="text-xs underline"
+              style={{ color: C.textSecondary }}
+            >
+              לא עכשיו
+            </button>
+          </div>
+        )}
+
         <div className="flex flex-col gap-2 rounded-3xl border p-3.5" style={{ background: C.subtleBg, borderColor: C.border }}>
           <p className="flex justify-between px-0.5 text-xs font-bold">
             <span>פריטים</span>
@@ -314,11 +430,14 @@ export function PurchaseOrderDetail() {
             ]
               .filter(Boolean)
               .join(' · ')
+            const before = editBaseline?.[item.inventory_item_id]
+            const isNewLine = editing && before === undefined
+            const changedFrom = editing && before !== undefined && before !== item.quantity ? before : null
             return (
               <div
                 key={item.id}
                 className="flex items-center gap-2 rounded-2xl border px-3 py-2.5"
-                style={{ background: C.card, borderColor: C.border }}
+                style={{ background: C.card, borderColor: isNewLine || changedFrom !== null ? C.accent : C.border }}
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-bold">
@@ -330,13 +449,19 @@ export function PurchaseOrderDetail() {
                       </span>
                     )}
                   </p>
-                  {sub && (
-                    <p className="truncate text-xs" style={{ color: isLow ? C.error : C.textMuted }}>
-                      {sub}
+                  {isNewLine || changedFrom !== null ? (
+                    <p className="truncate text-xs font-semibold" style={{ color: '#7A4A0A' }}>
+                      {isNewLine ? 'חדש בהזמנה' : `שונה: היה ${changedFrom}`}
                     </p>
+                  ) : (
+                    sub && (
+                      <p className="truncate text-xs" style={{ color: isLow ? C.error : C.textMuted }}>
+                        {sub}
+                      </p>
+                    )
                   )}
                 </div>
-                {isDraft ? (
+                {canEditLines ? (
                   <>
                     <div className="flex shrink-0 items-center overflow-hidden rounded-xl border" style={{ borderColor: C.border }}>
                       <button
@@ -387,7 +512,7 @@ export function PurchaseOrderDetail() {
             )
           })}
 
-          {isDraft && (
+          {canEditLines && (
             <div
               className="flex flex-col gap-2 rounded-2xl border-[1.5px] border-dashed p-3"
               style={{ background: C.card, borderColor: C.border }}
@@ -470,7 +595,17 @@ export function PurchaseOrderDetail() {
               </p>
               <p className="text-lg font-bold tabular-nums">{formatMoney(total)}</p>
             </div>
-            {(order.status === 'draft' || order.status === 'ordered') && (
+            {order.status === 'ordered' && !editing && (
+              <button
+                type="button"
+                onClick={startEditing}
+                className={`${actionButtonClass} border`}
+                style={{ borderColor: C.border, color: C.primary }}
+              >
+                עריכת ההזמנה
+              </button>
+            )}
+            {(order.status === 'draft' || order.status === 'ordered') && !editing && (
               <button
                 type="button"
                 onClick={() => handleSetStatus('cancelled')}
@@ -491,12 +626,25 @@ export function PurchaseOrderDetail() {
               </button>
             )}
           </div>
-          {(order.status === 'draft' || order.status === 'ordered') && (
+          {editing && (
+            <button
+              type="button"
+              onClick={finishEditing}
+              className={`${actionButtonClass} w-full text-base text-white`}
+              style={{ background: C.primary }}
+            >
+              סיום עריכה{liveChanges && changeCount(liveChanges) > 0 ? ` · ${changeCount(liveChanges)} שינויים` : ''}
+            </button>
+          )}
+          {(order.status === 'draft' || order.status === 'ordered') && !editing && (
             <div className="flex gap-2">
               {items.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => setShowWhatsApp(true)}
+                  onClick={() => {
+                    setSendingUpdate(false)
+                    setShowWhatsApp(true)
+                  }}
                   className={`${actionButtonClass} flex-1 gap-2 text-base font-extrabold`}
                   style={{ background: WHATSAPP_GREEN, color: WHATSAPP_TEXT }}
                 >
@@ -523,10 +671,12 @@ export function PurchaseOrderDetail() {
           contactName={supplier.supplier_contact_name}
           phone={supplier.supplier_contact_phone}
           lines={items.map((item) => ({
-            name: itemNames[item.inventory_item_id] ?? catalogById.get(item.inventory_item_id)?.name ?? '—',
+            name: nameOf(item.inventory_item_id),
             quantity: item.quantity,
+            note: lineNote(item.inventory_item_id),
           }))}
           isDraft={order.status === 'draft'}
+          update={update}
           onClose={() => setShowWhatsApp(false)}
           onMarkOrdered={() => handleSetStatus('ordered')}
         />

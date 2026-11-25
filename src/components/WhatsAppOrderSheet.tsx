@@ -27,9 +27,24 @@ export function WhatsAppIcon({ className }: { className?: string }) {
 const DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי']
 const DEFAULT_DAY = 'רביעי'
 
-function buildMessage(day: string, lines: { name: string; quantity: number }[]) {
-  const list = lines.map((l, i) => `${i + 1}. ${l.quantity} ${l.name}`).join('\n')
-  return `נשמח להזמין ליום ${day}:\n${list}\nתודה רבה!`
+export interface OrderLine {
+  name: string
+  quantity: number
+  // For an update to an order already sent: "חדש" or "היה 4".
+  note?: string
+}
+
+// Sent again after editing an order the supplier already has.
+export interface OrderUpdate {
+  orderNumber: string
+  removed: string[]
+}
+
+function buildMessage(day: string, lines: OrderLine[], update?: OrderUpdate) {
+  const list = lines.map((l, i) => `${i + 1}. ${l.quantity} ${l.name}${l.note ? ` (${l.note})` : ''}`).join('\n')
+  const removed = update?.removed.length ? `\nהוסר מההזמנה: ${update.removed.join(', ')}` : ''
+  const header = update ? `עדכון להזמנה ${update.orderNumber}\n` : ''
+  return `${header}נשמח להזמין ליום ${day}:\n${list}${removed}\nתודה רבה!`
 }
 
 // Opens WhatsApp with the supplier's contact and the order written out:
@@ -40,26 +55,28 @@ export function WhatsAppOrderSheet({
   phone,
   lines,
   isDraft,
+  update,
   onClose,
   onMarkOrdered,
 }: {
   supplierName: string
   contactName: string | null
   phone: string | null
-  lines: { name: string; quantity: number }[]
+  lines: OrderLine[]
   isDraft: boolean
+  update?: OrderUpdate
   onClose: () => void
   onMarkOrdered: () => void
 }) {
   const [day, setDay] = useState(DEFAULT_DAY)
-  const [message, setMessage] = useState(() => buildMessage(DEFAULT_DAY, lines))
+  const [message, setMessage] = useState(() => buildMessage(DEFAULT_DAY, lines, update))
   const [markOrdered, setMarkOrdered] = useState(true)
   const digits = whatsappDigits(phone)
 
   function pickDay(next: string) {
     setDay(next)
     // Only the day in the first line changes, so edits elsewhere are kept.
-    setMessage((prev) => prev.replace(/^נשמח להזמין ליום [^:\n]*:/, `נשמח להזמין ליום ${next}:`))
+    setMessage((prev) => prev.replace(/^נשמח להזמין ליום [^:\n]*:/m, `נשמח להזמין ליום ${next}:`))
   }
 
   function send() {
@@ -78,7 +95,7 @@ export function WhatsAppOrderSheet({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-extrabold">שליחה לספק בוואטסאפ</h2>
+          <h2 className="text-xl font-extrabold">{update ? 'שליחת העדכון לספק בוואטסאפ' : 'שליחה לספק בוואטסאפ'}</h2>
           <button
             type="button"
             aria-label="סגירה"
