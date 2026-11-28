@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   Lock,
   RotateCcw,
+  RefreshCw,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -155,6 +156,47 @@ function MineRow({
   )
 }
 
+// Name with the phone right under it.
+function PersonInfo({ name, phone, compact }: { name: string; phone: string | undefined; compact: boolean }) {
+  return (
+    <div className="min-w-0 flex-1">
+      <p className={cn('truncate leading-tight font-medium', compact ? 'text-sm' : 'text-base')} style={{ color: C.text }}>
+        {name}
+      </p>
+      <PhoneLine phone={phone} compact={compact} />
+    </div>
+  )
+}
+
+// Swap (circling arrows, opens the employee list) and remove (red minus,
+// asks first) next to an assigned person, for whoever manages assignments.
+function SlotActions({ name, onSwap, onRemove }: { name: string; onSwap: () => void; onRemove: () => void }) {
+  return (
+    <div className="flex shrink-0 items-center gap-1.5">
+      <button
+        type="button"
+        aria-label={`החלפת ${name}`}
+        title="החלפה"
+        onClick={onSwap}
+        className="flex size-9 items-center justify-center rounded-full"
+        style={{ background: '#E3EDF7', color: '#1F4E79' }}
+      >
+        <RefreshCw className="size-[18px]" strokeWidth={2.4} />
+      </button>
+      <button
+        type="button"
+        aria-label={`הסרת ${name} מהמשמרת`}
+        title="הסרה מהמשמרת"
+        onClick={onRemove}
+        className="flex size-9 items-center justify-center rounded-full"
+        style={{ background: C.errorBg, color: C.error }}
+      >
+        <Minus className="size-5" strokeWidth={3} />
+      </button>
+    </div>
+  )
+}
+
 // Click a filled name to turn it into a restyled <select> offering swap /
 // remove / (bartender-only) unify -- same interaction and option-filtering
 // as the real page's DutySlotCell, just reskinned to the card design.
@@ -170,6 +212,8 @@ function EditableDutyName({
   onSwap,
   onRemove,
   onUnify,
+  confirmRemove,
+  stacked = false,
 }: {
   name: string
   phone: string | undefined
@@ -182,8 +226,16 @@ function EditableDutyName({
   onSwap: (newEmployeeId: string) => void
   onRemove: () => void
   onUnify?: () => void
+  // Asks "להסיר את … מהמשמרת?" before onRemove.
+  confirmRemove: () => Promise<boolean>
+  // Half-width cells (split evenings): buttons go under the name.
+  stacked?: boolean
 }) {
   const [editing, setEditing] = useState(false)
+
+  async function remove() {
+    if (await confirmRemove()) onRemove()
+  }
 
   if (editing) {
     return (
@@ -201,10 +253,8 @@ function EditableDutyName({
           else if (v) onSwap(v)
         }}
       >
-        <option value={onUnify ? '__unify__' : ''} disabled={!onUnify}>
-          {name}
-        </option>
-        <option value="__remove__">— הסרה —</option>
+        <option value="">החלפה ב…</option>
+        {onUnify && <option value="__unify__">{name}: כל הערב</option>}
         {eligible
           .filter((e) => e.id === currentEmployeeId || !takenIds.has(e.id))
           .filter((e) => e.id !== currentEmployeeId)
@@ -218,16 +268,9 @@ function EditableDutyName({
   }
 
   return (
-    <div className="min-w-0">
-      <button
-        type="button"
-        onClick={() => setEditing(true)}
-        className="truncate text-start font-medium underline-offset-2 hover:underline"
-        style={{ color: C.text }}
-      >
-        {name}
-      </button>
-      <PhoneLine phone={phone} compact={compact} />
+    <div className={cn('flex min-w-0 flex-1 gap-1.5', stacked ? 'flex-col' : 'items-center')}>
+      <PersonInfo name={name} phone={phone} compact={compact} />
+      <SlotActions name={name} onSwap={() => setEditing(true)} onRemove={remove} />
     </div>
   )
 }
@@ -316,6 +359,7 @@ function SplitPairRow({
   onAssignSingle,
   onUnify,
   onRemove,
+  confirmRemove,
 }: {
   openingPerson?: DutyPerson
   closingPerson?: DutyPerson
@@ -334,6 +378,7 @@ function SplitPairRow({
   onAssignSingle?: (employeeId: string, shiftId: string) => void
   onUnify?: (employeeId: string, shiftId: string) => void
   onRemove: (assignmentIds: string[]) => void
+  confirmRemove: (employeeId: string) => Promise<boolean>
 }) {
   function cell(person: DutyPerson | undefined, shift: Shift, otherShift: Shift, sideLabel: string, pairedWith?: DutyPerson) {
     const cellTakenIds = pairedWith ? new Set(takenIds) : takenIds
@@ -360,6 +405,8 @@ function SplitPairRow({
                 onSwap={(newId) => onSwapSingle?.(occupiedId, newId, shift.id)}
                 onRemove={() => onRemove([occupiedId])}
                 onUnify={() => onUnify?.(person.employee_id, otherShift.id)}
+                confirmRemove={() => confirmRemove(person.employee_id)}
+                stacked
               />
             )
           })()
@@ -469,8 +516,7 @@ function BarManagerBody({
           else if (v) onSet(v)
         }}
       >
-        <option value="">בחר/י מרשימה</option>
-        {employeeId && <option value="__remove__">— הסרה —</option>}
+        <option value="">{employeeId ? 'החלפה ב…' : 'בחר/י מרשימה'}</option>
         {shiftManagers
           .filter((e) => e.id !== employeeId)
           .map((e) => (
@@ -484,14 +530,24 @@ function BarManagerBody({
 
   if (employeeId) {
     return (
-      <button
-        type="button"
-        onClick={() => setEditing(true)}
-        className={cn('truncate text-start font-medium underline-offset-2 hover:underline', textSize)}
-        style={{ color: C.text }}
-      >
-        {name}
-      </button>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <PersonInfo name={name!} phone={undefined} compact={compact} />
+        <SlotActions
+          name={name!}
+          onSwap={() => setEditing(true)}
+          onRemove={async () => {
+            const ok = await confirmAssign({
+              title: `להסיר את ${employeeNames[employeeId] ?? ''} מהמשמרת?`,
+              action: 'remove',
+              removeOther: true,
+              dateLabel,
+              hoursLabel: AREA_SUPERVISOR_HOURS,
+              role: 'bar_manager',
+            })
+            if (ok) onSet(null)
+          }}
+        />
+      </div>
     )
   }
 
@@ -582,8 +638,7 @@ function AreaSupervisorBody({
             else if (v) onSet(v)
           }}
         >
-          <option value="">בחר/י מרשימה</option>
-          {employeeId && <option value="__remove__">— הסרה —</option>}
+          <option value="">{employeeId ? 'החלפה ב…' : 'בחר/י מרשימה'}</option>
           {eligible
             .filter((e) => e.id !== employeeId)
             .map((e) => (
@@ -597,16 +652,23 @@ function AreaSupervisorBody({
 
     if (employeeId) {
       return (
-        <div className="min-w-0">
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className={cn('truncate text-start font-medium underline-offset-2 hover:underline', textSize)}
-            style={{ color: C.text }}
-          >
-            {name}
-          </button>
-          <PhoneLine phone={phone} compact={compact} />
+        <div className="flex min-w-0 items-center gap-1.5">
+          <PersonInfo name={name!} phone={phone} compact={compact} />
+          <SlotActions
+            name={name!}
+            onSwap={() => setEditing(true)}
+            onRemove={async () => {
+              const ok = await confirmAssign({
+                title: `להסיר את ${employeeNames[employeeId] ?? ''} מהמשמרת?`,
+                action: 'remove',
+                removeOther: true,
+                dateLabel,
+                hoursLabel: AREA_SUPERVISOR_HOURS,
+                role: 'area_supervisor',
+              })
+              if (ok) onSet(null)
+            }}
+          />
         </div>
       )
     }
@@ -737,6 +799,16 @@ function DutyListBody({
   const iAmEligible = !!myEmployeeId && eligible.some((e) => e.id === myEmployeeId)
   const anyShiftId = openingShift?.id ?? closingShift?.id
 
+  const confirmRemove = (employeeId: string) =>
+    confirmAssign({
+      title: `להסיר את ${employeeNames[employeeId] ?? ''} מהמשמרת?`,
+      action: 'remove',
+      removeOther: true,
+      dateLabel,
+      hoursLabel,
+      role,
+    })
+
   async function associateMe() {
     if (!myEmployeeId) return
     const ok = await confirmAssign({ title: 'איזה כיף!', action: 'assign', dateLabel, hoursLabel, role })
@@ -765,6 +837,7 @@ function DutyListBody({
               currentEmployeeId={person.employee_id}
               onSwap={(newId) => onSwap(person.assignmentIds, newId)}
               onRemove={() => onRemove(person.assignmentIds)}
+              confirmRemove={() => confirmRemove(person.employee_id)}
             />
             {allowSplit && bothShiftsActive && (
               <button
@@ -800,6 +873,7 @@ function DutyListBody({
               onAssignSingle={onAssignSingle}
               onUnify={onUnify}
               onRemove={onRemove}
+              confirmRemove={confirmRemove}
             />
           ))}
 
