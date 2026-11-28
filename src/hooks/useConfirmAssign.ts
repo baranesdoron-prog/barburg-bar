@@ -10,6 +10,9 @@ export interface ConfirmAssignState {
   partLabel?: string
   hoursLabel: string
   role: ShiftAssignmentRole
+  // A manager removing someone else (the title names them), not the
+  // person removing themselves.
+  removeOther?: boolean
 }
 
 // Turns a self-assign/self-remove click into an awaitable yes/no gate:

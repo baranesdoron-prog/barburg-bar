@@ -136,7 +136,7 @@ function ConfirmAssignDialogBody({
             {state.title}
           </h2>
           <p className="text-sm" style={{ color: C.textSecondary }}>
-            {isAssign ? 'רק לוודא שזו המשמרת הנכונה' : 'המקום שלך יתפנה לעובד/ת אחר/ת'}
+            {isAssign ? 'רק לוודא שזו המשמרת הנכונה' : state.removeOther ? 'המקום יתפנה ואחרים יוכלו להשתבץ אליו' : 'המקום שלך יתפנה לעובד/ת אחר/ת'}
           </p>
         </div>
 
@@ -227,7 +227,7 @@ function ConfirmAssignDialogBody({
             className="h-[50px] rounded-2xl text-base font-bold text-white disabled:opacity-45"
             style={{ background: isAssign ? C.primary : C.error }}
           >
-            {isAssign ? 'שבצו אותי' : 'הסירו אותי מהמשמרת'}
+            {isAssign ? 'שבצו אותי' : state.removeOther ? 'הסרה מהמשמרת' : 'הסירו אותי מהמשמרת'}
           </button>
           <button
             type="button"
@@ -240,7 +240,7 @@ function ConfirmAssignDialogBody({
               fontWeight: isAssign ? 600 : 700,
             }}
           >
-            {isAssign ? 'ביטול' : 'אני נשאר/ת'}
+            {isAssign || state.removeOther ? 'ביטול' : 'אני נשאר/ת'}
           </button>
         </div>
       </div>
